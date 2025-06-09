@@ -84,6 +84,7 @@ app.use((0, cors_1.default)({
             // Allow all pages.dev subdomains for Cloudflare Pages
             /\.pages\.dev$/
         ];
+        // allow pages
         // Check if the origin is allowed
         const isAllowed = allowedOrigins.some(allowedOrigin => {
             if (typeof allowedOrigin === 'string') {
@@ -146,6 +147,15 @@ catch (error) {
 // welcome route
 app.get('/', (_req, res) => {
     res.send('🚀 Welcome to the Green Uni Mind API!');
+});
+// health check route for Docker and monitoring
+app.get('/health', (_req, res) => {
+    res.status(200).json({
+        status: 'OK',
+        message: 'Green Uni Mind API is healthy',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
+    });
 });
 // application routes
 app.use('/api/v1', routes_1.default);

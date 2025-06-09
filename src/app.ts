@@ -154,6 +154,16 @@ app.get('/', (_req, res) => {
   res.send('🚀 Welcome to the Green Uni Mind API!');
 });
 
+// health check route for Docker and monitoring
+app.get('/health', (_req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'Green Uni Mind API is healthy',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // application routes
 app.use('/api/v1', router);
 

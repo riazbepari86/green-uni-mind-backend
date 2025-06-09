@@ -1,10 +1,10 @@
 services:
   - type: web
     name: green-uni-mind-backend
-    env: node
+    # Removed 'env: node' to let Render auto-detect Docker
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm run prod
+    # Docker will handle build and start commands
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /
     envVars:
       - key: NODE_ENV
