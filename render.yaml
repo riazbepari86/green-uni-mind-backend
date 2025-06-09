@@ -1,9 +1,8 @@
 services:
   - type: web
     name: green-uni-mind-backend
-    # Removed 'env: node' to let Render auto-detect Docker
+    env: docker
     plan: free
-    # Docker will handle build and start commands
     dockerfilePath: ./Dockerfile
     healthCheckPath: /
     envVars:
