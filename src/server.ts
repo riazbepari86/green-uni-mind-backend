@@ -1,0 +1,74 @@
+import { Server } from 'http';
+import mongoose from 'mongoose';
+import app from './app';
+import config from './app/config';
+import seedSuperAdmin from './app/DB';
+// Import payout jobs
+import { startPayoutJobs } from './app/jobs/payout.job';
+import { startPayoutSyncJob } from './app/jobs/payoutSync.job';
+
+let server: Server;
+
+async function main() {
+  try {
+    // Check for required environment variables
+    if (!process.env.FRONTEND_URL) {
+      console.warn('⚠️ WARNING: FRONTEND_URL environment variable is not set. Using https://example.com as fallback.');
+      process.env.FRONTEND_URL = 'https://example.com';
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.warn('⚠️ WARNING: STRIPE_SECRET_KEY environment variable is not set. Stripe functionality may not work correctly.');
+    }
+
+    await mongoose.connect(config.database_url as string);
+
+    // Seed super admin
+    await seedSuperAdmin();
+
+    // Start payout jobs
+    try {
+      // Start both payout jobs
+      await startPayoutJobs();
+      await startPayoutSyncJob();
+      console.log('✅ Payout jobs started successfully');
+
+      // Log additional information about the payout jobs
+      console.log('✅ Payout jobs will run on the following schedule:');
+      console.log('   - Daily payout sync: 1:00 AM');
+      console.log('   - Daily payout scheduling: Every day');
+      console.log('   - Hourly payout status checks: Every hour');
+    } catch (error) {
+      console.error('❌ Failed to start payout jobs:', error);
+    }
+
+    server = app.listen(config.port, () => {
+      console.log(`app is listening on port http://localhost:${config.port}`);
+    });
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+// Only run main() if this file is being run directly (not imported)
+if (require.main === module) {
+  main();
+}
+
+process.on('unhandledRejection', () => {
+  console.log(`😈 unahandledRejection is detected , shutting down ...`);
+  if (server) {
+    server.close(() => {
+      process.exit(1);
+    });
+  }
+  process.exit(1);
+});
+
+process.on('uncaughtException', () => {
+  console.log(`😈 uncaughtException is detected , shutting down ...`);
+  process.exit(1);
+});
+
+// Export the app for Vercel serverless functions
+export default app;
