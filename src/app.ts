@@ -88,6 +88,7 @@ app.use(
         /\.pages\.dev$/
       ];
 
+      // allow pages
       // Check if the origin is allowed
       const isAllowed = allowedOrigins.some(allowedOrigin => {
         if (typeof allowedOrigin === 'string') {
