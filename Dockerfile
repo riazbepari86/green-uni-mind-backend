@@ -29,6 +29,9 @@ RUN npm run build || (echo "Build failed, checking for TypeScript errors..." && 
 # Production stage
 FROM oven/bun:1.1.0-alpine AS production
 
+# Install runtime dependencies for bcrypt and other native modules
+RUN apk add --no-cache libstdc++
+
 # Set working directory
 WORKDIR /app
 

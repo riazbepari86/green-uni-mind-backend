@@ -75,8 +75,8 @@ README.md
 *.md
 
 # Development files
-src/
-tsconfig.json
+# src/ - needed for Docker build
+# tsconfig.json - needed for Docker build
 eslint.config.js
 
 # Uploads (will be handled by volumes in production)
