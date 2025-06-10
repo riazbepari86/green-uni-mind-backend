@@ -19,6 +19,8 @@ const DB_1 = __importDefault(require("./app/DB"));
 // Import payout jobs
 const payout_job_1 = require("./app/jobs/payout.job");
 const payoutSync_job_1 = require("./app/jobs/payoutSync.job");
+// Import keep-alive service
+const keepAlive_1 = __importDefault(require("./utils/keepAlive"));
 let server;
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -51,6 +53,14 @@ function main() {
             }
             server = app_1.default.listen(config_1.default.port, () => {
                 console.log(`app is listening on port http://localhost:${config_1.default.port}`);
+                // Start keep-alive service to prevent Render from sleeping
+                try {
+                    keepAlive_1.default.start();
+                    console.log('✅ Keep-alive service started successfully');
+                }
+                catch (error) {
+                    console.error('❌ Failed to start keep-alive service:', error);
+                }
             });
         }
         catch (err) {
@@ -63,7 +73,8 @@ if (require.main === module) {
     main();
 }
 process.on('unhandledRejection', () => {
-    console.log(`😈 unahandledRejection is detected , shutting down ...`);
+    console.log(`😈 unhandledRejection is detected , shutting down ...`);
+    keepAlive_1.default.stop();
     if (server) {
         server.close(() => {
             process.exit(1);
@@ -73,7 +84,27 @@ process.on('unhandledRejection', () => {
 });
 process.on('uncaughtException', () => {
     console.log(`😈 uncaughtException is detected , shutting down ...`);
+    keepAlive_1.default.stop();
     process.exit(1);
+});
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    keepAlive_1.default.stop();
+    if (server) {
+        server.close(() => {
+            process.exit(0);
+        });
+    }
+});
+process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    keepAlive_1.default.stop();
+    if (server) {
+        server.close(() => {
+            process.exit(0);
+        });
+    }
 });
 // Export the app for Vercel serverless functions
 exports.default = app_1.default;
