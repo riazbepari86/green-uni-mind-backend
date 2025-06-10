@@ -65,8 +65,8 @@ class KeepAliveService {
 }
 // Export singleton instance
 const keepAliveService = new KeepAliveService({
-    url: process.env.BACKEND_URL || 'https://green-uni-mind-backend-oxpo.onrender.com/api/health',
-    interval: 14, // Ping every 14 minutes (before 15-minute sleep)
+    url: process.env.BACKEND_URL || 'https://green-uni-mind-backend-oxpo.onrender.com/health',
+    interval: 10, // Ping every 10 minutes (more frequent to prevent sleep)
     enabled: process.env.NODE_ENV === 'production' && process.env.KEEP_ALIVE_ENABLED === 'true'
 });
 exports.default = keepAliveService;

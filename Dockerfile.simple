@@ -1,0 +1,44 @@
+# Simple Dockerfile for Green Uni Mind Backend (Fallback)
+# Use this if the main Dockerfile has TypeScript compilation issues
+
+FROM node:18-alpine
+
+# Install necessary packages
+RUN apk add --no-cache python3 make g++
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY bun.lock* ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy all source files
+COPY . .
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+# Create a non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Change ownership of the app directory to nodejs user
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Expose port
+EXPOSE 5000
+
+# Set environment to production
+ENV NODE_ENV=production
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:5000/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+
+# Start the application with ts-node (no build step)
+CMD ["npx", "ts-node", "src/server.ts"]

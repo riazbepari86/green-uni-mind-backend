@@ -1,20 +1,30 @@
 # Multi-stage build for optimized production image with Bun
 FROM node:18-alpine AS builder
 
+# Install necessary build tools
+RUN apk add --no-cache python3 make g++
+
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json bun.lock* ./
+# Copy package files first for better caching
+COPY package*.json ./
+COPY bun.lock* ./
 
 # Install all dependencies (including devDependencies for building)
-RUN npm ci
+RUN npm ci --only=production=false
+
+# Copy TypeScript configuration
+COPY tsconfig.json ./
 
 # Copy source code
-COPY . .
+COPY src ./src
 
-# Build the application using TypeScript compiler directly
-RUN npx tsc
+# Create dist directory
+RUN mkdir -p dist
+
+# Build the application with error handling
+RUN npm run build || (echo "Build failed, checking for TypeScript errors..." && npx tsc --noEmit && exit 1)
 
 # Production stage
 FROM oven/bun:1.1.0-alpine AS production
