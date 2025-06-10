@@ -74,3 +74,7 @@ services:
         sync: false
       - key: RESET_PASS_UI_LINK
         sync: false
+      - key: KEEP_ALIVE_ENABLED
+        value: true
+      - key: BACKEND_URL
+        value: https://green-uni-mind-backend-oxpo.onrender.com

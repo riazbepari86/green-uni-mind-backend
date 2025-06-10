@@ -6,6 +6,8 @@ import seedSuperAdmin from './app/DB';
 // Import payout jobs
 import { startPayoutJobs } from './app/jobs/payout.job';
 import { startPayoutSyncJob } from './app/jobs/payoutSync.job';
+// Import keep-alive service
+import keepAliveService from './utils/keepAlive';
 
 let server: Server;
 
@@ -44,6 +46,14 @@ async function main() {
 
     server = app.listen(config.port, () => {
       console.log(`app is listening on port http://localhost:${config.port}`);
+
+      // Start keep-alive service to prevent Render from sleeping
+      try {
+        keepAliveService.start();
+        console.log('✅ Keep-alive service started successfully');
+      } catch (error) {
+        console.error('❌ Failed to start keep-alive service:', error);
+      }
     });
   } catch (err) {
     console.log(err);
@@ -56,7 +66,8 @@ if (require.main === module) {
 }
 
 process.on('unhandledRejection', () => {
-  console.log(`😈 unahandledRejection is detected , shutting down ...`);
+  console.log(`😈 unhandledRejection is detected , shutting down ...`);
+  keepAliveService.stop();
   if (server) {
     server.close(() => {
       process.exit(1);
@@ -67,7 +78,29 @@ process.on('unhandledRejection', () => {
 
 process.on('uncaughtException', () => {
   console.log(`😈 uncaughtException is detected , shutting down ...`);
+  keepAliveService.stop();
   process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  keepAliveService.stop();
+  if (server) {
+    server.close(() => {
+      process.exit(0);
+    });
+  }
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  keepAliveService.stop();
+  if (server) {
+    server.close(() => {
+      process.exit(0);
+    });
+  }
 });
 
 // Export the app for Vercel serverless functions
