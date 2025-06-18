@@ -27,7 +27,7 @@ const sendEmail = (to, html, subject) => __awaiter(void 0, void 0, void 0, funct
     });
     // send mail with defined transport object
     yield transporter.sendMail({
-        from: `"GreenUniMind" <${config_1.default.email.user}>`, // sender address
+        from: `"Green Uni Mind" <${config_1.default.email.user}>`, // sender address
         to, // list of receivers
         subject: subject || 'Password reset request for Green Uni Mind', // Subject line
         text: subject || 'Change your password', // plain text body

@@ -13,7 +13,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserControllers = void 0;
-const config_1 = __importDefault(require("../../config"));
 const catchAsync_1 = __importDefault(require("../../utils/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../utils/sendResponse"));
 const user_service_1 = require("./user.service");
@@ -21,35 +20,33 @@ const http_status_1 = __importDefault(require("http-status"));
 const createStudent = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { password, student: studentData } = req.body;
     const result = yield user_service_1.UserServices.createStudentIntoDB(req.file, password, studentData);
-    const { refreshToken } = result;
-    res.cookie('refreshToken', refreshToken, {
-        secure: config_1.default.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 1000 * 60 * 60 * 24 * 365,
-    });
+    // Don't set cookies since user is not verified yet
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
-        message: 'Student is created successfully',
-        data: result,
+        message: result.message,
+        data: {
+            newStudent: result.newStudent,
+            isVerified: result.isVerified,
+            email: studentData.email,
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes from now
+        },
     });
 }));
 const createTeacher = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { password, teacher: teacherData } = req.body;
     const result = yield user_service_1.UserServices.createTeacherIntoDB(req.file, password, teacherData);
-    const { refreshToken } = result;
-    res.cookie('refreshToken', refreshToken, {
-        secure: config_1.default.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 1000 * 60 * 60 * 24 * 365,
-    });
+    // Don't set cookies since user is not verified yet
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
-        message: 'Teacher is created successfully',
-        data: result,
+        message: result.message,
+        data: {
+            newTeacher: result.newTeacher,
+            isVerified: result.isVerified,
+            email: teacherData.email,
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes from now
+        },
     });
 }));
 const getAllUsers = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {

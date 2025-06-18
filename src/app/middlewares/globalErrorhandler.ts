@@ -66,13 +66,20 @@ const globalErrorHandler: ErrorRequestHandler = (
   }
 
   //ultimate return
-  res.status(statusCode).json({
+  const response: any = {
     success: false,
     message,
     errorSources,
     err,
     stack: config.NODE_ENV === 'development' ? err?.stack : null,
-  });
+  };
+
+  // Include additional data if it exists (for AppError with data)
+  if (err instanceof AppError && err.data) {
+    response.data = err.data;
+  }
+
+  res.status(statusCode).json(response);
 };
 
 export default globalErrorHandler;

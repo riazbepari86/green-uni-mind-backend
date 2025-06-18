@@ -156,7 +156,7 @@ const sendEmail = async (
 ): Promise<boolean> => {
   try {
     const info = await transporter.sendMail({
-      from: `"GreenUniMind" <${config.email.user}>`,
+      from: `"Green Uni Mind" <${config.email.user}>`,
       to,
       subject,
       html,

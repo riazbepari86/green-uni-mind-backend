@@ -330,7 +330,7 @@ const emailTemplate = (resetLink) => `
 
                 <!-- Expiry notice -->
                 <div class="expiry-notice" style="margin-top: 30px; padding: 18px; background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px; font-size: 15px; color: #92400e;">
-                  <strong style="color: #b45309; font-weight: 700;">Important:</strong> This password reset link will expire in 10 minutes for security reasons.
+                  <strong style="color: #b45309; font-weight: 700;">Important:</strong> This password reset link will expire in 5 minutes for security reasons.
                   If you didn't request this password reset, you can safely ignore this email.
                 </div>
 

@@ -17,6 +17,8 @@ router.get(
 
 router.get('/published-courses', CourseController.getPublishedCourse);
 
+router.get('/popular-courses', CourseController.getPopularCourses);
+
 router.get(
   '/creator/:id',
   auth(USER_ROLE.teacher),

@@ -19,6 +19,7 @@ import { Student } from '../Student/student.model';
 import { ITeacher } from '../Teacher/teacher.interface';
 import { Teacher } from '../Teacher/teacher.model';
 import { sendEmail } from '../../utils/sendEmail';
+import { otpOperations } from '../../config/redis';
 
 interface CloudinaryResponse {
   secure_url: string;
@@ -39,6 +40,145 @@ const createStudentIntoDB = async (
   session.startTransaction();
 
   try {
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: payload.email });
+    if (existingUser) {
+      if (existingUser.isVerified) {
+        throw new AppError(
+          httpStatus.CONFLICT,
+          'User already exists with this email address. Please login instead.'
+        );
+      } else {
+        // User exists but is not verified - resend OTP
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        await otpOperations.setOTP(payload.email, verificationCode, 300);
+
+        // Send verification email
+        const emailSubject = 'Verify Your Email - Green Uni Mind';
+        const emailBody = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+            <title>Email Verification</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                line-height: 1.5;
+                color: #333;
+                margin: 0;
+                padding: 0;
+              }
+              .container {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #ffffff;
+              }
+              .header {
+                text-align: center;
+                padding: 20px 0;
+                border-bottom: 1px solid #eaeaea;
+              }
+              .content {
+                padding: 30px 20px;
+                text-align: center;
+              }
+              .code {
+                background-color: #f5f5f5;
+                padding: 15px;
+                text-align: center;
+                font-size: 32px;
+                letter-spacing: 8px;
+                font-weight: bold;
+                margin: 20px 0;
+                border-radius: 6px;
+                color: #333;
+              }
+              .footer {
+                text-align: center;
+                padding-top: 20px;
+                border-top: 1px solid #eaeaea;
+                color: #888;
+                font-size: 12px;
+              }
+              .note {
+                font-size: 14px;
+                color: #666;
+                margin-top: 20px;
+              }
+              .expires {
+                color: #e53e3e;
+                font-weight: 500;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1 style="color: #10b981; margin: 0;">Green Uni Mind</h1>
+              </div>
+              <div class="content">
+                <h2>Verify Your Email Address</h2>
+                <p>You already have an account with this email. Please verify your email address to complete the registration:</p>
+                <div class="code">${verificationCode}</div>
+                <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
+                <p>If you did not request this verification, please ignore this email.</p>
+              </div>
+              <div class="footer">
+                <p>&copy; ${new Date().getFullYear()} Green Uni Mind. All rights reserved.</p>
+                <p>This is an automated email, please do not reply.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
+        await sendEmail(payload.email, emailBody, emailSubject);
+
+        throw new AppError(
+          httpStatus.CONFLICT,
+          'An account with this email already exists but is not verified. A new verification code has been sent to your email.',
+          {
+            requiresVerification: true,
+            email: payload.email,
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+          }
+        );
+      }
+    }
+
+    // Check professional-grade rate limiting for OTP requests
+    const rateLimit = await otpOperations.checkOTPRateLimit(payload.email);
+    if (!rateLimit.allowed) {
+      const timeRemaining = Math.ceil((rateLimit.resetTime - Date.now()) / 60000);
+
+      if (rateLimit.isLocked) {
+        throw new AppError(
+          httpStatus.TOO_MANY_REQUESTS,
+          rateLimit.lockReason || 'Account temporarily locked due to too many requests.',
+          {
+            isLocked: true,
+            lockDuration: rateLimit.lockDuration,
+            resetTime: rateLimit.resetTime,
+            timeRemaining
+          }
+        );
+      }
+
+      throw new AppError(
+        httpStatus.TOO_MANY_REQUESTS,
+        `Too many OTP requests. You have ${rateLimit.remaining} attempts remaining. Please try again after ${timeRemaining} minutes.`,
+        {
+          remaining: rateLimit.remaining,
+          resetTime: rateLimit.resetTime,
+          timeRemaining
+        }
+      );
+    }
+
     const imagePromise = file
       ? sendFileToCloudinary(`${payload?.name}`, file?.path)
       : Promise.resolve(null);
@@ -46,13 +186,10 @@ const createStudentIntoDB = async (
     // Generate a verification code (6 digits)
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Set expiration time (10 minutes from now)
-    const expiryDate = new Date();
-    expiryDate.setMinutes(expiryDate.getMinutes() + 10);
+    // Store OTP in Redis with 5-minute expiration
+    await otpOperations.setOTP(payload.email, verificationCode, 300);
 
-    // Add verification code to user data
-    userData.emailVerificationCode = verificationCode;
-    userData.emailVerificationExpiry = expiryDate;
+    // Don't store verification code in user data anymore - use Redis only
     userData.isVerified = false;
 
     const userPromise = User.create([userData], { session });
@@ -67,7 +204,7 @@ const createStudentIntoDB = async (
     }
 
     // Send verification email with modern template
-    const emailSubject = 'Your Verification Code for GreenUniMind';
+    const emailSubject = 'Verify Your Email - Green Uni Mind';
     const emailBody = `
       <!DOCTYPE html>
       <html>
@@ -131,17 +268,17 @@ const createStudentIntoDB = async (
       <body>
         <div class="container">
           <div class="header">
-            <h1 style="color: #4CAF50; margin: 0;">GreenUniMind</h1>
+            <h1 style="color: #10b981; margin: 0;">Green Uni Mind</h1>
           </div>
           <div class="content">
             <h2>Verify Your Email Address</h2>
-            <p>Thank you for registering with GreenUniMind. Please use the following code to verify your email address:</p>
+            <p>Thank you for registering with Green Uni Mind. Please use the following code to verify your email address:</p>
             <div class="code">${verificationCode}</div>
-            <p class="note">This code will <span class="expires">expire in 10 minutes</span>.</p>
+            <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
             <p>If you did not request this verification, please ignore this email.</p>
           </div>
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} GreenUniMind. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} Green Uni Mind. All rights reserved.</p>
             <p>This is an automated email, please do not reply.</p>
           </div>
         </div>
@@ -172,20 +309,12 @@ const createStudentIntoDB = async (
     await session.commitTransaction();
     await session.endSession();
 
-    const jwtPayload = { email: payload.email, role: userData.role as string };
-
-    const accessToken = createToken(
-      jwtPayload,
-      config.jwt_access_secret as string,
-      config.jwt_access_expires_in as StringValue,
-    );
-    const refreshToken = createToken(
-      jwtPayload,
-      config.jwt_refresh_secret as string,
-      config.jwt_refresh_expires_in as StringValue,
-    );
-
-    return { newStudent, accessToken, refreshToken };
+    // Don't generate tokens until email is verified
+    return {
+      newStudent,
+      message: 'Student created successfully. Please check your email for verification code.',
+      isVerified: false
+    };
   } catch (error: any) {
     await session.abortTransaction();
     await session.endSession();
@@ -212,6 +341,145 @@ const createTeacherIntoDB = async (
   session.startTransaction();
 
   try {
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: payload.email });
+    if (existingUser) {
+      if (existingUser.isVerified) {
+        throw new AppError(
+          httpStatus.CONFLICT,
+          'User already exists with this email address. Please login instead.'
+        );
+      } else {
+        // User exists but is not verified - resend OTP
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        await otpOperations.setOTP(payload.email, verificationCode, 300);
+
+        // Send verification email
+        const emailSubject = 'Verify Your Email - Green Uni Mind';
+        const emailBody = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+            <title>Email Verification</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                line-height: 1.5;
+                color: #333;
+                margin: 0;
+                padding: 0;
+              }
+              .container {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #ffffff;
+              }
+              .header {
+                text-align: center;
+                padding: 20px 0;
+                border-bottom: 1px solid #eaeaea;
+              }
+              .content {
+                padding: 30px 20px;
+                text-align: center;
+              }
+              .code {
+                background-color: #f5f5f5;
+                padding: 15px;
+                text-align: center;
+                font-size: 32px;
+                letter-spacing: 8px;
+                font-weight: bold;
+                margin: 20px 0;
+                border-radius: 6px;
+                color: #333;
+              }
+              .footer {
+                text-align: center;
+                padding-top: 20px;
+                border-top: 1px solid #eaeaea;
+                color: #888;
+                font-size: 12px;
+              }
+              .note {
+                font-size: 14px;
+                color: #666;
+                margin-top: 20px;
+              }
+              .expires {
+                color: #e53e3e;
+                font-weight: 500;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1 style="color: #10b981; margin: 0;">Green Uni Mind</h1>
+              </div>
+              <div class="content">
+                <h2>Verify Your Email Address</h2>
+                <p>You already have an account with this email. Please verify your email address to complete the registration:</p>
+                <div class="code">${verificationCode}</div>
+                <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
+                <p>If you did not request this verification, please ignore this email.</p>
+              </div>
+              <div class="footer">
+                <p>&copy; ${new Date().getFullYear()} Green Uni Mind. All rights reserved.</p>
+                <p>This is an automated email, please do not reply.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
+        await sendEmail(payload.email, emailBody, emailSubject);
+
+        throw new AppError(
+          httpStatus.CONFLICT,
+          'An account with this email already exists but is not verified. A new verification code has been sent to your email.',
+          {
+            requiresVerification: true,
+            email: payload.email,
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+          }
+        );
+      }
+    }
+
+    // Check professional-grade rate limiting for OTP requests
+    const rateLimit = await otpOperations.checkOTPRateLimit(payload.email);
+    if (!rateLimit.allowed) {
+      const timeRemaining = Math.ceil((rateLimit.resetTime - Date.now()) / 60000);
+
+      if (rateLimit.isLocked) {
+        throw new AppError(
+          httpStatus.TOO_MANY_REQUESTS,
+          rateLimit.lockReason || 'Account temporarily locked due to too many requests.',
+          {
+            isLocked: true,
+            lockDuration: rateLimit.lockDuration,
+            resetTime: rateLimit.resetTime,
+            timeRemaining
+          }
+        );
+      }
+
+      throw new AppError(
+        httpStatus.TOO_MANY_REQUESTS,
+        `Too many OTP requests. You have ${rateLimit.remaining} attempts remaining. Please try again after ${timeRemaining} minutes.`,
+        {
+          remaining: rateLimit.remaining,
+          resetTime: rateLimit.resetTime,
+          timeRemaining
+        }
+      );
+    }
+
     const imagePromise = file
       ? sendImageToCloudinary(`${payload?.name}`, file?.path)
       : Promise.resolve(null);
@@ -219,13 +487,10 @@ const createTeacherIntoDB = async (
     // Generate a verification code (6 digits)
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Set expiration time (10 minutes from now)
-    const expiryDate = new Date();
-    expiryDate.setMinutes(expiryDate.getMinutes() + 10);
+    // Store OTP in Redis with 5-minute expiration
+    await otpOperations.setOTP(payload.email, verificationCode, 300);
 
-    // Add verification code to user data
-    userData.emailVerificationCode = verificationCode;
-    userData.emailVerificationExpiry = expiryDate;
+    // Don't store verification code in user data anymore - use Redis only
     userData.isVerified = false;
 
     const userPromise = User.create([userData], { session });
@@ -240,7 +505,7 @@ const createTeacherIntoDB = async (
     }
 
     // Send verification email with modern template
-    const emailSubject = 'Your Verification Code for GreenUniMind';
+    const emailSubject = 'Verify Your Email - Green Uni Mind';
     const emailBody = `
       <!DOCTYPE html>
       <html>
@@ -304,17 +569,17 @@ const createTeacherIntoDB = async (
       <body>
         <div class="container">
           <div class="header">
-            <h1 style="color: #4CAF50; margin: 0;">GreenUniMind</h1>
+            <h1 style="color: #10b981; margin: 0;">Green Uni Mind</h1>
           </div>
           <div class="content">
             <h2>Verify Your Email Address</h2>
-            <p>Thank you for registering with GreenUniMind. Please use the following code to verify your email address:</p>
+            <p>Thank you for registering with Green Uni Mind. Please use the following code to verify your email address:</p>
             <div class="code">${verificationCode}</div>
-            <p class="note">This code will <span class="expires">expire in 10 minutes</span>.</p>
+            <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
             <p>If you did not request this verification, please ignore this email.</p>
           </div>
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} GreenUniMind. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} Green Uni Mind. All rights reserved.</p>
             <p>This is an automated email, please do not reply.</p>
           </div>
         </div>
@@ -345,20 +610,12 @@ const createTeacherIntoDB = async (
     await session.commitTransaction();
     await session.endSession();
 
-    const jwtPayload = { email: payload.email, role: userData.role as string };
-
-    const accessToken = createToken(
-      jwtPayload,
-      config.jwt_access_secret as string,
-      config.jwt_access_expires_in as StringValue,
-    );
-    const refreshToken = createToken(
-      jwtPayload,
-      config.jwt_refresh_secret as string,
-      config.jwt_refresh_expires_in as StringValue,
-    );
-
-    return { newTeacher, accessToken, refreshToken };
+    // Don't generate tokens until email is verified
+    return {
+      newTeacher,
+      message: 'Teacher created successfully. Please check your email for verification code.',
+      isVerified: false
+    };
   } catch (error: any) {
     await session.abortTransaction();
     await session.endSession();

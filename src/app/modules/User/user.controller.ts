@@ -1,4 +1,3 @@
-import config from '../../config';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { UserServices } from './user.service';
@@ -13,20 +12,17 @@ const createStudent = catchAsync(async (req, res) => {
     studentData,
   );
 
-  const { refreshToken } = result;
-
-  res.cookie('refreshToken', refreshToken, {
-    secure: config.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 1000 * 60 * 60 * 24 * 365,
-  });
-
+  // Don't set cookies since user is not verified yet
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Student is created successfully',
-    data: result,
+    message: result.message,
+    data: {
+      newStudent: result.newStudent,
+      isVerified: result.isVerified,
+      email: studentData.email,
+      otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes from now
+    },
   });
 });
 
@@ -39,20 +35,17 @@ const createTeacher = catchAsync(async (req, res) => {
     teacherData,
   );
 
-  const { refreshToken } = result;
-
-  res.cookie('refreshToken', refreshToken, {
-    secure: config.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 1000 * 60 * 60 * 24 * 365,
-  });
-
+  // Don't set cookies since user is not verified yet
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Teacher is created successfully',
-    data: result,
+    message: result.message,
+    data: {
+      newTeacher: result.newTeacher,
+      isVerified: result.isVerified,
+      email: teacherData.email,
+      otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes from now
+    },
   });
 });
 

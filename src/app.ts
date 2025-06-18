@@ -9,13 +9,17 @@ import { configurePassport } from './app/config/passport';
 import { debugRequestMiddleware } from './app/middlewares/debugMiddleware';
 import { oauthLinkMiddleware } from './app/middlewares/oauthLinkMiddleware';
 import { formDataMiddleware } from './app/middlewares/formDataMiddleware';
+import monitoringRoutes from './app/routes/monitoring.routes';
+import { redisConservativeConfig } from './app/services/redis/RedisConservativeConfig';
 
 const app: Application = express();
+
+// Initialize conservative Redis configuration to minimize usage
+redisConservativeConfig.initialize();
 
 // Set up webhook route first (before body parsers)
 // This ensures the raw body is preserved for Stripe signature verification
 const stripeWebhookPath = '/api/v1/payments/webhook';
-console.log('Setting up Stripe webhook endpoint at:', stripeWebhookPath);
 app.post(
   stripeWebhookPath,
   express.raw({ type: 'application/json' })
@@ -60,6 +64,8 @@ app.use(oauthLinkMiddleware);
 
 // Add form data middleware to handle form data requests
 app.use(formDataMiddleware);
+
+// Cache monitoring disabled (Redis not available)
 
 // Configure CORS with dynamic origin handling
 app.use(
@@ -143,7 +149,6 @@ app.use(passport.initialize());
 // Configure Passport strategies if OAuth is configured
 try {
   configurePassport();
-  console.log('Passport strategies configured successfully');
 } catch (error) {
   console.error('Error configuring Passport strategies:', error);
   console.log('OAuth authentication will not be available');
@@ -166,6 +171,9 @@ app.get('/health', (_req, res) => {
 
 // application routes
 app.use('/api/v1', router);
+
+// monitoring routes (admin only)
+app.use('/api/v1/monitoring', monitoringRoutes);
 
 // global error handler
 app.use(globalErrorHandler);

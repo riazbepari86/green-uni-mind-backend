@@ -34,6 +34,9 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const sendEmail_1 = require("../../utils/sendEmail");
 const student_model_1 = require("../Student/student.model");
 const teacher_model_1 = require("../Teacher/teacher.model");
+const redis_1 = require("../../config/redis");
+const JWTService_1 = require("../../services/auth/JWTService");
+const RedisServiceManager_1 = require("../../services/redis/RedisServiceManager");
 const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const user = yield user_model_1.User.isUserExists(payload.email);
@@ -54,14 +57,113 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     if (!(yield user_model_1.User.isPasswordMatched(payload === null || payload === void 0 ? void 0 : payload.password, user === null || user === void 0 ? void 0 : user.password))) {
         throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'Password do not matched');
     }
-    // create token and sent to the client
+    // Check if user email is verified
+    if (!user.isVerified) {
+        // Generate and send new OTP for unverified user
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        yield redis_1.otpOperations.setOTP(user.email, verificationCode, 300);
+        // Send verification email
+        const emailSubject = 'Verify Your Email - Green Uni Mind';
+        const emailBody = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <title>Email Verification</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.5;
+            color: #333;
+            margin: 0;
+            padding: 0;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+          }
+          .header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #eaeaea;
+          }
+          .content {
+            padding: 30px 20px;
+            text-align: center;
+          }
+          .code {
+            background-color: #f5f5f5;
+            padding: 15px;
+            text-align: center;
+            font-size: 32px;
+            letter-spacing: 8px;
+            font-weight: bold;
+            margin: 20px 0;
+            border-radius: 6px;
+            color: #333;
+          }
+          .footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #eaeaea;
+            color: #888;
+            font-size: 12px;
+          }
+          .note {
+            font-size: 14px;
+            color: #666;
+            margin-top: 20px;
+          }
+          .expires {
+            color: #e53e3e;
+            font-weight: 500;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1 style="color: #10b981; margin: 0;">Green Uni Mind</h1>
+          </div>
+          <div class="content">
+            <h2>Verify Your Email Address</h2>
+            <p>Please verify your email address to complete the login process:</p>
+            <div class="code">${verificationCode}</div>
+            <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
+            <p>If you did not request this verification, please ignore this email.</p>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Green Uni Mind. All rights reserved.</p>
+            <p>This is an automated email, please do not reply.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+        yield (0, sendEmail_1.sendEmail)(user.email, emailBody, emailSubject);
+        throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'Email not verified. A new verification code has been sent to your email.', {
+            requiresVerification: true,
+            email: user.email,
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+        });
+    }
+    // create token pair using enhanced JWT service
     const jwtPayload = {
         email: user.email,
         role: user.role,
         _id: (_a = user._id) === null || _a === void 0 ? void 0 : _a.toString(),
     };
-    const accessToken = (0, auth_utils_1.createToken)(jwtPayload, config_1.default.jwt_access_secret, config_1.default.jwt_access_expires_in);
-    const refreshToken = (0, auth_utils_1.createToken)(jwtPayload, config_1.default.jwt_refresh_secret, config_1.default.jwt_refresh_expires_in);
+    // Use the new JWT service for token creation with Redis caching
+    const tokenPair = yield JWTService_1.jwtService.createTokenPair(jwtPayload);
+    // Cache user data for faster subsequent requests
+    yield RedisServiceManager_1.redisServiceManager.executeWithCircuitBreaker(() => RedisServiceManager_1.redisServiceManager.cache.set(`user:${user.email}`, user, 900), // 15 minutes
+    'cache').catch(error => {
+        console.warn('Failed to cache user data during login:', error);
+    });
     let roleDetails = null;
     switch (user.role) {
         case 'student':
@@ -85,8 +187,10 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     }
     const { email: _email } = roleDetails, safeRoleDetails = __rest(roleDetails, ["email"]);
     return {
-        accessToken,
-        refreshToken,
+        accessToken: tokenPair.accessToken,
+        refreshToken: tokenPair.refreshToken,
+        tokenFamily: tokenPair.tokenFamily,
+        expiresIn: tokenPair.expiresIn,
         user: Object.assign({ id: user._id, email: user.email, role: user.role, status: user.status }, safeRoleDetails),
     };
 });
@@ -121,48 +225,26 @@ const changePassword = (userData, payload) => __awaiter(void 0, void 0, void 0, 
     return null;
 });
 const refreshToken = (token) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     try {
-        // checking if the given token is valid
-        const decoded = (0, auth_utils_1.verifyToken)(token, config_1.default.jwt_refresh_secret);
-        const { email, iat } = decoded;
-        // checking if the user is exist
-        const user = yield user_model_1.User.isUserExists(email);
-        if (!user) {
-            throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'This user is not found !');
-        }
-        // checking if the user is already deleted
-        const isDeleted = user === null || user === void 0 ? void 0 : user.isDeleted;
-        if (isDeleted) {
-            throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'This user is deleted !');
-        }
-        // checking if the user is blocked
-        const userStatus = user === null || user === void 0 ? void 0 : user.status;
-        if (userStatus === 'blocked') {
-            throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'This user is blocked ! !');
-        }
-        if ((user === null || user === void 0 ? void 0 : user.passwordChangedAt) &&
-            user_model_1.User.isJWTIssuedBeforePasswordChanged(user.passwordChangedAt, iat)) {
-            throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'You are not authorized !');
-        }
-        const jwtPayload = {
-            email: user.email,
-            role: user.role,
-            _id: (_a = user._id) === null || _a === void 0 ? void 0 : _a.toString(),
-        };
-        // Create a new access token
-        const accessToken = (0, auth_utils_1.createToken)(jwtPayload, config_1.default.jwt_access_secret, config_1.default.jwt_access_expires_in);
-        // Create a new refresh token as well to extend the session
-        const newRefreshToken = (0, auth_utils_1.createToken)(jwtPayload, config_1.default.jwt_refresh_secret, config_1.default.jwt_refresh_expires_in);
+        // Use the enhanced JWT service for token refresh with family tracking
+        const newTokenPair = yield JWTService_1.jwtService.refreshTokens(token);
         return {
-            accessToken,
-            refreshToken: newRefreshToken,
+            accessToken: newTokenPair.accessToken,
+            refreshToken: newTokenPair.refreshToken,
+            tokenFamily: newTokenPair.tokenFamily,
+            expiresIn: newTokenPair.expiresIn,
         };
     }
     catch (error) {
         console.error('Error in refreshToken service:', error);
         // Rethrow with more specific message if it's a JWT error
         if (error instanceof Error) {
+            if (error.message.includes('not found') || error.message.includes('expired')) {
+                throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'Refresh token has expired or is invalid, please login again');
+            }
+            if (error.message.includes('compromised')) {
+                throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'Security violation detected, please login again');
+            }
             if (error.name === 'JsonWebTokenError') {
                 throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'Invalid refresh token');
             }
@@ -231,26 +313,64 @@ const resetPassword = (payload, token) => __awaiter(void 0, void 0, void 0, func
         passwordChangedAt: new Date(),
     });
 });
-const logoutUser = (_refreshToken) => __awaiter(void 0, void 0, void 0, function* () {
-    return {
-        message: 'User logged out successfully!',
-    };
+const logoutUser = (accessToken, refreshToken) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Blacklist both access and refresh tokens if provided
+        const tokensToBlacklist = [];
+        if (accessToken)
+            tokensToBlacklist.push(accessToken);
+        if (refreshToken)
+            tokensToBlacklist.push(refreshToken);
+        if (tokensToBlacklist.length > 0) {
+            yield JWTService_1.jwtService.batchBlacklistTokens(tokensToBlacklist);
+        }
+        return {
+            message: 'User logged out successfully!',
+        };
+    }
+    catch (error) {
+        console.warn('Error during logout token blacklisting:', error);
+        // Don't fail logout if blacklisting fails
+        return {
+            message: 'User logged out successfully!',
+        };
+    }
 });
-const verifyEmail = (code) => __awaiter(void 0, void 0, void 0, function* () {
-    // Find user with this verification code
-    const user = yield user_model_1.User.findOne({ emailVerificationCode: code });
+const verifyEmail = (email, code) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    // Get OTP from Redis
+    const storedOTP = yield redis_1.otpOperations.getOTP(email);
+    if (!storedOTP) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'OTP has expired or does not exist. Please request a new one.');
+    }
+    if (storedOTP !== code) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Invalid OTP code. Please check and try again.');
+    }
+    // Find user by email
+    const user = yield user_model_1.User.findOne({ email });
     if (!user) {
-        throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Invalid verification code');
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'User not found');
     }
-    // Check if the verification code has expired
-    if (user.emailVerificationExpiry && user.emailVerificationExpiry < new Date()) {
-        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Verification code has expired');
+    if (user.isVerified) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Email is already verified');
     }
-    // Mark user as verified and clear verification code
+    // Mark user as verified
     user.isVerified = true;
-    user.emailVerificationCode = undefined;
-    user.emailVerificationExpiry = undefined;
     yield user.save();
+    // Delete OTP from Redis after successful verification
+    yield redis_1.otpOperations.deleteOTP(email);
+    // Generate tokens after successful verification using enhanced JWT service
+    const jwtPayload = {
+        email: user.email,
+        role: user.role,
+        _id: (_a = user._id) === null || _a === void 0 ? void 0 : _a.toString(),
+    };
+    const tokenPair = yield JWTService_1.jwtService.createTokenPair(jwtPayload);
+    // Cache user data for faster subsequent requests
+    yield RedisServiceManager_1.redisServiceManager.executeWithCircuitBreaker(() => RedisServiceManager_1.redisServiceManager.cache.set(`user:${user.email}`, user, 900), // 15 minutes
+    'cache').catch(error => {
+        console.warn('Failed to cache user data during email verification:', error);
+    });
     return {
         success: true,
         message: 'Email verified successfully',
@@ -260,6 +380,10 @@ const verifyEmail = (code) => __awaiter(void 0, void 0, void 0, function* () {
             role: user.role,
             isVerified: user.isVerified,
         },
+        accessToken: tokenPair.accessToken,
+        refreshToken: tokenPair.refreshToken,
+        tokenFamily: tokenPair.tokenFamily,
+        expiresIn: tokenPair.expiresIn,
     };
 });
 const resendVerificationEmail = (email) => __awaiter(void 0, void 0, void 0, function* () {
@@ -272,24 +396,38 @@ const resendVerificationEmail = (email) => __awaiter(void 0, void 0, void 0, fun
     if (user.isVerified) {
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Email is already verified');
     }
-    // Check if a verification code was sent recently (30 seconds cooldown)
-    const cooldownPeriod = 30 * 1000; // 30 seconds in milliseconds
-    if (user.emailVerificationExpiry &&
-        new Date().getTime() - new Date(user.emailVerificationExpiry).getTime() + 24 * 60 * 60 * 1000 < cooldownPeriod) {
-        const timeLeft = Math.ceil((cooldownPeriod - (new Date().getTime() - new Date(user.emailVerificationExpiry).getTime() + 24 * 60 * 60 * 1000)) / 1000);
-        throw new AppError_1.default(http_status_1.default.TOO_MANY_REQUESTS, `Please wait ${timeLeft} seconds before requesting another verification code`);
+    // Check resend cooldown (1-minute between resends)
+    const cooldownCheck = yield redis_1.otpOperations.checkResendCooldown(email);
+    if (!cooldownCheck.allowed) {
+        throw new AppError_1.default(http_status_1.default.TOO_MANY_REQUESTS, `Please wait ${cooldownCheck.remainingTime} seconds before requesting a new code.`, {
+            isResendCooldown: true,
+            remainingTime: cooldownCheck.remainingTime
+        });
+    }
+    // Check professional-grade rate limiting for OTP requests
+    const rateLimit = yield redis_1.otpOperations.checkOTPRateLimit(email);
+    if (!rateLimit.allowed) {
+        const timeRemaining = Math.ceil((rateLimit.resetTime - Date.now()) / 60000);
+        if (rateLimit.isLocked) {
+            throw new AppError_1.default(http_status_1.default.TOO_MANY_REQUESTS, rateLimit.lockReason || 'Account temporarily locked due to too many requests.', {
+                isLocked: true,
+                lockDuration: rateLimit.lockDuration,
+                resetTime: rateLimit.resetTime,
+                timeRemaining
+            });
+        }
+        throw new AppError_1.default(http_status_1.default.TOO_MANY_REQUESTS, `Too many OTP requests. You have ${rateLimit.remaining} attempts remaining. Please try again after ${timeRemaining} minutes.`, {
+            remaining: rateLimit.remaining,
+            resetTime: rateLimit.resetTime,
+            timeRemaining
+        });
     }
     // Generate a new verification code (6 digits)
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    // Set expiration time (10 minutes from now)
-    const expiryDate = new Date();
-    expiryDate.setMinutes(expiryDate.getMinutes() + 10);
-    // Update user with new verification code
-    user.emailVerificationCode = verificationCode;
-    user.emailVerificationExpiry = expiryDate;
-    yield user.save();
+    // Store OTP in Redis with 5-minute expiration
+    yield redis_1.otpOperations.setOTP(email, verificationCode, 300);
     // Send verification email with modern template
-    const emailSubject = 'Your Verification Code for GreenUniMind';
+    const emailSubject = 'Verify Your Email - Green Uni Mind';
     const emailBody = `
     <!DOCTYPE html>
     <html>
@@ -353,17 +491,17 @@ const resendVerificationEmail = (email) => __awaiter(void 0, void 0, void 0, fun
     <body>
       <div class="container">
         <div class="header">
-          <h1 style="color: #4CAF50; margin: 0;">GreenUniMind</h1>
+          <h1 style="color: #10b981; margin: 0;">Green Uni Mind</h1>
         </div>
         <div class="content">
           <h2>Verify Your Email Address</h2>
-          <p>Thank you for registering with GreenUniMind. Please use the following code to verify your email address:</p>
+          <p>Thank you for registering with Green Uni Mind. Please use the following code to verify your email address:</p>
           <div class="code">${verificationCode}</div>
-          <p class="note">This code will <span class="expires">expire in 10 minutes</span>.</p>
+          <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
           <p>If you did not request this verification, please ignore this email.</p>
         </div>
         <div class="footer">
-          <p>&copy; ${new Date().getFullYear()} GreenUniMind. All rights reserved.</p>
+          <p>&copy; ${new Date().getFullYear()} Green Uni Mind. All rights reserved.</p>
           <p>This is an automated email, please do not reply.</p>
         </div>
       </div>
@@ -374,7 +512,14 @@ const resendVerificationEmail = (email) => __awaiter(void 0, void 0, void 0, fun
     return {
         success: true,
         message: 'Verification email sent successfully',
-        expiresIn: 600, // 10 minutes in seconds
+        expiresIn: 300, // 5 minutes in seconds
+    };
+});
+const getRateLimitStatus = (email) => __awaiter(void 0, void 0, void 0, function* () {
+    const status = yield redis_1.otpOperations.getRateLimitStatus(email);
+    return {
+        success: true,
+        data: status
     };
 });
 exports.AuthServices = {
@@ -386,4 +531,5 @@ exports.AuthServices = {
     logoutUser,
     verifyEmail,
     resendVerificationEmail,
+    getRateLimitStatus,
 };

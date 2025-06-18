@@ -14,7 +14,7 @@ export const sendEmail = async (to: string, html: string, subject?: string) => {
 
   // send mail with defined transport object
   await transporter.sendMail({
-    from: `"GreenUniMind" <${config.email.user}>`, // sender address
+    from: `"Green Uni Mind" <${config.email.user}>`, // sender address
     to, // list of receivers
     subject: subject || 'Password reset request for Green Uni Mind', // Subject line
     text: subject || 'Change your password', // plain text body

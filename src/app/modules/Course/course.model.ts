@@ -2,7 +2,6 @@ import { model, Schema } from 'mongoose';
 import { ICourse } from './course.interface';
 import {
   courseLevel,
-  courseCategories,
   courseStatus,
   courseIsFree,
 } from './course.constant';
@@ -22,13 +21,15 @@ const courseSchema = new Schema<ICourse>(
       type: String,
       trim: true,
     },
-    category: {
-      type: String,
-      enum: {
-        values: courseCategories,
-        message: 'Invalid course category',
-      },
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Category',
       required: [true, 'Course category is required'],
+    },
+    subcategoryId: {
+      type: Schema.Types.ObjectId,
+      ref: 'SubCategory',
+      required: [true, 'Course subcategory is required'],
     },
     courseLevel: {
       type: String,
@@ -93,7 +94,9 @@ const courseSchema = new Schema<ICourse>(
   { timestamps: true },
 );
 
-// Optionally create an index for better searching
-courseSchema.index({ title: 'text', category: 'text' });
+// Create indexes for better searching and filtering
+courseSchema.index({ title: 'text', description: 'text' });
+courseSchema.index({ categoryId: 1, subcategoryId: 1 });
+courseSchema.index({ isPublished: 1, status: 1 });
 
 export const Course = model<ICourse>('Course', courseSchema);

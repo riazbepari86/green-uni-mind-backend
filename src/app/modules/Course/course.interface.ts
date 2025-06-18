@@ -1,6 +1,5 @@
 import { Types } from 'mongoose';
 import {
-  courseCategories,
   courseIsFree,
   courseLevel,
   courseStatus,
@@ -10,7 +9,8 @@ export interface ICourse {
   title: string;
   subtitle?: string;
   description?: string;
-  category: keyof typeof courseCategories;
+  categoryId: Types.ObjectId;
+  subcategoryId: Types.ObjectId;
   courseLevel: keyof typeof courseLevel;
   coursePrice?: number;
   courseThumbnail?: string;

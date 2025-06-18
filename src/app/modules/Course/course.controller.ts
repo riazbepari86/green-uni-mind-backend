@@ -94,6 +94,19 @@ const getCourseByEnrolledStudentId = catchAsync(async (req, res) => {
   });
 });
 
+const getPopularCourses = catchAsync(async (req, res) => {
+  const limit = req.query.limit ? parseInt(req.query.limit as string) : 8;
+
+  const result = await CourseServices.getPopularCourses(limit);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Popular courses retrieved successfully',
+    data: result,
+  });
+});
+
 const editCourse = catchAsync(async (req, res) => {
   const { id } = req.params;
   const file = req.file;
@@ -129,6 +142,7 @@ export const CourseController = {
   getCourseById,
   updateCourse,
   getCourseByEnrolledStudentId,
+  getPopularCourses,
   editCourse,
   deleteCourse,
 };

@@ -17,13 +17,15 @@ const courseSchema = new mongoose_1.Schema({
         type: String,
         trim: true,
     },
-    category: {
-        type: String,
-        enum: {
-            values: course_constant_1.courseCategories,
-            message: 'Invalid course category',
-        },
+    categoryId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'Category',
         required: [true, 'Course category is required'],
+    },
+    subcategoryId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'SubCategory',
+        required: [true, 'Course subcategory is required'],
     },
     courseLevel: {
         type: String,
@@ -85,6 +87,8 @@ const courseSchema = new mongoose_1.Schema({
         },
     },
 }, { timestamps: true });
-// Optionally create an index for better searching
-courseSchema.index({ title: 'text', category: 'text' });
+// Create indexes for better searching and filtering
+courseSchema.index({ title: 'text', description: 'text' });
+courseSchema.index({ categoryId: 1, subcategoryId: 1 });
+courseSchema.index({ isPublished: 1, status: 1 });
 exports.Course = (0, mongoose_1.model)('Course', courseSchema);

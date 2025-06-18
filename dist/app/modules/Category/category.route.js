@@ -11,5 +11,13 @@ const validateRequest_1 = __importDefault(require("../../middlewares/validateReq
 const category_validation_1 = require("./category.validation");
 const category_controller_1 = require("./category.controller");
 const router = (0, express_1.Router)();
+// Public routes
+router.get('/', category_controller_1.CategoryController.getAllCategories);
+router.get('/with-subcategories', category_controller_1.CategoryController.getAllCategoriesWithSubcategories);
+router.get('/:id', category_controller_1.CategoryController.getCategoryById);
+router.get('/:categoryId/courses', category_controller_1.CategoryController.getCoursesByCategory);
+// Protected routes (Teacher only)
 router.post('/create-category', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(category_validation_1.CategoryValidation.createCategoryValidationSchema), category_controller_1.CategoryController.createCategory);
+router.patch('/:id', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(category_validation_1.CategoryValidation.updateCategoryValidationSchema), category_controller_1.CategoryController.updateCategory);
+router.delete('/:id', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), category_controller_1.CategoryController.deleteCategory);
 exports.CategoryRoutes = router;

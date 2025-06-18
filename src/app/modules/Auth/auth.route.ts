@@ -49,11 +49,21 @@ router.post(
   AuthControllers.verifyEmail,
 );
 
+// OTP verification route (alias for verify-email for better naming)
+router.post(
+  '/verify-otp',
+  validateRequest(AuthValidation.verifyEmailValidationSchema),
+  AuthControllers.verifyEmail,
+);
+
 router.post(
   '/resend-verification',
   validateRequest(AuthValidation.resendVerificationEmailValidationSchema),
   AuthControllers.resendVerificationEmail,
 );
+
+// Rate limiting status route
+router.get('/rate-limit-status', AuthControllers.getRateLimitStatus);
 
 // Two-factor authentication routes
 const setupTwoFactorSchema = z.object({

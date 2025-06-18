@@ -151,7 +151,7 @@ const templates = {
 const sendEmail = (to, subject, html) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const info = yield transporter.sendMail({
-            from: `"GreenUniMind" <${config_1.default.email.user}>`,
+            from: `"Green Uni Mind" <${config_1.default.email.user}>`,
             to,
             subject,
             html,

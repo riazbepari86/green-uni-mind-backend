@@ -159,6 +159,34 @@ const getCourseByEnrolledStudentId = (studentId) => __awaiter(void 0, void 0, vo
     });
     return result;
 });
+const getPopularCourses = (...args_1) => __awaiter(void 0, [...args_1], void 0, function* (limit = 8) {
+    try {
+        // Get popular courses based on enrollment count and published status
+        // Sort by totalEnrollment in descending order to get most popular first
+        const result = yield course_model_1.Course.find({
+            isPublished: true
+            // Remove status filter for now as it might not be set consistently
+        })
+            .populate({
+            path: 'creator',
+            select: 'name profileImg',
+        })
+            .populate({
+            path: 'lectures',
+            select: '_id lectureTitle duration', // Only select necessary fields for performance
+        })
+            .sort({
+            totalEnrollment: -1, // Primary sort by enrollment count
+            createdAt: -1 // Secondary sort by newest first
+        })
+            .limit(limit);
+        return result;
+    }
+    catch (error) {
+        console.error('Error fetching popular courses:', error);
+        throw new AppError_1.default(http_status_1.default.INTERNAL_SERVER_ERROR, 'Failed to fetch popular courses');
+    }
+});
 const editCourse = (id, payload, file) => __awaiter(void 0, void 0, void 0, function* () {
     const session = yield mongoose_1.default.startSession();
     session.startTransaction();
@@ -275,6 +303,7 @@ exports.CourseServices = {
     updateCourse,
     getCourseById,
     getCourseByEnrolledStudentId,
+    getPopularCourses,
     editCourse,
     deleteCourse,
 };

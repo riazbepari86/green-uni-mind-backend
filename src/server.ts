@@ -25,6 +25,12 @@ async function main() {
 
     await mongoose.connect(config.database_url as string);
 
+    // Skip Redis initialization due to connection issues - using Agenda.js for jobs
+    console.log('⚠️ Skipping Redis initialization - using MongoDB-based Agenda.js for job scheduling');
+
+    // Note: OTP functionality will be limited without Redis
+    console.log('ℹ️ OTP functionality will use in-memory storage (development mode)');
+
     // Seed super admin
     await seedSuperAdmin();
 
@@ -65,7 +71,7 @@ if (require.main === module) {
   main();
 }
 
-process.on('unhandledRejection', () => {
+process.on('unhandledRejection', async () => {
   console.log(`😈 unhandledRejection is detected , shutting down ...`);
   keepAliveService.stop();
   if (server) {
@@ -76,7 +82,7 @@ process.on('unhandledRejection', () => {
   process.exit(1);
 });
 
-process.on('uncaughtException', () => {
+process.on('uncaughtException', async () => {
   console.log(`😈 uncaughtException is detected , shutting down ...`);
   keepAliveService.stop();
   process.exit(1);

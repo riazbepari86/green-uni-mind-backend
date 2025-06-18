@@ -26,6 +26,72 @@ const createCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0,
         data: result,
     });
 }));
+const getAllCategories = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield category_service_1.CategoryService.getAllCategories();
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Categories retrieved successfully!',
+        data: result,
+    });
+}));
+const getAllCategoriesWithSubcategories = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield category_service_1.CategoryService.getAllCategoriesWithSubcategories();
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Categories with subcategories retrieved successfully!',
+        data: result,
+    });
+}));
+const getCategoryById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const result = yield category_service_1.CategoryService.getCategoryById(id);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Category retrieved successfully!',
+        data: result,
+    });
+}));
+const getCoursesByCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { categoryId } = req.params;
+    const { page, limit } = req.query;
+    const result = yield category_service_1.CategoryService.getCoursesByCategory(categoryId, Number(page) || 1, Number(limit) || 10);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Courses retrieved successfully!',
+        data: result.courses,
+        meta: result.meta,
+    });
+}));
+const updateCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const result = yield category_service_1.CategoryService.updateCategory(id, req.body);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Category updated successfully!',
+        data: result,
+    });
+}));
+const deleteCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    yield category_service_1.CategoryService.deleteCategory(id);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Category deleted successfully!',
+        data: null,
+    });
+}));
 exports.CategoryController = {
     createCategory,
+    getAllCategories,
+    getAllCategoriesWithSubcategories,
+    getCategoryById,
+    getCoursesByCategory,
+    updateCategory,
+    deleteCategory,
 };

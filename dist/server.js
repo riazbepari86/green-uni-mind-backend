@@ -34,6 +34,10 @@ function main() {
                 console.warn('⚠️ WARNING: STRIPE_SECRET_KEY environment variable is not set. Stripe functionality may not work correctly.');
             }
             yield mongoose_1.default.connect(config_1.default.database_url);
+            // Skip Redis initialization due to connection issues - using Agenda.js for jobs
+            console.log('⚠️ Skipping Redis initialization - using MongoDB-based Agenda.js for job scheduling');
+            // Note: OTP functionality will be limited without Redis
+            console.log('ℹ️ OTP functionality will use in-memory storage (development mode)');
             // Seed super admin
             yield (0, DB_1.default)();
             // Start payout jobs
@@ -72,7 +76,7 @@ function main() {
 if (require.main === module) {
     main();
 }
-process.on('unhandledRejection', () => {
+process.on('unhandledRejection', () => __awaiter(void 0, void 0, void 0, function* () {
     console.log(`😈 unhandledRejection is detected , shutting down ...`);
     keepAlive_1.default.stop();
     if (server) {
@@ -81,12 +85,12 @@ process.on('unhandledRejection', () => {
         });
     }
     process.exit(1);
-});
-process.on('uncaughtException', () => {
+}));
+process.on('uncaughtException', () => __awaiter(void 0, void 0, void 0, function* () {
     console.log(`😈 uncaughtException is detected , shutting down ...`);
     keepAlive_1.default.stop();
     process.exit(1);
-});
+}));
 // Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down gracefully...');

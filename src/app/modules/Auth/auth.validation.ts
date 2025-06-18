@@ -48,6 +48,9 @@ const resetpasswordValidationSchema = z.object({
 // Email verification validation schemas
 const verifyEmailValidationSchema = z.object({
   body: z.object({
+    email: z
+      .string({ required_error: 'Email is required' })
+      .email({ message: 'Invalid email format' }),
     code: z
       .string({ required_error: 'Verification code is required' })
       .length(6, { message: 'Verification code must be 6 digits' })

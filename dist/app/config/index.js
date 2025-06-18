@@ -25,6 +25,11 @@ exports.default = {
     stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
     stripe_mother_account_id: process.env.MOTHER_STRIPE_ACCOUNT_ID,
     frontend_url: process.env.FRONTEND_URL || 'http://localhost:8080',
+    redis: {
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD,
+    },
     email: {
         host: process.env.EMAIL_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.EMAIL_PORT || '587'),

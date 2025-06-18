@@ -45,6 +45,9 @@ const resetpasswordValidationSchema = zod_1.z.object({
 // Email verification validation schemas
 const verifyEmailValidationSchema = zod_1.z.object({
     body: zod_1.z.object({
+        email: zod_1.z
+            .string({ required_error: 'Email is required' })
+            .email({ message: 'Invalid email format' }),
         code: zod_1.z
             .string({ required_error: 'Verification code is required' })
             .length(6, { message: 'Verification code must be 6 digits' })

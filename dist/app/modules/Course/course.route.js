@@ -15,6 +15,7 @@ const parseMiddleware_1 = require("../../middlewares/parseMiddleware");
 const router = (0, express_1.Router)({ mergeParams: true });
 router.get('/search', (0, auth_1.default)(user_constant_1.USER_ROLE.student, user_constant_1.USER_ROLE.teacher), course_controller_1.CourseController.searchCourse);
 router.get('/published-courses', course_controller_1.CourseController.getPublishedCourse);
+router.get('/popular-courses', course_controller_1.CourseController.getPopularCourses);
 router.get('/creator/:id', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), course_controller_1.CourseController.getCreatorCourse);
 router.patch('/update-course/:id', sendImageToCloudinary_1.upload.single('file'), parseMiddleware_1.parseDataMiddleware, (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(course_validation_1.CourseValidation.updateCourseZodSchema), course_controller_1.CourseController.updateCourse);
 router.post('/create-course/:id', sendImageToCloudinary_1.upload.single('file'), parseMiddleware_1.parseDataMiddleware, (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(course_validation_1.CourseValidation.createCourseZodSchema), course_controller_1.CourseController.createCourse);

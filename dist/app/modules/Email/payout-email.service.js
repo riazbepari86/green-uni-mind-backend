@@ -10,10 +10,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PayoutEmailService = exports.sendPayoutStatusChangeNotification = exports.sendAllUpcomingPayoutNotifications = exports.sendPayoutProcessedNotification = exports.sendUpcomingPayoutNotification = void 0;
+const payout_interface_1 = require("../Payment/payout.interface");
 const email_service_1 = require("./email.service");
 const teacher_model_1 = require("../Teacher/teacher.model");
 const payout_model_1 = require("../Payment/payout.model");
-const payout_interface_1 = require("../Payment/payout.interface");
 const date_fns_1 = require("date-fns");
 /**
  * Send email notification for upcoming payout

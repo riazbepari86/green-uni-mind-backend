@@ -207,6 +207,38 @@ const getCourseByEnrolledStudentId = async (studentId: string) => {
   return result;
 };
 
+const getPopularCourses = async (limit: number = 8) => {
+  try {
+    // Get popular courses based on enrollment count and published status
+    // Sort by totalEnrollment in descending order to get most popular first
+    const result = await Course.find({
+      isPublished: true
+      // Remove status filter for now as it might not be set consistently
+    })
+      .populate({
+        path: 'creator',
+        select: 'name profileImg',
+      })
+      .populate({
+        path: 'lectures',
+        select: '_id lectureTitle duration', // Only select necessary fields for performance
+      })
+      .sort({
+        totalEnrollment: -1, // Primary sort by enrollment count
+        createdAt: -1 // Secondary sort by newest first
+      })
+      .limit(limit);
+
+    return result;
+  } catch (error) {
+    console.error('Error fetching popular courses:', error);
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch popular courses',
+    );
+  }
+};
+
 const editCourse = async (
   id: string,
   payload: Partial<ICourse>,
@@ -357,6 +389,7 @@ export const CourseServices = {
   updateCourse,
   getCourseById,
   getCourseByEnrolledStudentId,
+  getPopularCourses,
   editCourse,
   deleteCourse,
 };

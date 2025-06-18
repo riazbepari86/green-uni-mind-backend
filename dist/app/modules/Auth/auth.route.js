@@ -21,7 +21,11 @@ router.post('/reset-password', (0, validateRequest_1.default)(auth_validation_1.
 router.post('/logout', auth_controller_1.AuthControllers.logoutUser);
 // Email verification routes
 router.post('/verify-email', (0, validateRequest_1.default)(auth_validation_1.AuthValidation.verifyEmailValidationSchema), auth_controller_1.AuthControllers.verifyEmail);
+// OTP verification route (alias for verify-email for better naming)
+router.post('/verify-otp', (0, validateRequest_1.default)(auth_validation_1.AuthValidation.verifyEmailValidationSchema), auth_controller_1.AuthControllers.verifyEmail);
 router.post('/resend-verification', (0, validateRequest_1.default)(auth_validation_1.AuthValidation.resendVerificationEmailValidationSchema), auth_controller_1.AuthControllers.resendVerificationEmail);
+// Rate limiting status route
+router.get('/rate-limit-status', auth_controller_1.AuthControllers.getRateLimitStatus);
 // Two-factor authentication routes
 const setupTwoFactorSchema = zod_1.z.object({
     params: zod_1.z.object({

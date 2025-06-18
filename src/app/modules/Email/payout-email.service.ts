@@ -1,9 +1,35 @@
+import { Types } from 'mongoose';
+import { PayoutStatus } from '../Payment/payout.interface';
 import { EmailService } from './email.service';
 import { Teacher } from '../Teacher/teacher.model';
 import { Payout } from '../Payment/payout.model';
-import { PayoutStatus } from '../Payment/payout.interface';
 import { format, addDays } from 'date-fns';
-import { Types } from 'mongoose';
+
+export interface IEmailService {
+  sendEmail(to: string, subject: string, html: string): Promise<boolean>;
+  sendVerificationEmail(email: string, userName: string, verificationCode: string): Promise<boolean>;
+  resendVerificationEmail(email: string): Promise<boolean>;
+  sendPasswordResetEmail(email: string, userName: string, resetCode: string): Promise<boolean>;
+  sendWelcomeEmail(email: string, userName: string): Promise<boolean>;
+  sendUpcomingPayoutNotification(email: string, teacherName: string, amount: number, date: Date, payoutId: string): Promise<boolean>;
+  sendPayoutProcessedNotification(email: string, teacherName: string, amount: number, date: Date, payoutId: string): Promise<boolean>;
+}
+
+export interface EmailTemplateData {
+  emailVerification: (data: { userName: string; verificationCode: string; }) => { subject: string; html: string; };
+  upcomingPayout: (data: { teacherName: string; amount: number; date: Date; payoutId: string; }) => { subject: string; html: string; };
+  payoutProcessed: (data: { teacherName: string; amount: number; date: Date; payoutId: string; }) => { subject: string; html: string; };
+  passwordReset: (data: { userName: string; resetCode: string; }) => { subject: string; html: string; };
+  welcome: (data: { userName: string; }) => { subject: string; html: string; };
+}
+
+export interface PayoutNotificationData {
+  email: string;
+  teacherName: string;
+  amount: number;
+  date: Date;
+  payoutId: string;
+}
 
 /**
  * Send email notification for upcoming payout

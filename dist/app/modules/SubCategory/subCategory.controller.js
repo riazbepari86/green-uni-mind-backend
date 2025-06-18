@@ -26,6 +26,63 @@ const createSubCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void
         data: result,
     });
 }));
+const getSubCategoriesByCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { categoryId } = req.params;
+    const result = yield subCategory_service_1.SubCategoryService.getSubCategoriesByCategory(categoryId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Subcategories retrieved successfully!',
+        data: result,
+    });
+}));
+const getSubCategoryById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const result = yield subCategory_service_1.SubCategoryService.getSubCategoryById(id);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Subcategory retrieved successfully!',
+        data: result,
+    });
+}));
+const getCoursesBySubCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { subcategoryId } = req.params;
+    const { page, limit } = req.query;
+    const result = yield subCategory_service_1.SubCategoryService.getCoursesBySubCategory(subcategoryId, Number(page) || 1, Number(limit) || 10);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Courses retrieved successfully!',
+        data: result.courses,
+        meta: result.meta,
+    });
+}));
+const updateSubCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const result = yield subCategory_service_1.SubCategoryService.updateSubCategory(id, req.body);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Subcategory updated successfully!',
+        data: result,
+    });
+}));
+const deleteSubCategory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    yield subCategory_service_1.SubCategoryService.deleteSubCategory(id);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Subcategory deleted successfully!',
+        data: null,
+    });
+}));
 exports.SubCategoryController = {
     createSubCategory,
+    getSubCategoriesByCategory,
+    getSubCategoryById,
+    getCoursesBySubCategory,
+    updateSubCategory,
+    deleteSubCategory,
 };
