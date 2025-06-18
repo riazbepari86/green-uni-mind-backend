@@ -15,7 +15,10 @@ const debugMiddleware_1 = require("./app/middlewares/debugMiddleware");
 const oauthLinkMiddleware_1 = require("./app/middlewares/oauthLinkMiddleware");
 const formDataMiddleware_1 = require("./app/middlewares/formDataMiddleware");
 const monitoring_routes_1 = __importDefault(require("./app/routes/monitoring.routes"));
+const RedisConservativeConfig_1 = require("./app/services/redis/RedisConservativeConfig");
 const app = (0, express_1.default)();
+// Initialize conservative Redis configuration to minimize usage
+RedisConservativeConfig_1.redisConservativeConfig.initialize();
 // Set up webhook route first (before body parsers)
 // This ensures the raw body is preserved for Stripe signature verification
 const stripeWebhookPath = '/api/v1/payments/webhook';

@@ -13,9 +13,10 @@ exports.smartCacheService = exports.SmartCacheService = void 0;
 const RedisServiceManager_1 = require("../redis/RedisServiceManager");
 class SmartCacheService {
     constructor() {
-        this.compressionThreshold = 1024; // 1KB
-        this.maxL1Size = 1000; // Maximum items in L1 cache
-        this.maxL1Memory = 50 * 1024 * 1024; // 50MB max for L1 cache
+        this.compressionThreshold = 512; // 512B - smaller threshold
+        this.maxL1Size = 200; // Reduced to 200 items max
+        this.maxL1Memory = 10 * 1024 * 1024; // Reduced to 10MB max for L1 cache
+        this.maxObjectSize = 5 * 1024; // 5KB max object size - reject larger objects
         this.redis = RedisServiceManager_1.redisServiceManager.cacheClient;
         // Initialize L1 cache with simple Map for now
         this.l1Cache = new Map();
@@ -72,6 +73,16 @@ class SmartCacheService {
             const ttl = options.ttl || this.getSmartTTL(key, options.priority);
             const serializedValue = JSON.stringify(value);
             const size = Buffer.byteLength(serializedValue, 'utf8');
+            // Skip caching if object is too large
+            if (size > this.maxObjectSize) {
+                console.log(`⚠️ Skipping cache: ${key} (Size: ${size}B exceeds limit of ${this.maxObjectSize}B)`);
+                return;
+            }
+            // Skip caching alerts and monitoring data to reduce Redis usage
+            if (key.includes('alert:') || key.includes('metrics:') || key.includes('monitoring:')) {
+                console.log(`📵 Skipping cache for monitoring data: ${key}`);
+                return;
+            }
             try {
                 // Determine caching strategy based on options and value characteristics
                 const strategy = this.determineCachingStrategy(key, size, options);

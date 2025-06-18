@@ -54,28 +54,28 @@ class FeatureToggleService {
                 },
                 // Medium priority features (disable in conservative mode)
                 'performance_monitoring': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'medium',
                     description: 'Performance metrics storage',
                     redisUsage: 'heavy',
                     fallbackAvailable: true
                 },
                 'api_metrics_tracking': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'medium',
                     description: 'API endpoint metrics tracking',
                     redisUsage: 'heavy',
                     fallbackAvailable: true
                 },
                 'cache_statistics': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'medium',
                     description: 'Cache hit/miss statistics',
                     redisUsage: 'moderate',
                     fallbackAvailable: true
                 },
                 'popular_content_tracking': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'medium',
                     description: 'Popular endpoints and queries tracking',
                     redisUsage: 'moderate',
@@ -83,28 +83,28 @@ class FeatureToggleService {
                 },
                 // Low priority features (disable in normal mode when usage is high)
                 'detailed_logging': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'low',
                     description: 'Detailed operation logging in Redis',
                     redisUsage: 'moderate',
                     fallbackAvailable: true
                 },
                 'cache_warming': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'low',
                     description: 'Automatic cache warming',
                     redisUsage: 'moderate',
                     fallbackAvailable: true
                 },
                 'invalidation_tracking': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'low',
                     description: 'Cache invalidation event tracking',
                     redisUsage: 'light',
                     fallbackAvailable: true
                 },
                 'connection_metrics': {
-                    enabled: true,
+                    enabled: false, // Disabled by default to reduce Redis usage
                     priority: 'low',
                     description: 'Redis connection metrics',
                     redisUsage: 'light',

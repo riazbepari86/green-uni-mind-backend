@@ -23,9 +23,10 @@ export default {
   stripe_mother_account_id: process.env.MOTHER_STRIPE_ACCOUNT_ID!,
   frontend_url: process.env.FRONTEND_URL || 'http://localhost:8080',
   redis: {
-    host: process.env.REDIS_HOST!,
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    password: process.env.REDIS_PASSWORD!,
+    host: process.env.REDIS_HOST || process.env.REDIS_URL?.split('@')[1]?.split(':')[0] || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || process.env.REDIS_URL?.split(':').pop()?.split('/')[0] || '6379'),
+    password: process.env.REDIS_PASSWORD || process.env.REDIS_URL?.split('://')[1]?.split('@')[0]?.split(':')[1] || '',
+    url: process.env.REDIS_URL, // Support for full Redis URL (common in cloud deployments)
   },
   email: {
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',

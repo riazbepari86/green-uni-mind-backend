@@ -2,34 +2,70 @@ import Redis from 'ioredis';
 import config from './index';
 
 // Redis connection configuration with optimized settings
-const redisConfig = {
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  enableReadyCheck: true,
-  maxRetriesPerRequest: 3,
-  lazyConnect: true,
-  // TLS configuration for Upstash Redis
-  tls: config.redis.host.includes('upstash.io') ? {} : undefined,
-  // Connection pool settings for better performance
-  family: 4, // Use IPv4
-  keepAlive: 0, // 0 disables TCP keep-alive, or set to a number in ms (e.g., 10000)
-  connectTimeout: 10000,
-  commandTimeout: 5000,
-  retryDelayOnFailover: 100,
-  enableOfflineQueue: false,
-  // Optimized for high-performance scenarios
-  retryDelayOnClusterDown: 300,
-};
+const redisConfig = (() => {
+  // If REDIS_URL is provided (common in cloud deployments), use it directly
+  if (config.redis.url) {
+    return {
+      connectionName: 'green-uni-mind',
+      enableReadyCheck: true,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+      // TLS configuration for Upstash Redis
+      tls: config.redis.url.includes('upstash.io') || config.redis.url.includes('rediss://') ? {} : undefined,
+      // Connection pool settings for better performance
+      family: 4, // Use IPv4
+      keepAlive: 0,
+      connectTimeout: 10000,
+      commandTimeout: 5000,
+      retryDelayOnFailover: 100,
+      enableOfflineQueue: false,
+      retryDelayOnClusterDown: 300,
+    };
+  }
+
+  // Fallback to individual host/port/password configuration
+  const host = config.redis.host || 'localhost';
+  const port = config.redis.port || 6379;
+  const password = config.redis.password || '';
+
+  return {
+    host,
+    port,
+    password,
+    enableReadyCheck: true,
+    maxRetriesPerRequest: 3,
+    lazyConnect: true,
+    // TLS configuration for Upstash Redis
+    tls: host && host.includes('upstash.io') ? {} : undefined,
+    // Connection pool settings for better performance
+    family: 4, // Use IPv4
+    keepAlive: 0,
+    connectTimeout: 10000,
+    commandTimeout: 5000,
+    retryDelayOnFailover: 100,
+    enableOfflineQueue: false,
+    retryDelayOnClusterDown: 300,
+  };
+})();
 
 // Create primary Redis client instance
-const redis = new Redis(redisConfig);
+const redis = config.redis.url
+  ? new Redis(config.redis.url, redisConfig)
+  : new Redis(redisConfig);
 
 // Create separate Redis clients for different use cases
-const redisAuth = new Redis(redisConfig); // For authentication operations
-const redisCache = new Redis(redisConfig); // For caching operations
-const redisJobs = new Redis(redisConfig); // For job queue operations
-const redisSessions = new Redis(redisConfig); // For session management
+const redisAuth = config.redis.url
+  ? new Redis(config.redis.url, redisConfig)
+  : new Redis(redisConfig); // For authentication operations
+const redisCache = config.redis.url
+  ? new Redis(config.redis.url, redisConfig)
+  : new Redis(redisConfig); // For caching operations
+const redisJobs = config.redis.url
+  ? new Redis(config.redis.url, redisConfig)
+  : new Redis(redisConfig); // For job queue operations
+const redisSessions = config.redis.url
+  ? new Redis(config.redis.url, redisConfig)
+  : new Redis(redisConfig); // For session management
 
 // Handle Redis connection events for primary client
 redis.on('connect', () => {

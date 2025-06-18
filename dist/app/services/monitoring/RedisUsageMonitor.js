@@ -56,12 +56,14 @@ class RedisUsageMonitor {
             return;
         console.log('📊 Starting Redis usage monitoring...');
         this.isMonitoring = true;
-        // Monitor every 30 seconds
+        // Monitor every 2 minutes to reduce Redis operations
         this.monitoringInterval = setInterval(() => __awaiter(this, void 0, void 0, function* () {
             yield this.checkUsage();
-        }), 30000);
-        // Initial check
-        this.checkUsage();
+        }), 120000); // 2 minutes instead of 30 seconds
+        // Initial check after 10 seconds to let Redis connections stabilize
+        setTimeout(() => {
+            this.checkUsage();
+        }, 10000);
     }
     stopMonitoring() {
         if (!this.isMonitoring)
@@ -225,11 +227,14 @@ class RedisUsageMonitor {
         const alert = Object.assign(Object.assign({ id: alertId }, alertData), { timestamp: new Date(), acknowledged: false, autoResolved: false });
         this.alerts.set(alertId, alert);
         console.log(`🚨 Redis Alert [${alert.severity.toUpperCase()}]: ${alert.message}`);
-        // Store alert in hybrid storage for persistence
-        HybridStorageService_1.hybridStorageService.set(`alert:${alertId}`, alert, { ttl: 86400, priority: 'high' } // 24 hours
-        ).catch(error => {
-            console.error('Error storing alert:', error);
-        });
+        // Don't store alerts in Redis to reduce usage - keep in memory only
+        // hybridStorageService.set(
+        //   `alert:${alertId}`,
+        //   alert,
+        //   { ttl: 86400, priority: 'high' } // 24 hours
+        // ).catch(error => {
+        //   console.error('Error storing alert:', error);
+        // });
     }
     resolveAlert(alertId) {
         const alert = this.alerts.get(alertId);

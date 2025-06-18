@@ -17,6 +17,8 @@ class HybridStorageService {
     constructor() {
         this.mongoFallbackEnabled = true;
         this.memoryFallbackEnabled = true;
+        this.maxObjectSize = 3 * 1024; // 3KB max object size
+        this.maxCacheSize = 500; // Maximum 500 items in memory cache
         // Initialize memory cache with simple Map for now
         this.memoryCache = new Map();
         // Listen to feature toggle changes
@@ -78,9 +80,29 @@ class HybridStorageService {
         return __awaiter(this, arguments, void 0, function* (key, value, options = {}) {
             const priority = options.priority || 'medium';
             const ttl = options.ttl || this.getSmartTTL(key, priority);
+            // Check object size
+            const serializedValue = JSON.stringify(value);
+            const size = Buffer.byteLength(serializedValue, 'utf8');
+            // Skip storing if object is too large
+            if (size > this.maxObjectSize) {
+                console.log(`⚠️ Skipping storage: ${key} (Size: ${size}B exceeds limit of ${this.maxObjectSize}B)`);
+                return;
+            }
+            // Skip storing alerts and monitoring data
+            if (key.includes('alert:') || key.includes('metrics:') || key.includes('monitoring:')) {
+                console.log(`📵 Skipping storage for monitoring data: ${key}`);
+                return;
+            }
+            // Limit memory cache size
+            if (this.memoryCache.size >= this.maxCacheSize) {
+                // Remove oldest entries (simple FIFO)
+                const keysToRemove = Array.from(this.memoryCache.keys()).slice(0, 50);
+                keysToRemove.forEach(k => this.memoryCache.delete(k));
+                console.log(`🧹 Cleaned ${keysToRemove.length} old entries from memory cache`);
+            }
             try {
-                // Strategy 1: Store in Redis for critical/high priority data
-                if ((priority === 'critical' || priority === 'high') &&
+                // Strategy 1: Store in Redis for critical/high priority data ONLY
+                if (priority === 'critical' &&
                     FeatureToggleService_1.featureToggleService.isFeatureEnabled('api_response_caching')) {
                     yield SmartCacheService_1.smartCacheService.set(key, value, {
                         ttl,
@@ -89,8 +111,10 @@ class HybridStorageService {
                     });
                     console.log(`📦 Stored in Redis: ${key} (TTL: ${ttl}s)`);
                 }
-                // Strategy 2: Always store in memory cache for fast access
-                this.setToMemory(key, value, ttl);
+                // Strategy 2: Store in memory cache for fast access (smaller objects only)
+                if (size <= 1024) { // Only cache objects smaller than 1KB in memory
+                    this.setToMemory(key, value, ttl);
+                }
                 // Strategy 3: Store in MongoDB for user data (if enabled)
                 if (options.fallbackToMongo && key.includes('user:') && this.mongoFallbackEnabled) {
                     yield this.setToMongo(key, value, ttl);
@@ -98,10 +122,12 @@ class HybridStorageService {
             }
             catch (error) {
                 console.error(`Hybrid storage set error for key ${key}:`, error);
-                // Fallback: at least store in memory
+                // Fallback: at least store in memory if small enough
                 try {
-                    this.setToMemory(key, value, ttl);
-                    console.log(`🔄 Fallback: stored in memory only: ${key}`);
+                    if (size <= 1024) {
+                        this.setToMemory(key, value, ttl);
+                        console.log(`🔄 Fallback: stored in memory only: ${key}`);
+                    }
                 }
                 catch (memoryError) {
                     console.error(`Failed to store in memory fallback:`, memoryError);

@@ -20,8 +20,8 @@ class BatchOperationsService {
         this.isProcessing = false;
         this.operationCounter = 0;
         this.config = {
-            maxBatchSize: 100,
-            batchTimeout: 50, // 50ms
+            maxBatchSize: 25, // Reduced from 100 to 25 to minimize Redis operations
+            batchTimeout: 200, // Increased from 50ms to 200ms to batch more efficiently
             enableCompression: true,
             priorityQueues: true
         };

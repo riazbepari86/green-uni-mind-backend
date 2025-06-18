@@ -2,6 +2,7 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a, _b, _c, _d, _e, _f, _g;
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
@@ -26,9 +27,10 @@ exports.default = {
     stripe_mother_account_id: process.env.MOTHER_STRIPE_ACCOUNT_ID,
     frontend_url: process.env.FRONTEND_URL || 'http://localhost:8080',
     redis: {
-        host: process.env.REDIS_HOST,
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
+        host: process.env.REDIS_HOST || ((_b = (_a = process.env.REDIS_URL) === null || _a === void 0 ? void 0 : _a.split('@')[1]) === null || _b === void 0 ? void 0 : _b.split(':')[0]) || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || ((_d = (_c = process.env.REDIS_URL) === null || _c === void 0 ? void 0 : _c.split(':').pop()) === null || _d === void 0 ? void 0 : _d.split('/')[0]) || '6379'),
+        password: process.env.REDIS_PASSWORD || ((_g = (_f = (_e = process.env.REDIS_URL) === null || _e === void 0 ? void 0 : _e.split('://')[1]) === null || _f === void 0 ? void 0 : _f.split('@')[0]) === null || _g === void 0 ? void 0 : _g.split(':')[1]) || '',
+        url: process.env.REDIS_URL, // Support for full Redis URL (common in cloud deployments)
     },
     email: {
         host: process.env.EMAIL_HOST || 'smtp.gmail.com',

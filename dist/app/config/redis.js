@@ -16,36 +16,70 @@ exports.testRedisConnection = exports.otpOperations = exports.newRedisSessions =
 const ioredis_1 = __importDefault(require("ioredis"));
 const index_1 = __importDefault(require("./index"));
 // Redis connection configuration with optimized settings
-const redisConfig = {
-    host: index_1.default.redis.host,
-    port: index_1.default.redis.port,
-    password: index_1.default.redis.password,
-    enableReadyCheck: true,
-    maxRetriesPerRequest: 3,
-    lazyConnect: true,
-    // TLS configuration for Upstash Redis
-    tls: index_1.default.redis.host.includes('upstash.io') ? {} : undefined,
-    // Connection pool settings for better performance
-    family: 4, // Use IPv4
-    keepAlive: 0, // 0 disables TCP keep-alive, or set to a number in ms (e.g., 10000)
-    connectTimeout: 10000,
-    commandTimeout: 5000,
-    retryDelayOnFailover: 100,
-    enableOfflineQueue: false,
-    // Optimized for high-performance scenarios
-    retryDelayOnClusterDown: 300,
-};
+const redisConfig = (() => {
+    // If REDIS_URL is provided (common in cloud deployments), use it directly
+    if (index_1.default.redis.url) {
+        return {
+            connectionName: 'green-uni-mind',
+            enableReadyCheck: true,
+            maxRetriesPerRequest: 3,
+            lazyConnect: true,
+            // TLS configuration for Upstash Redis
+            tls: index_1.default.redis.url.includes('upstash.io') || index_1.default.redis.url.includes('rediss://') ? {} : undefined,
+            // Connection pool settings for better performance
+            family: 4, // Use IPv4
+            keepAlive: 0,
+            connectTimeout: 10000,
+            commandTimeout: 5000,
+            retryDelayOnFailover: 100,
+            enableOfflineQueue: false,
+            retryDelayOnClusterDown: 300,
+        };
+    }
+    // Fallback to individual host/port/password configuration
+    const host = index_1.default.redis.host || 'localhost';
+    const port = index_1.default.redis.port || 6379;
+    const password = index_1.default.redis.password || '';
+    return {
+        host,
+        port,
+        password,
+        enableReadyCheck: true,
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+        // TLS configuration for Upstash Redis
+        tls: host && host.includes('upstash.io') ? {} : undefined,
+        // Connection pool settings for better performance
+        family: 4, // Use IPv4
+        keepAlive: 0,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
+        retryDelayOnFailover: 100,
+        enableOfflineQueue: false,
+        retryDelayOnClusterDown: 300,
+    };
+})();
 // Create primary Redis client instance
-const redis = new ioredis_1.default(redisConfig);
+const redis = index_1.default.redis.url
+    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
+    : new ioredis_1.default(redisConfig);
 exports.redis = redis;
 // Create separate Redis clients for different use cases
-const redisAuth = new ioredis_1.default(redisConfig); // For authentication operations
+const redisAuth = index_1.default.redis.url
+    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
+    : new ioredis_1.default(redisConfig); // For authentication operations
 exports.redisAuth = redisAuth;
-const redisCache = new ioredis_1.default(redisConfig); // For caching operations
+const redisCache = index_1.default.redis.url
+    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
+    : new ioredis_1.default(redisConfig); // For caching operations
 exports.redisCache = redisCache;
-const redisJobs = new ioredis_1.default(redisConfig); // For job queue operations
+const redisJobs = index_1.default.redis.url
+    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
+    : new ioredis_1.default(redisConfig); // For job queue operations
 exports.redisJobs = redisJobs;
-const redisSessions = new ioredis_1.default(redisConfig); // For session management
+const redisSessions = index_1.default.redis.url
+    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
+    : new ioredis_1.default(redisConfig); // For session management
 exports.redisSessions = redisSessions;
 // Handle Redis connection events for primary client
 redis.on('connect', () => {
