@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # Backend API Service (Development)
+  backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DATABASE_URL=mongodb://mongo-dev:27017/green-uni-mind-dev
+      - REDIS_URL=redis://redis-dev:6379
+      - JWT_ACCESS_SECRET=dev-jwt-access-secret
+      - JWT_REFRESH_SECRET=dev-jwt-refresh-secret
+      - BCRYPT_SALT_ROUNDS=10
+      - ENCRYPTION_KEY=dev-encryption-key-change-in-production
+    depends_on:
+      - mongo-dev
+      - redis-dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - green-uni-mind-dev
+    restart: unless-stopped
+    command: ["npm", "run", "dev"]
+
+  # MongoDB Database (Development)
+  mongo-dev:
+    image: mongo:7.0
+    ports:
+      - "27018:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=green-uni-mind-dev
+    volumes:
+      - mongo_dev_data:/data/db
+    networks:
+      - green-uni-mind-dev
+    restart: unless-stopped
+
+  # Redis Cache (Development)
+  redis-dev:
+    image: redis:7.2-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - green-uni-mind-dev
+    restart: unless-stopped
+
+  # Redis Commander (Development Tool)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis-dev:6379
+    depends_on:
+      - redis-dev
+    networks:
+      - green-uni-mind-dev
+    profiles:
+      - tools
+
+  # Mongo Express (Development Tool)
+  mongo-express:
+    image: mongo-express:latest
+    ports:
+      - "8082:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo-dev
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+    depends_on:
+      - mongo-dev
+    networks:
+      - green-uni-mind-dev
+    profiles:
+      - tools
+
+volumes:
+  mongo_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+
+networks:
+  green-uni-mind-dev:
+    driver: bridge

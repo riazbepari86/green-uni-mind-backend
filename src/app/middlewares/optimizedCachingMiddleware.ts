@@ -310,7 +310,7 @@ export const featureAwareCacheStats = () => {
     const cacheStatus = res.get('X-Cache');
     if (cacheStatus) {
       // Use memory-only storage for stats to reduce Redis usage
-      const statsKey = `cache:stats:${cacheStatus.toLowerCase()}`;
+      const statsKey = `cache:stats:${cacheStatus?.toLowerCase() || 'unknown'}`;
       
       try {
         await smartCacheService.set(

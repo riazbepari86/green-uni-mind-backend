@@ -73,7 +73,7 @@ function sanitizeRequestBody(body: any): any {
   const sanitized: any = Array.isArray(body) ? [] : {};
 
   for (const [key, value] of Object.entries(body)) {
-    const lowerKey = key.toLowerCase();
+    const lowerKey = key?.toLowerCase() || '';
     const isSensitive = sensitiveFields.some(field => lowerKey.includes(field));
 
     if (isSensitive) {

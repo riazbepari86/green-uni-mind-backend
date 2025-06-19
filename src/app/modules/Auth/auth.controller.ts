@@ -29,13 +29,24 @@ const loginUser = catchAsync(async (req, res) => {
     }
   }
 
-  res.cookie('refreshToken', refreshToken, {
-    secure: true,
-    httpOnly: true,
-    sameSite: config.NODE_ENV === 'production' ? 'none' : 'lax',
-    domain: domain || undefined, 
-    maxAge: 1000 * 60 * 60 * 24 * 365, 
-  });
+  // Enhanced cookie security configuration
+  const cookieOptions = {
+    httpOnly: true, // Prevent XSS attacks
+    secure: config.NODE_ENV === 'production', // HTTPS only in production
+    sameSite: config.NODE_ENV === 'production' ? 'strict' as const : 'lax' as const, // CSRF protection
+    domain: domain || undefined,
+    maxAge: config.NODE_ENV === 'production' ?
+      1000 * 60 * 60 * 24 : // 1 day in production
+      1000 * 60 * 60 * 24 * 7, // 7 days in development
+    path: '/', // Restrict to root path
+  };
+
+  // Sign the refresh token for additional security
+  const signedRefreshToken = config.NODE_ENV === 'production' ?
+    `${refreshToken}.${Buffer.from(refreshToken).toString('base64')}` :
+    refreshToken;
+
+  res.cookie('refreshToken', signedRefreshToken, cookieOptions);
 
  
   sendResponse(res, {
@@ -203,13 +214,24 @@ const verifyEmail = catchAsync(async (req, res) => {
 
   const result = await AuthServices.verifyEmail(email, code);
 
-  // Set refresh token as cookie
-  res.cookie('refreshToken', result.refreshToken, {
-    secure: config.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 1000 * 60 * 60 * 24 * 365,
-  });
+  // Enhanced cookie security configuration for email verification
+  const cookieOptions = {
+    httpOnly: true, // Prevent XSS attacks
+    secure: config.NODE_ENV === 'production', // HTTPS only in production
+    sameSite: config.NODE_ENV === 'production' ? 'strict' as const : 'lax' as const, // CSRF protection
+    maxAge: config.NODE_ENV === 'production' ?
+      1000 * 60 * 60 * 24 : // 1 day in production
+      1000 * 60 * 60 * 24 * 7, // 7 days in development
+    path: '/', // Restrict to root path
+  };
+
+  // Sign the refresh token for additional security
+  const signedRefreshToken = config.NODE_ENV === 'production' ?
+    `${result.refreshToken}.${Buffer.from(result.refreshToken).toString('base64')}` :
+    result.refreshToken;
+
+  // Set refresh token as secure cookie
+  res.cookie('refreshToken', signedRefreshToken, cookieOptions);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

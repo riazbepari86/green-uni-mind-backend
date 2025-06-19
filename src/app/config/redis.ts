@@ -377,12 +377,20 @@ const redisOperations = {
     );
   },
 
-  async del(key: string): Promise<void> {
-    await safeRedisOperation(
-      () => redis.del(key),
-      undefined,
-      `del:${key}`
-    );
+  async del(...keys: string[]): Promise<number> {
+    return await safeRedisOperation(
+      () => redis.del(...keys),
+      0,
+      `del:${keys.join(',')}`
+    ) || 0;
+  },
+
+  async keys(pattern: string): Promise<string[]> {
+    return await safeRedisOperation(
+      () => redis.keys(pattern),
+      [],
+      `keys:${pattern}`
+    ) || [];
   },
 
   async exists(key: string): Promise<number> {

@@ -9,7 +9,22 @@ import { configurePassport } from './app/config/passport';
 // Security middleware imports
 import {
   authRateLimit,
+  enhancedSecurityHeaders,
+  encryptionMiddleware,
+  generalRateLimit,
+  securityLogging,
+  requestSizeLimit,
 } from './app/middlewares/security.middleware';
+
+// Performance middleware imports
+import {
+  performanceTracker,
+  responseCompression,
+  memoryMonitor,
+  requestTimeout,
+  cacheHeaders,
+  requestSizeMonitor,
+} from './app/middlewares/performance.middleware';
 // import monitoringRoutes from './app/routes/monitoring.routes'; // Disabled to prevent Redis overload
 import { redisConservativeConfig } from './app/services/redis/RedisConservativeConfig';
 import { redisCleanupService } from './app/services/redis/RedisCleanupService';
@@ -22,21 +37,38 @@ app.get('/test', (_req, res) => {
   res.json({ message: 'Express is working!', timestamp: new Date().toISOString() });
 });
 
-// TEMPORARILY DISABLE ALL MIDDLEWARE TO TEST
-// Apply security headers first
-// app.use(securityHeaders);
+// Apply enhanced security headers first
+app.use(enhancedSecurityHeaders);
 
-// TEMPORARILY DISABLE RATE LIMITING TO TEST
-// Apply general rate limiting
-// app.use(generalRateLimit);
+// Apply response compression for better performance
+app.use(responseCompression);
 
-// TEMPORARILY DISABLE INTERNAL ENDPOINTS HIDING TO TEST
-// Hide internal endpoints in production
-// app.use(hideInternalEndpoints);
+// Apply performance tracking
+app.use(performanceTracker);
 
-// TEMPORARILY DISABLE SECURITY LOGGING TO TEST
-// Security logging for suspicious requests
-// app.use(securityLogging);
+// Apply memory monitoring
+app.use(memoryMonitor);
+
+// Apply request timeout (30 seconds)
+app.use(requestTimeout(30000));
+
+// Apply cache headers
+app.use(cacheHeaders);
+
+// Apply request size monitoring
+app.use(requestSizeMonitor);
+
+// Apply general rate limiting (production-ready)
+app.use(generalRateLimit);
+
+// Apply security logging for suspicious requests
+app.use(securityLogging);
+
+// Apply request/response encryption in production
+app.use(encryptionMiddleware());
+
+// Apply request size limiting
+app.use(requestSizeLimit('10mb'));
 
 // Initialize conservative Redis configuration to minimize usage (non-blocking)
 setTimeout(() => {
