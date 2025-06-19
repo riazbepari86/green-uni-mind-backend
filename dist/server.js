@@ -21,23 +21,26 @@ const payout_job_1 = require("./app/jobs/payout.job");
 const payoutSync_job_1 = require("./app/jobs/payoutSync.job");
 // Import keep-alive service
 const keepAlive_1 = __importDefault(require("./utils/keepAlive"));
+// Import production-safe logging
+const logger_1 = require("./app/config/logger");
+const console_replacement_1 = require("./app/utils/console-replacement");
 let server;
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             // Check for required environment variables
             if (!process.env.FRONTEND_URL) {
-                console.warn('⚠️ WARNING: FRONTEND_URL environment variable is not set. Using https://example.com as fallback.');
+                logger_1.Logger.warn('FRONTEND_URL environment variable is not set. Using https://example.com as fallback.');
                 process.env.FRONTEND_URL = 'https://example.com';
             }
             if (!process.env.STRIPE_SECRET_KEY) {
-                console.warn('⚠️ WARNING: STRIPE_SECRET_KEY environment variable is not set. Stripe functionality may not work correctly.');
+                logger_1.Logger.warn('STRIPE_SECRET_KEY environment variable is not set. Stripe functionality may not work correctly.');
             }
             yield mongoose_1.default.connect(config_1.default.database_url);
             // Skip Redis initialization due to connection issues - using Agenda.js for jobs
-            console.log('⚠️ Skipping Redis initialization - using MongoDB-based Agenda.js for job scheduling');
+            logger_1.Logger.info('Skipping Redis initialization - using MongoDB-based Agenda.js for job scheduling');
             // Note: OTP functionality will be limited without Redis
-            console.log('ℹ️ OTP functionality will use in-memory storage (development mode)');
+            logger_1.Logger.info('OTP functionality will use in-memory storage (development mode)');
             // Seed super admin
             yield (0, DB_1.default)();
             // Start payout jobs
@@ -45,30 +48,30 @@ function main() {
                 // Start both payout jobs
                 yield (0, payout_job_1.startPayoutJobs)();
                 yield (0, payoutSync_job_1.startPayoutSyncJob)();
-                console.log('✅ Payout jobs started successfully');
+                console_replacement_1.specializedLog.system.startup('Payout jobs');
                 // Log additional information about the payout jobs
-                console.log('✅ Payout jobs will run on the following schedule:');
-                console.log('   - Daily payout sync: 1:00 AM');
-                console.log('   - Daily payout scheduling: Every day');
-                console.log('   - Hourly payout status checks: Every hour');
+                logger_1.Logger.info('Payout jobs will run on the following schedule:');
+                logger_1.Logger.info('   - Daily payout sync: 1:00 AM');
+                logger_1.Logger.info('   - Daily payout scheduling: Every day');
+                logger_1.Logger.info('   - Hourly payout status checks: Every hour');
             }
             catch (error) {
-                console.error('❌ Failed to start payout jobs:', error);
+                logger_1.Logger.error('Failed to start payout jobs', { error });
             }
             server = app_1.default.listen(config_1.default.port, () => {
-                console.log(`app is listening on port http://localhost:${config_1.default.port}`);
+                console_replacement_1.specializedLog.system.startup('Green Uni Mind API', Number(config_1.default.port));
                 // Start keep-alive service to prevent Render from sleeping
                 try {
                     keepAlive_1.default.start();
-                    console.log('✅ Keep-alive service started successfully');
+                    console_replacement_1.specializedLog.system.startup('Keep-alive service');
                 }
                 catch (error) {
-                    console.error('❌ Failed to start keep-alive service:', error);
+                    logger_1.Logger.error('Failed to start keep-alive service', { error });
                 }
             });
         }
         catch (err) {
-            console.log(err);
+            logger_1.Logger.error('Server startup failed', { error: err });
         }
     });
 }
@@ -76,8 +79,9 @@ function main() {
 if (require.main === module) {
     main();
 }
-process.on('unhandledRejection', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log(`😈 unhandledRejection is detected , shutting down ...`);
+process.on('unhandledRejection', (reason) => __awaiter(void 0, void 0, void 0, function* () {
+    logger_1.Logger.error('Unhandled rejection detected, shutting down...', { reason });
+    console_replacement_1.specializedLog.system.shutdown('Server', 'Unhandled rejection');
     keepAlive_1.default.stop();
     if (server) {
         server.close(() => {
@@ -86,14 +90,16 @@ process.on('unhandledRejection', () => __awaiter(void 0, void 0, void 0, functio
     }
     process.exit(1);
 }));
-process.on('uncaughtException', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log(`😈 uncaughtException is detected , shutting down ...`);
+process.on('uncaughtException', (error) => __awaiter(void 0, void 0, void 0, function* () {
+    logger_1.Logger.error('Uncaught exception detected, shutting down...', { error });
+    console_replacement_1.specializedLog.system.shutdown('Server', 'Uncaught exception');
     keepAlive_1.default.stop();
     process.exit(1);
 }));
 // Graceful shutdown
 process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down gracefully...');
+    logger_1.Logger.info('SIGTERM received, shutting down gracefully...');
+    console_replacement_1.specializedLog.system.shutdown('Server', 'SIGTERM signal');
     keepAlive_1.default.stop();
     if (server) {
         server.close(() => {
@@ -102,7 +108,8 @@ process.on('SIGTERM', () => {
     }
 });
 process.on('SIGINT', () => {
-    console.log('SIGINT received, shutting down gracefully...');
+    logger_1.Logger.info('SIGINT received, shutting down gracefully...');
+    console_replacement_1.specializedLog.system.shutdown('Server', 'SIGINT signal');
     keepAlive_1.default.stop();
     if (server) {
         server.close(() => {

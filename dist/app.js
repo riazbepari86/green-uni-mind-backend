@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -14,11 +23,34 @@ const passport_2 = require("./app/config/passport");
 const debugMiddleware_1 = require("./app/middlewares/debugMiddleware");
 const oauthLinkMiddleware_1 = require("./app/middlewares/oauthLinkMiddleware");
 const formDataMiddleware_1 = require("./app/middlewares/formDataMiddleware");
-const monitoring_routes_1 = __importDefault(require("./app/routes/monitoring.routes"));
+// Security middleware imports
+const security_middleware_1 = require("./app/middlewares/security.middleware");
+// import monitoringRoutes from './app/routes/monitoring.routes'; // Disabled to prevent Redis overload
 const RedisConservativeConfig_1 = require("./app/services/redis/RedisConservativeConfig");
+const RedisCleanupService_1 = require("./app/services/redis/RedisCleanupService");
 const app = (0, express_1.default)();
+// Apply security headers first
+app.use(security_middleware_1.securityHeaders);
+// Apply general rate limiting
+app.use(security_middleware_1.generalRateLimit);
+// Hide internal endpoints in production
+app.use(security_middleware_1.hideInternalEndpoints);
+// Security logging for suspicious requests
+app.use(security_middleware_1.securityLogging);
 // Initialize conservative Redis configuration to minimize usage
 RedisConservativeConfig_1.redisConservativeConfig.initialize();
+// Clean up excessive Redis keys on startup
+setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log('🧹 Starting Redis cleanup to remove excessive monitoring data...');
+        yield RedisCleanupService_1.redisCleanupService.cleanupPerformanceMetrics();
+        yield RedisCleanupService_1.redisCleanupService.getMemoryStats();
+        console.log('✅ Redis cleanup completed');
+    }
+    catch (error) {
+        console.error('❌ Redis cleanup failed:', error);
+    }
+}), 5000); // Wait 5 seconds for Redis connections to be ready
 // Set up webhook route first (before body parsers)
 // This ensures the raw body is preserved for Stripe signature verification
 const stripeWebhookPath = '/api/v1/payments/webhook';
@@ -99,22 +131,18 @@ app.use((0, cors_1.default)({
             }
             return false;
         });
-        if (isAllowed || process.env.NODE_ENV !== 'production') {
+        if (isAllowed) {
+            callback(null, true);
+        }
+        else if (process.env.NODE_ENV !== 'production') {
+            // In development, allow all origins but log them
+            console.log('🔓 CORS allowing request from (dev mode):', origin);
             callback(null, true);
         }
         else {
-            console.log('CORS blocked request from:', origin);
-            // In development, allow all origins but log them
-            if (process.env.NODE_ENV !== 'production') {
-                callback(null, true);
-            }
-            else {
-                // In production, be more strict but still allow for now with a warning
-                console.warn('⚠️ CORS request from unauthorized origin:', origin);
-                callback(null, true);
-                // In strict mode, you would use:
-                // callback(new Error('Not allowed by CORS'));
-            }
+            // In production, strictly block unauthorized origins
+            console.error('🚫 CORS blocked unauthorized request from:', origin);
+            callback(new Error('Not allowed by CORS policy'));
         }
     },
     credentials: true,
@@ -160,10 +188,13 @@ app.get('/health', (_req, res) => {
         environment: process.env.NODE_ENV || 'development'
     });
 });
+// Apply auth rate limiting to authentication routes
+app.use('/api/v1/auth', security_middleware_1.authRateLimit);
 // application routes
 app.use('/api/v1', routes_1.default);
-// monitoring routes (admin only)
-app.use('/api/v1/monitoring', monitoring_routes_1.default);
+// monitoring routes (admin only) - DISABLED to prevent Redis overload
+// app.use('/api/v1/monitoring', monitoringRoutes);
+console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
 // global error handler
 app.use(globalErrorhandler_1.default);
 // Not found

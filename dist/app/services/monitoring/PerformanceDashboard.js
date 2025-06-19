@@ -25,8 +25,11 @@ class PerformanceDashboard {
         this.apiCache = new ApiCacheService_1.ApiCacheService(RedisServiceManager_1.redisServiceManager.cacheClient, RedisServiceManager_1.redisServiceManager.monitoring);
         this.queryCache = new QueryCacheService_1.QueryCacheService(RedisServiceManager_1.redisServiceManager.cacheClient, RedisServiceManager_1.redisServiceManager.monitoring);
         this.invalidationService = new CacheInvalidationService_1.CacheInvalidationService(RedisServiceManager_1.redisServiceManager.cacheClient, RedisServiceManager_1.redisServiceManager.monitoring);
-        this.setupDefaultAlertRules();
-        this.startMetricsCollection();
+        // DISABLED: Excessive Redis operations causing 121K+ ops/min
+        console.log('📵 PerformanceDashboard disabled to prevent Redis overload');
+        // Don't setup alert rules or start metrics collection
+        // this.setupDefaultAlertRules();
+        // this.startMetricsCollection();
     }
     setupDefaultAlertRules() {
         const defaultRules = [
@@ -87,25 +90,34 @@ class PerformanceDashboard {
         });
     }
     startMetricsCollection() {
-        // Collect metrics every minute
+        // DISABLED: Excessive Redis operations and storage consumption
+        console.log('📵 Performance metrics collection disabled to prevent Redis overload');
+        // Optional: Very basic metrics collection every 30 minutes (instead of every minute)
+        // and store in memory only (not Redis)
         setInterval(() => __awaiter(this, void 0, void 0, function* () {
             try {
-                const metrics = yield this.collectMetrics();
-                this.metricsHistory.push(metrics);
-                // Keep only the last maxHistorySize entries
-                if (this.metricsHistory.length > this.maxHistorySize) {
-                    this.metricsHistory = this.metricsHistory.slice(-this.maxHistorySize);
+                // Only collect basic system metrics, no Redis operations
+                const basicMetrics = {
+                    timestamp: new Date().toISOString(),
+                    system: {
+                        uptime: process.uptime(),
+                        memory: process.memoryUsage(),
+                        cpu: process.cpuUsage()
+                    }
+                };
+                // Store only in memory, not Redis
+                this.metricsHistory.push(basicMetrics);
+                // Keep only the last 10 entries (much smaller)
+                if (this.metricsHistory.length > 10) {
+                    this.metricsHistory = this.metricsHistory.slice(-10);
                 }
-                // Check alert rules
-                yield this.checkAlertRules(metrics);
-                // Store metrics in Redis for persistence
-                yield this.storeMetrics(metrics);
+                console.log('📊 Basic system metrics collected (memory only)');
             }
             catch (error) {
-                console.error('Error collecting performance metrics:', error);
+                console.error('Error collecting basic metrics:', error);
             }
-        }), 60000); // Every minute
-        console.log('📊 Performance metrics collection started');
+        }), 1800000); // Every 30 minutes instead of 1 minute
+        console.log('📊 Minimal performance monitoring started (30min intervals, memory only)');
     }
     collectMetrics() {
         return __awaiter(this, void 0, void 0, function* () {

@@ -86,7 +86,7 @@ export class RedisCleanupService {
 
       for (const key of cacheKeys) {
         try {
-          const size = await redis.memory('usage', key);
+          const size = await redis.memory('USAGE', key);
           
           // If key is larger than 1MB, consider removing it
           if (size && size > 1024 * 1024) {

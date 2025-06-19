@@ -9,11 +9,33 @@ import { configurePassport } from './app/config/passport';
 import { debugRequestMiddleware } from './app/middlewares/debugMiddleware';
 import { oauthLinkMiddleware } from './app/middlewares/oauthLinkMiddleware';
 import { formDataMiddleware } from './app/middlewares/formDataMiddleware';
+// Security middleware imports
+import {
+  generalRateLimit,
+  authRateLimit,
+  securityHeaders,
+  hideInternalEndpoints,
+  securityLogging,
+  validateContentType,
+  requestSizeLimit,
+} from './app/middlewares/security.middleware';
 // import monitoringRoutes from './app/routes/monitoring.routes'; // Disabled to prevent Redis overload
 import { redisConservativeConfig } from './app/services/redis/RedisConservativeConfig';
 import { redisCleanupService } from './app/services/redis/RedisCleanupService';
 
 const app: Application = express();
+
+// Apply security headers first
+app.use(securityHeaders);
+
+// Apply general rate limiting
+app.use(generalRateLimit);
+
+// Hide internal endpoints in production
+app.use(hideInternalEndpoints);
+
+// Security logging for suspicious requests
+app.use(securityLogging);
 
 // Initialize conservative Redis configuration to minimize usage
 redisConservativeConfig.initialize();
@@ -118,20 +140,16 @@ app.use(
         return false;
       });
 
-      if (isAllowed || process.env.NODE_ENV !== 'production') {
+      if (isAllowed) {
+        callback(null, true);
+      } else if (process.env.NODE_ENV !== 'production') {
+        // In development, allow all origins but log them
+        console.log('🔓 CORS allowing request from (dev mode):', origin);
         callback(null, true);
       } else {
-        console.log('CORS blocked request from:', origin);
-        // In development, allow all origins but log them
-        if (process.env.NODE_ENV !== 'production') {
-          callback(null, true);
-        } else {
-          // In production, be more strict but still allow for now with a warning
-          console.warn('⚠️ CORS request from unauthorized origin:', origin);
-          callback(null, true);
-          // In strict mode, you would use:
-          // callback(new Error('Not allowed by CORS'));
-        }
+        // In production, strictly block unauthorized origins
+        console.error('🚫 CORS blocked unauthorized request from:', origin);
+        callback(new Error('Not allowed by CORS policy'));
       }
     },
     credentials: true,
@@ -181,6 +199,9 @@ app.get('/health', (_req, res) => {
     environment: process.env.NODE_ENV || 'development'
   });
 });
+
+// Apply auth rate limiting to authentication routes
+app.use('/api/v1/auth', authRateLimit);
 
 // application routes
 app.use('/api/v1', router);

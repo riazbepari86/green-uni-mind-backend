@@ -26,4 +26,21 @@ declare const process: {
   cwd(): string;
   on(event: string, listener: (...args: any[]) => void): any;
   exit(code?: number): never;
+  // Performance monitoring methods
+  uptime(): number;
+  memoryUsage(): {
+    rss: number;
+    heapTotal: number;
+    heapUsed: number;
+    external: number;
+    arrayBuffers: number;
+  };
+  cpuUsage(previousValue?: {
+    user: number;
+    system: number;
+  }): {
+    user: number;
+    system: number;
+  };
+  version: string;
 };

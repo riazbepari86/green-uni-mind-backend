@@ -200,25 +200,20 @@ class OptimizedRedisService {
         });
     }
     setupOptimizations() {
-        // Monitor Redis usage and auto-optimize
+        // DISABLED: Excessive Redis monitoring causing 121K+ ops/min
+        // Only enable basic health check with very long intervals
+        console.log('📵 Redis auto-optimization disabled to reduce Redis operations');
+        // Optional: Basic health check every 10 minutes (instead of every minute)
         setInterval(() => __awaiter(this, void 0, void 0, function* () {
             try {
-                const info = yield this.primaryClient.info('memory');
-                const usedMatch = info.match(/used_memory:(\d+)/);
-                const used = usedMatch ? parseInt(usedMatch[1]) : 0;
-                const freeLimit = 256 * 1024 * 1024; // 256MB
-                const percentage = (used / freeLimit) * 100;
-                // Auto-optimize features based on usage
-                FeatureToggleService_1.featureToggleService.autoOptimizeBasedOnUsage(percentage);
-                if (percentage > 80) {
-                    console.log('🚨 High Redis usage detected, enabling aggressive optimization');
-                    yield this.enableAggressiveOptimization();
-                }
+                // Just a simple ping to check connectivity - no memory info calls
+                yield this.primaryClient.ping();
+                console.log('✅ Redis basic connectivity check passed');
             }
             catch (error) {
-                console.error('Error in auto-optimization:', error);
+                console.error('❌ Redis connectivity check failed:', error);
             }
-        }), 60000); // Check every minute
+        }), 600000); // Check every 10 minutes instead of 1 minute
     }
     handleConnectionError() {
         console.log('🔧 Handling Redis connection error with optimization');

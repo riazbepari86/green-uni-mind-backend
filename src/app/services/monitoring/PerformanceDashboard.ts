@@ -331,10 +331,10 @@ export class PerformanceDashboard {
 
   private collectSystemMetrics(): any {
     return {
-      uptime: (process as any).uptime(),
-      nodeVersion: (process as any).version,
-      memoryUsage: (process as any).memoryUsage(),
-      cpuUsage: (process as any).cpuUsage(),
+      uptime: process.uptime(),
+      nodeVersion: process.version,
+      memoryUsage: process.memoryUsage(),
+      cpuUsage: process.cpuUsage(),
     };
   }
 

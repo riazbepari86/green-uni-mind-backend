@@ -59,11 +59,10 @@ class RedisOptimizationManager {
         });
     }
     startOptimizationLoop() {
-        // Run optimization checks every 2 minutes
-        this.optimizationInterval = setInterval(() => __awaiter(this, void 0, void 0, function* () {
-            yield this.performOptimizationCheck();
-        }), 120000);
-        console.log('📊 Optimization monitoring loop started');
+        // DISABLED: Excessive Redis operations causing 121K+ ops/min
+        console.log('📵 Optimization monitoring loop disabled to prevent Redis overload');
+        // No automatic optimization loop to reduce Redis operations
+        return;
     }
     performInitialOptimization() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -101,18 +100,10 @@ class RedisOptimizationManager {
     }
     performOptimizationCheck() {
         return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // Get current metrics
-                const healthCheck = yield RedisUsageAuditor_1.redisUsageAuditor.quickHealthCheck();
-                const activeAlerts = RedisUsageMonitor_1.redisUsageMonitor.getActiveAlerts();
-                // Auto-optimize based on current state
-                yield this.autoOptimize(healthCheck, activeAlerts);
-                // Log optimization status
-                console.log(`📊 Optimization check: ${healthCheck.status} (${healthCheck.memoryPercentage.toFixed(1)}% memory, ${activeAlerts.length} alerts)`);
-            }
-            catch (error) {
-                console.error('❌ Error in optimization check:', error);
-            }
+            // DISABLED: Excessive Redis operations causing 121K+ ops/min
+            console.log('📵 Redis optimization checks disabled to prevent excessive operations');
+            // No automatic optimization checks to reduce Redis load
+            return;
         });
     }
     autoOptimize(healthCheck, alerts) {

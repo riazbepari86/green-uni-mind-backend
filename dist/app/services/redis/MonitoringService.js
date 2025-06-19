@@ -177,15 +177,19 @@ class RedisMonitoringService {
         });
     }
     startPeriodicHealthCheck() {
-        // Run health check every 30 seconds
+        // DISABLED: Excessive Redis operations causing 121K+ ops/min
+        console.log('📵 Periodic Redis health checks disabled to prevent excessive operations');
+        // Optional: Very basic health check every 15 minutes (instead of 30 seconds)
         setInterval(() => __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.healthCheck();
+                // Just a simple ping, no detailed health check
+                yield this.redis.ping();
+                console.log('✅ Basic Redis connectivity verified');
             }
             catch (error) {
-                console.error('Error during periodic health check:', error);
+                console.error('❌ Basic Redis connectivity failed:', error);
             }
-        }), 30000);
+        }), 900000); // Every 15 minutes instead of 30 seconds
     }
     getHealthHistory() {
         return __awaiter(this, arguments, void 0, function* (limit = 10) {

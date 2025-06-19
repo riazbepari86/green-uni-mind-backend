@@ -39,12 +39,15 @@ class RedisUsageMonitor {
                 critical: 2000 // 2K ops/min
             }
         };
-        // Start monitoring automatically
-        this.startMonitoring();
+        // DISABLED: Excessive Redis monitoring causing 121K+ ops/min
+        console.log('📵 RedisUsageMonitor disabled to prevent excessive Redis operations');
+        // Don't start monitoring automatically
+        // this.startMonitoring();
         // Listen to feature toggle changes
         FeatureToggleService_1.featureToggleService.onFeatureChange('performance_monitoring', (enabled) => {
             if (enabled) {
-                this.startMonitoring();
+                console.log('⚠️ Performance monitoring requested but disabled to prevent Redis overload');
+                // this.startMonitoring();
             }
             else {
                 this.stopMonitoring();
