@@ -126,9 +126,13 @@ export class PerformanceDashboard {
     this.apiCache = new ApiCacheService(redisServiceManager.cacheClient, redisServiceManager.monitoring);
     this.queryCache = new QueryCacheService(redisServiceManager.cacheClient, redisServiceManager.monitoring);
     this.invalidationService = new CacheInvalidationService(redisServiceManager.cacheClient, redisServiceManager.monitoring);
-    
-    this.setupDefaultAlertRules();
-    this.startMetricsCollection();
+
+    // DISABLED: Excessive Redis operations causing 121K+ ops/min
+    console.log('📵 PerformanceDashboard disabled to prevent Redis overload');
+
+    // Don't setup alert rules or start metrics collection
+    // this.setupDefaultAlertRules();
+    // this.startMetricsCollection();
   }
 
   private setupDefaultAlertRules(): void {
@@ -191,29 +195,39 @@ export class PerformanceDashboard {
   }
 
   private startMetricsCollection(): void {
-    // Collect metrics every minute
+    // DISABLED: Excessive Redis operations and storage consumption
+    console.log('📵 Performance metrics collection disabled to prevent Redis overload');
+
+    // Optional: Very basic metrics collection every 30 minutes (instead of every minute)
+    // and store in memory only (not Redis)
     setInterval(async () => {
       try {
-        const metrics = await this.collectMetrics();
-        this.metricsHistory.push(metrics);
-        
-        // Keep only the last maxHistorySize entries
-        if (this.metricsHistory.length > this.maxHistorySize) {
-          this.metricsHistory = this.metricsHistory.slice(-this.maxHistorySize);
-        }
-        
-        // Check alert rules
-        await this.checkAlertRules(metrics);
-        
-        // Store metrics in Redis for persistence
-        await this.storeMetrics(metrics);
-        
-      } catch (error) {
-        console.error('Error collecting performance metrics:', error);
-      }
-    }, 60000); // Every minute
+        // Only collect basic system metrics, no Redis operations
+        const basicMetrics = {
+          timestamp: new Date().toISOString(),
+          system: {
+            uptime: process.uptime(),
+            memory: process.memoryUsage(),
+            cpu: process.cpuUsage()
+          }
+        };
 
-    console.log('📊 Performance metrics collection started');
+        // Store only in memory, not Redis
+        this.metricsHistory.push(basicMetrics as any);
+
+        // Keep only the last 10 entries (much smaller)
+        if (this.metricsHistory.length > 10) {
+          this.metricsHistory = this.metricsHistory.slice(-10);
+        }
+
+        console.log('📊 Basic system metrics collected (memory only)');
+
+      } catch (error) {
+        console.error('Error collecting basic metrics:', error);
+      }
+    }, 1800000); // Every 30 minutes instead of 1 minute
+
+    console.log('📊 Minimal performance monitoring started (30min intervals, memory only)');
   }
 
   async collectMetrics(): Promise<PerformanceMetrics> {

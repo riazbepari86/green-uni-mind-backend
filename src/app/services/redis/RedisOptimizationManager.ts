@@ -81,12 +81,11 @@ export class RedisOptimizationManager {
   }
 
   private startOptimizationLoop(): void {
-    // Run optimization checks every 2 minutes
-    this.optimizationInterval = setInterval(async () => {
-      await this.performOptimizationCheck();
-    }, 120000);
+    // DISABLED: Excessive Redis operations causing 121K+ ops/min
+    console.log('📵 Optimization monitoring loop disabled to prevent Redis overload');
 
-    console.log('📊 Optimization monitoring loop started');
+    // No automatic optimization loop to reduce Redis operations
+    return;
   }
 
   private async performInitialOptimization(): Promise<void> {
@@ -125,20 +124,11 @@ export class RedisOptimizationManager {
   }
 
   private async performOptimizationCheck(): Promise<void> {
-    try {
-      // Get current metrics
-      const healthCheck = await redisUsageAuditor.quickHealthCheck();
-      const activeAlerts = redisUsageMonitor.getActiveAlerts();
-      
-      // Auto-optimize based on current state
-      await this.autoOptimize(healthCheck, activeAlerts);
+    // DISABLED: Excessive Redis operations causing 121K+ ops/min
+    console.log('📵 Redis optimization checks disabled to prevent excessive operations');
 
-      // Log optimization status
-      console.log(`📊 Optimization check: ${healthCheck.status} (${healthCheck.memoryPercentage.toFixed(1)}% memory, ${activeAlerts.length} alerts)`);
-
-    } catch (error) {
-      console.error('❌ Error in optimization check:', error);
-    }
+    // No automatic optimization checks to reduce Redis load
+    return;
   }
 
   private async autoOptimize(healthCheck: any, alerts: any[]): Promise<void> {

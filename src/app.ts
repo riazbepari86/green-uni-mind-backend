@@ -9,13 +9,26 @@ import { configurePassport } from './app/config/passport';
 import { debugRequestMiddleware } from './app/middlewares/debugMiddleware';
 import { oauthLinkMiddleware } from './app/middlewares/oauthLinkMiddleware';
 import { formDataMiddleware } from './app/middlewares/formDataMiddleware';
-import monitoringRoutes from './app/routes/monitoring.routes';
+// import monitoringRoutes from './app/routes/monitoring.routes'; // Disabled to prevent Redis overload
 import { redisConservativeConfig } from './app/services/redis/RedisConservativeConfig';
+import { redisCleanupService } from './app/services/redis/RedisCleanupService';
 
 const app: Application = express();
 
 // Initialize conservative Redis configuration to minimize usage
 redisConservativeConfig.initialize();
+
+// Clean up excessive Redis keys on startup
+setTimeout(async () => {
+  try {
+    console.log('🧹 Starting Redis cleanup to remove excessive monitoring data...');
+    await redisCleanupService.cleanupPerformanceMetrics();
+    await redisCleanupService.getMemoryStats();
+    console.log('✅ Redis cleanup completed');
+  } catch (error) {
+    console.error('❌ Redis cleanup failed:', error);
+  }
+}, 5000); // Wait 5 seconds for Redis connections to be ready
 
 // Set up webhook route first (before body parsers)
 // This ensures the raw body is preserved for Stripe signature verification
@@ -172,8 +185,9 @@ app.get('/health', (_req, res) => {
 // application routes
 app.use('/api/v1', router);
 
-// monitoring routes (admin only)
-app.use('/api/v1/monitoring', monitoringRoutes);
+// monitoring routes (admin only) - DISABLED to prevent Redis overload
+// app.use('/api/v1/monitoring', monitoringRoutes);
+console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
 
 // global error handler
 app.use(globalErrorHandler);

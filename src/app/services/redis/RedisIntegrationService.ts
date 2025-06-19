@@ -119,10 +119,11 @@ export class RedisIntegrationService {
         await this.warmCriticalCache();
       }
 
-      // Setup monitoring if enabled
+      // Setup monitoring if enabled - DISABLED to prevent Redis overload
       if (this.config.enableMonitoring) {
+        console.log('📵 Performance monitoring disabled to prevent excessive Redis operations');
         // Performance dashboard is automatically initialized
-        console.log('📊 Performance monitoring enabled');
+        // console.log('📊 Performance monitoring enabled');
       }
 
       this.isInitialized = true;

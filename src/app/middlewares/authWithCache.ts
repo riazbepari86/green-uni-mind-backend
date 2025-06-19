@@ -10,6 +10,8 @@ import { JwtUserPayload } from '../interface/auth';
 import { AuthCacheService } from '../services/redis/AuthCacheService';
 import { redisServiceManager } from '../services/redis/RedisServiceManager';
 import crypto from 'crypto';
+import { Logger } from '../config/logger';
+import { conditionalLog, specializedLog } from '../utils/console-replacement';
 
 // Extend Express Request type to include user property
 declare module 'express-serve-static-core' {
@@ -83,7 +85,7 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
       // If not in cache, verify JWT and cache the result
       if (!decoded) {
         if (!config.jwt_access_secret) {
-          console.error('JWT access secret is not configured');
+          Logger.error('JWT access secret is not configured');
           throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'JWT configuration error');
         }
 
@@ -97,14 +99,14 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
             () => authCache.cacheToken(tokenId, decoded, tokenTTL),
             'auth'
           ).catch(error => {
-            console.warn('Failed to cache token:', error);
+            Logger.warn('Failed to cache token', { error });
             // Don't fail the request if caching fails
           });
         }
 
-        console.log('Token verified and cached for user:', decoded.email);
+        conditionalLog.dev('Token verified and cached for user:', decoded.email);
       } else {
-        console.log('Token retrieved from cache for user:', decoded.email);
+        conditionalLog.dev('Token retrieved from cache for user:', decoded.email);
       }
 
       const { role, email, iat } = decoded;
@@ -126,7 +128,7 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
             () => redisServiceManager.cache.set(`user:${email}`, user, 900),
             'cache'
           ).catch(error => {
-            console.warn('Failed to cache user data:', error);
+            Logger.warn('Failed to cache user data', { error });
           });
         }
       }
@@ -155,7 +157,7 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
           () => authCache.blacklistToken(tokenId, tokenTTL),
           'auth'
         ).catch(error => {
-          console.warn('Failed to blacklist token:', error);
+          Logger.warn('Failed to blacklist token', { error });
         });
 
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
@@ -163,7 +165,7 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
 
       // Check role permissions
       if (requiredRoles && requiredRoles.length > 0) {
-        console.log(`Required roles: ${requiredRoles.join(', ')}, User role: ${role}`);
+        conditionalLog.dev(`Required roles: ${requiredRoles.join(', ')}, User role: ${role}`);
 
         if (!requiredRoles.includes(role)) {
           await authCache.logSecurityEvent(user._id?.toString() || 'unknown', 'unauthorized_access_attempt', {
@@ -174,7 +176,12 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
             userAgent: req.get('User-Agent')
           });
 
-          console.error(`Role mismatch: User has role "${role}" but needs one of [${requiredRoles.join(', ')}]`);
+          specializedLog.auth.security('role_mismatch', {
+            userRole: role,
+            requiredRoles,
+            endpoint: req.path,
+            userId: user._id?.toString()
+          });
           throw new AppError(httpStatus.FORBIDDEN, `Access denied. Required role: ${requiredRoles.join(' or ')}`);
         }
       }
@@ -189,7 +196,7 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
         }),
         'auth'
       ).catch(error => {
-        console.warn('Failed to track user activity:', error);
+        Logger.warn('Failed to track user activity', { error });
       });
 
       // Add user info to request
@@ -200,11 +207,11 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      console.log(`Auth middleware completed in ${duration}ms for user: ${email}`);
+      conditionalLog.perf('auth_middleware', startTime, { email, duration });
 
       next();
     } catch (err) {
-      console.error('JWT verification error:', err);
+      Logger.error('JWT verification error', { error: err });
 
       // Log security event for failed authentication
       await authCache.logSecurityEvent('unknown', 'authentication_failed', {
@@ -213,19 +220,19 @@ const authWithCache = (...requiredRoles: IUserRole[]): RequestHandler => {
         ip: req.ip,
         userAgent: req.get('User-Agent')
       }).catch(logError => {
-        console.warn('Failed to log security event:', logError);
+        Logger.warn('Failed to log security event', { error: logError });
       });
 
       // Handle specific JWT errors
       if (err instanceof Error && err.name === 'TokenExpiredError') {
-        console.log('Token expired at:', (err as any).expiredAt);
-        
+        conditionalLog.dev('Token expired at:', (err as any).expiredAt);
+
         // Blacklist expired token to prevent reuse
         await redisServiceManager.executeWithCircuitBreaker(
           () => authCache.blacklistToken(tokenId, 3600),
           'auth'
         ).catch(error => {
-          console.warn('Failed to blacklist expired token:', error);
+          Logger.warn('Failed to blacklist expired token', { error });
         });
 
         throw new AppError(
@@ -268,9 +275,9 @@ export const logout = catchAsync(async (req: Request, res: Response, next: NextF
         userAgent: req.get('User-Agent')
       });
 
-      console.log('Token blacklisted successfully for logout');
+      specializedLog.auth.success(req.user?._id || 'unknown', 'user_logout_token_blacklisted');
     } catch (error) {
-      console.warn('Failed to blacklist token during logout:', error);
+      Logger.warn('Failed to blacklist token during logout', { error });
       // Don't fail the logout process if blacklisting fails
     }
   }
@@ -293,9 +300,9 @@ export const logoutAllDevices = catchAsync(async (req: Request, res: Response, n
         userAgent: req.get('User-Agent')
       });
 
-      console.log('All sessions destroyed for user:', req.user._id);
+      specializedLog.auth.success(req.user._id, 'all_sessions_destroyed');
     } catch (error) {
-      console.warn('Failed to destroy all sessions:', error);
+      Logger.warn('Failed to destroy all sessions', { error, userId: req.user._id });
     }
   }
   
@@ -334,7 +341,7 @@ export const requirePermissions = (...permissions: string[]): RequestHandler => 
           () => authCache.cacheUserPermissions(req.user._id, userPermissions!, 3600),
           'auth'
         ).catch(error => {
-          console.warn('Failed to cache user permissions:', error);
+          Logger.warn('Failed to cache user permissions', { error, userId: req.user._id });
         });
       }
 
@@ -363,7 +370,7 @@ export const requirePermissions = (...permissions: string[]): RequestHandler => 
       if (error instanceof AppError) {
         throw error;
       }
-      console.error('Permission check error:', error);
+      Logger.error('Permission check error', { error, userId: req.user?._id });
       throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Permission check failed');
     }
   });

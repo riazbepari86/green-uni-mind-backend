@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import { debugOnly } from '../utils/console-replacement';
+import config from '../config';
 
 // Extend the Request type to include any custom properties
 interface ExtendedRequest extends Request {
@@ -10,37 +12,78 @@ export const debugRequestMiddleware = (
   _res: Response,
   next: NextFunction,
 ) => {
+  // Only enable debug logging in development environment
+  if (config.NODE_ENV !== 'development') {
+    next();
+    return;
+  }
+
   // Only log for specific routes that are having issues
   if (req.originalUrl.includes('/oauth/link')) {
-    console.log('==== DEBUG REQUEST ====');
-    console.log('URL:', req.originalUrl);
-    console.log('Method:', req.method);
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    debugOnly.log('==== DEBUG REQUEST ====');
+    debugOnly.log('URL:', req.originalUrl);
+    debugOnly.log('Method:', req.method);
 
-    // Log the request body
-    console.log('Body type:', typeof req.body);
+    // Sanitize headers - remove sensitive information
+    const sanitizedHeaders = { ...req.headers };
+    delete sanitizedHeaders.authorization;
+    delete sanitizedHeaders.cookie;
+    delete sanitizedHeaders['x-api-key'];
+
+    debugOnly.log('Headers:', JSON.stringify(sanitizedHeaders, null, 2));
+
+    // Log the request body (sanitized)
+    debugOnly.log('Body type:', typeof req.body);
     if (typeof req.body === 'object') {
-      console.log('Body:', JSON.stringify(req.body, null, 2));
+      // Create a sanitized copy of the body
+      const sanitizedBody = sanitizeRequestBody(req.body);
+      debugOnly.log('Body:', JSON.stringify(sanitizedBody, null, 2));
     } else if (typeof req.body === 'string') {
-      console.log('Body (string):', req.body);
+      debugOnly.log('Body (string length):', req.body.length);
       try {
-        // Try to parse it as JSON
+        // Try to parse it as JSON and sanitize
         const parsedBody = JSON.parse(req.body);
-        console.log('Parsed body:', JSON.stringify(parsedBody, null, 2));
+        const sanitizedBody = sanitizeRequestBody(parsedBody);
+        debugOnly.log('Parsed body:', JSON.stringify(sanitizedBody, null, 2));
       } catch (e) {
-        console.log('Body is not valid JSON');
+        debugOnly.log('Body is not valid JSON');
       }
     } else {
-      console.log('Body:', req.body);
+      debugOnly.log('Body type:', typeof req.body);
     }
 
     // Check for any custom raw body property
     if ('rawBody' in req) {
-      console.log('Raw body available:', typeof req.rawBody);
+      debugOnly.log('Raw body available:', typeof req.rawBody);
     }
 
-    console.log('==== END DEBUG REQUEST ====');
+    debugOnly.log('==== END DEBUG REQUEST ====');
   }
 
   next();
 };
+
+// Helper function to sanitize request body
+function sanitizeRequestBody(body: any): any {
+  if (typeof body !== 'object' || body === null) {
+    return body;
+  }
+
+  const sensitiveFields = ['password', 'token', 'secret', 'key', 'otp', 'pin'];
+  const sanitized: any = Array.isArray(body) ? [] : {};
+
+  for (const [key, value] of Object.entries(body)) {
+    const lowerKey = key.toLowerCase();
+    const isSensitive = sensitiveFields.some(field => lowerKey.includes(field));
+
+    if (isSensitive) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      sanitized[key] = sanitizeRequestBody(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+
+  return sanitized;
+}

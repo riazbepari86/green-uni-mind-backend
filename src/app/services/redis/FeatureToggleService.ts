@@ -195,33 +195,13 @@ export class FeatureToggleService {
     });
   }
 
-  // Auto-optimize based on Redis usage
+  // Auto-optimize based on Redis usage - DISABLED to prevent excessive operations
   autoOptimizeBasedOnUsage(redisUsagePercentage: number): void {
-    console.log(`📊 Redis usage: ${redisUsagePercentage.toFixed(1)}%`);
+    // DISABLED: This was causing excessive Redis operations (121K+ ops/min)
+    console.log(`📵 Auto-optimization disabled (Redis usage: ${redisUsagePercentage.toFixed(1)}%)`);
 
-    let newMode = this.state.globalOptimizationMode;
-
-    if (redisUsagePercentage > 85) {
-      newMode = 'aggressive';
-    } else if (redisUsagePercentage > this.state.redisUsageThreshold) {
-      newMode = 'conservative';
-    } else if (redisUsagePercentage < 50) {
-      newMode = 'normal';
-    }
-
-    if (newMode !== this.state.globalOptimizationMode) {
-      console.log(`🚨 Auto-optimizing due to Redis usage: ${redisUsagePercentage.toFixed(1)}%`);
-      this.setOptimizationMode(newMode);
-    }
-
-    // Additionally disable low priority features if usage is high in normal mode
-    if (this.state.globalOptimizationMode === 'normal' && redisUsagePercentage > this.state.redisUsageThreshold) {
-      Object.entries(this.state.features).forEach(([featureName, feature]) => {
-        if (feature.priority === 'low' && feature.enabled && feature.fallbackAvailable) {
-          this.setFeatureEnabled(featureName, false);
-        }
-      });
-    }
+    // No automatic optimization to prevent Redis overload
+    return;
   }
 
   // Register a listener for feature changes

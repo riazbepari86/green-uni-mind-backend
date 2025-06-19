@@ -64,6 +64,8 @@
     "stripe": "^18.1.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

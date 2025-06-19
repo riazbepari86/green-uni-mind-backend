@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/media/gm-hridoy/study/programming-hero/green-uni-mind/backend/logs/.2420739a5988cd48029b8459c2e301ab3bf77965-audit.json",
+    "files": [
+        {
+            "date": 1750264962443,
+            "name": "/media/gm-hridoy/study/programming-hero/green-uni-mind/backend/logs/rejections-2025-06-18.log",
+            "hash": "f3bd62aaff2d7bb16503b21a8ff92cb59fda0af5c51cd2ec1718c1ff7a5702ca"
+        }
+    ],
+    "hashType": "sha256"
+}
