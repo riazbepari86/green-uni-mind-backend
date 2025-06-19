@@ -86,10 +86,7 @@ const refreshToken = catchAsync(async (req, res) => {
     });
   }
 
-  const tokenSource = tokenFromCookie ? 'cookie' :
-    tokenFromBody ? 'body' :
-    tokenFromBearer ? 'bearer' :
-    'header';
+
 
   try {
     

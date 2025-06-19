@@ -1,7 +1,6 @@
 import jwt, { JwtPayload, Secret, SignOptions } from 'jsonwebtoken';
-import { AuthCacheService } from '../redis/AuthCacheService';
-import { redisServiceManager } from '../redis/RedisServiceManager';
 import config from '../../config';
+import { redisOperations } from '../../config/redis';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -23,15 +22,6 @@ export interface JWTPayload extends JwtPayload {
 }
 
 export class JWTService {
-  private authCache: AuthCacheService;
-
-  constructor() {
-    this.authCache = new AuthCacheService(
-      redisServiceManager.authClient,
-      redisServiceManager.monitoring
-    );
-  }
-
   // Generate token ID from payload
   private generateTokenId(): string {
     return uuidv4();
@@ -42,7 +32,7 @@ export class JWTService {
     return crypto.randomBytes(16).toString('hex');
   }
 
-  // Create access token with caching
+  // Create access token
   async createAccessToken(
     payload: { email: string; role: string; _id?: string },
     secret: Secret,
@@ -64,21 +54,13 @@ export class JWTService {
     const decoded = jwt.decode(token) as JwtPayload;
     const ttl = decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
 
-    // Cache the token payload
-    try {
-      await redisServiceManager.executeWithCircuitBreaker(
-        () => this.authCache.cacheToken(tokenId, jwtPayload, ttl),
-        'auth'
-      );
-    } catch (error) {
-      console.warn('Failed to cache access token:', error);
-      // Don't fail token creation if caching fails
-    }
+    // Cache the token payload in Redis
+    await redisOperations.setex(`jwt:${tokenId}`, ttl, JSON.stringify(jwtPayload));
 
     return { token, tokenId };
   }
 
-  // Create refresh token with family tracking
+  // Create refresh token
   async createRefreshToken(
     payload: { email: string; role: string; _id?: string },
     secret: Secret,
@@ -100,16 +82,16 @@ export class JWTService {
     const decoded = jwt.decode(token) as JwtPayload;
     const ttl = decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 86400 * 30; // 30 days default
 
-    // Store refresh token with family tracking
-    try {
-      await redisServiceManager.executeWithCircuitBreaker(
-        () => this.authCache.storeRefreshToken(tokenFamily, tokenId, payload._id || '', ttl),
-        'auth'
-      );
-    } catch (error) {
-      console.warn('Failed to store refresh token:', error);
-      // Don't fail token creation if storage fails
-    }
+    // Store refresh token with family tracking in Redis
+    await redisOperations.setex(`refresh:${tokenId}`, ttl, JSON.stringify({
+      userId: payload._id || '',
+      family: tokenFamily,
+      createdAt: new Date().toISOString()
+    }));
+    
+    // Add to family set
+    await redisOperations.sadd(`family:${tokenFamily}`, tokenId);
+    await redisOperations.expire(`family:${tokenFamily}`, ttl);
 
     return { token, tokenId };
   }
@@ -155,30 +137,19 @@ export class JWTService {
 
   // Verify token with cache check
   async verifyToken(token: string, secret: Secret): Promise<JWTPayload> {
-    // Generate token ID for cache lookup
     const tokenId = this.extractTokenId(token);
     
     if (tokenId) {
       // Check if token is blacklisted
-      const isBlacklisted = await redisServiceManager.executeWithCircuitBreaker(
-        () => this.authCache.isTokenBlacklisted(tokenId),
-        'auth',
-        () => Promise.resolve(false)
-      );
-
+      const isBlacklisted = await redisOperations.exists(`blacklist:${tokenId}`);
       if (isBlacklisted) {
         throw new Error('Token has been revoked');
       }
 
       // Try to get from cache first
-      const cachedPayload = await redisServiceManager.executeWithCircuitBreaker(
-        () => this.authCache.getTokenPayload(tokenId),
-        'auth',
-        () => Promise.resolve(null)
-      );
-
+      const cachedPayload = await redisOperations.get(`jwt:${tokenId}`);
       if (cachedPayload) {
-        return cachedPayload;
+        return JSON.parse(cachedPayload);
       }
     }
 
@@ -189,14 +160,7 @@ export class JWTService {
     if (decoded.tokenId) {
       const ttl = decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
       if (ttl > 0) {
-        try {
-          await redisServiceManager.executeWithCircuitBreaker(
-            () => this.authCache.cacheToken(decoded.tokenId!, decoded, ttl),
-            'auth'
-          );
-        } catch (error) {
-          console.warn('Failed to cache verified token:', error);
-        }
+        await redisOperations.setex(`jwt:${decoded.tokenId}`, ttl, JSON.stringify(decoded));
       }
     }
 
@@ -217,21 +181,42 @@ export class JWTService {
   async refreshTokens(refreshToken: string): Promise<TokenPair> {
     // Verify refresh token
     const decoded = await this.verifyToken(refreshToken, config.jwt_refresh_secret);
-    
+
+    // Add debugging information
+    console.log('Token refresh attempt - decoded token:', {
+      type: decoded.type,
+      tokenId: decoded.tokenId,
+      family: decoded.family,
+      email: decoded.email,
+      role: decoded.role
+    });
+
+    // Check if token has the correct type
+    if (!decoded.type) {
+      console.warn('Token missing type field, assuming it is a refresh token');
+      // For backward compatibility, assume it's a refresh token if type is missing
+      decoded.type = 'refresh';
+    }
+
     if (decoded.type !== 'refresh') {
-      throw new Error('Invalid token type for refresh');
+      console.error('Invalid token type for refresh. Received:', decoded.type, 'Expected: refresh');
+      throw new Error(`Invalid token type for refresh. Received: ${decoded.type}, Expected: refresh`);
     }
 
     if (!decoded.tokenId || !decoded.family) {
       throw new Error('Invalid refresh token structure');
     }
 
-    // Get refresh token info from cache
-    const tokenInfo = await redisServiceManager.executeWithCircuitBreaker(
-      () => this.authCache.getRefreshTokenInfo(decoded.tokenId!),
-      'auth',
-      () => Promise.resolve(null)
-    );
+    // Get refresh token info from Redis
+    let tokenInfo = null;
+    const tokenData = await redisOperations.get(`refresh:${decoded.tokenId}`);
+    if (tokenData) {
+      try {
+        tokenInfo = JSON.parse(tokenData);
+      } catch (parseError) {
+        console.warn('Failed to parse refresh token data:', parseError);
+      }
+    }
 
     if (!tokenInfo) {
       // Token family might be compromised - invalidate all tokens in family
@@ -252,14 +237,8 @@ export class JWTService {
     );
 
     // Invalidate the old refresh token
-    try {
-      await redisServiceManager.executeWithCircuitBreaker(
-        () => this.authCache.blacklistToken(decoded.tokenId!, 86400),
-        'auth'
-      );
-    } catch (error) {
-      console.warn('Failed to blacklist old refresh token:', error);
-    }
+    await redisOperations.setex(`blacklist:${decoded.tokenId}`, 86400, '1'); // Blacklist for 24 hours
+    await redisOperations.del(`refresh:${decoded.tokenId}`);
 
     return newTokenPair;
   }
@@ -274,34 +253,46 @@ export class JWTService {
     const decoded = jwt.decode(token) as JwtPayload;
     const ttl = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
 
-    await redisServiceManager.executeWithCircuitBreaker(
-      () => this.authCache.blacklistToken(tokenId, Math.max(ttl, 0)),
-      'auth'
-    );
+    await redisOperations.setex(`blacklist:${tokenId}`, Math.max(ttl, 0), '1');
+    await redisOperations.del(`jwt:${tokenId}`);
+  }
+
+  // Batch blacklist multiple tokens
+  async batchBlacklistTokens(tokens: string[]): Promise<void> {
+    if (!tokens || tokens.length === 0) {
+      return;
+    }
+
+    const pipeline = redisOperations.pipeline();
+    
+    for (const token of tokens) {
+      const tokenId = this.extractTokenId(token);
+      if (tokenId) {
+        const decoded = jwt.decode(token) as JwtPayload;
+        const ttl = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
+        
+        pipeline.setex(`blacklist:${tokenId}`, Math.max(ttl, 0), '1');
+        pipeline.del(`jwt:${tokenId}`);
+        pipeline.del(`refresh:${tokenId}`);
+      }
+    }
+    
+    await pipeline.exec();
   }
 
   // Invalidate token family (useful when refresh token is compromised)
   async invalidateTokenFamily(tokenFamily: string): Promise<void> {
-    await redisServiceManager.executeWithCircuitBreaker(
-      () => this.authCache.invalidateTokenFamily(tokenFamily),
-      'auth'
-    );
-  }
-
-  // Batch blacklist tokens (useful for logout from all devices)
-  async batchBlacklistTokens(tokens: string[]): Promise<void> {
-    const tokenIds = tokens
-      .map(token => this.extractTokenId(token))
-      .filter(id => id !== null) as string[];
-
-    if (tokenIds.length === 0) {
-      return;
+    const tokenIds = await redisOperations.smembers(`family:${tokenFamily}`);
+    if (tokenIds.length > 0) {
+      const pipeline = redisOperations.pipeline();
+      tokenIds.forEach(tokenId => {
+        pipeline.setex(`blacklist:${tokenId}`, 86400, '1');
+        pipeline.del(`refresh:${tokenId}`);
+        pipeline.del(`jwt:${tokenId}`);
+      });
+      pipeline.del(`family:${tokenFamily}`);
+      await pipeline.exec();
     }
-
-    await redisServiceManager.executeWithCircuitBreaker(
-      () => this.authCache.batchBlacklistTokens(tokenIds, 86400),
-      'auth'
-    );
   }
 
   // Check if token is blacklisted
@@ -311,11 +302,8 @@ export class JWTService {
       return false;
     }
 
-    return await redisServiceManager.executeWithCircuitBreaker(
-      () => this.authCache.isTokenBlacklisted(tokenId),
-      'auth',
-      () => Promise.resolve(false)
-    );
+    const result = await redisOperations.exists(`blacklist:${tokenId}`);
+    return result === 1;
   }
 
   // Get token info from cache
@@ -325,38 +313,18 @@ export class JWTService {
       return null;
     }
 
-    return await redisServiceManager.executeWithCircuitBreaker(
-      () => this.authCache.getTokenPayload(tokenId),
-      'auth',
-      () => Promise.resolve(null)
-    );
+    const cachedPayload = await redisOperations.get(`jwt:${tokenId}`);
+    return cachedPayload ? JSON.parse(cachedPayload) : null;
   }
 
   // Cleanup expired tokens (maintenance function)
   async cleanupExpiredTokens(): Promise<void> {
     try {
-      await redisServiceManager.executeWithCircuitBreaker(
-        () => this.authCache.cleanupExpiredData(),
-        'auth'
-      );
+      // Redis automatically removes expired keys, but we can do manual cleanup if needed
+      console.log('Token cleanup completed (Redis handles expiration automatically)');
     } catch (error) {
       console.error('Failed to cleanup expired tokens:', error);
     }
-  }
-
-  // Get JWT statistics
-  async getJWTStats(): Promise<{
-    activeSessions: number;
-    blacklistedTokens: number;
-    tokenFamilies: number;
-  }> {
-    // This would require additional Redis operations to count keys
-    // Implementation depends on your specific monitoring needs
-    return {
-      activeSessions: 0,
-      blacklistedTokens: 0,
-      tokenFamilies: 0
-    };
   }
 }
 

@@ -34,7 +34,7 @@ export abstract class BaseRedisService implements IRedisService {
 
   async disconnect(): Promise<void> {
     try {
-      await this.client.disconnect();
+      this.client.disconnect();
     } catch (error) {
       console.error(`Error disconnecting Redis client in ${this.constructor.name}:`, error);
     }

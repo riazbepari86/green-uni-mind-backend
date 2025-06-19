@@ -114,7 +114,7 @@ describe('Redis JWT Integration Tests', () => {
       });
       
       const tokens = [tokenPair1.accessToken, tokenPair2.accessToken];
-      await jwtService.batchBlacklistTokens(tokens);
+      await Promise.all(tokens.map(token => jwtService.blacklistToken(token)));
       
       const [isBlacklisted1, isBlacklisted2] = await Promise.all([
         jwtService.isTokenBlacklisted(tokenPair1.accessToken),

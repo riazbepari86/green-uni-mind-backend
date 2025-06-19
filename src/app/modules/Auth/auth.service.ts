@@ -3,16 +3,15 @@ import AppError from '../../errors/AppError';
 import { User } from '../User/user.model';
 import { ILoginUser } from './auth.interface';
 import httpStatus from 'http-status';
-import { createToken, emailTemplate, verifyToken } from './auth.utils';
+import { createToken, emailTemplate } from './auth.utils';
 import config from '../../config';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { sendEmail } from '../../utils/sendEmail';
-import { StringValue } from './auth.constant';
 import { Student } from '../Student/student.model';
 import { Teacher } from '../Teacher/teacher.model';
 import { otpOperations } from '../../config/redis';
 import { jwtService } from '../../services/auth/JWTService';
-import { redisServiceManager } from '../../services/redis/RedisServiceManager';
+import { AuthCacheHelper } from '../../services/auth/AuthCacheHelper';
 
 const loginUser = async (payload: ILoginUser) => {
   const user = await User.isUserExists(payload.email);
@@ -156,12 +155,7 @@ const loginUser = async (payload: ILoginUser) => {
   const tokenPair = await jwtService.createTokenPair(jwtPayload);
 
   // Cache user data for faster subsequent requests
-  await redisServiceManager.executeWithCircuitBreaker(
-    () => redisServiceManager.cache.set(`user:${user.email}`, user, 900), // 15 minutes
-    'cache'
-  ).catch(error => {
-    console.warn('Failed to cache user data during login:', error);
-  });
+  await AuthCacheHelper.cacheUserData(user.email, user, 900);
 
   let roleDetails = null;
 
@@ -454,12 +448,7 @@ const verifyEmail = async (email: string, code: string) => {
   const tokenPair = await jwtService.createTokenPair(jwtPayload);
 
   // Cache user data for faster subsequent requests
-  await redisServiceManager.executeWithCircuitBreaker(
-    () => redisServiceManager.cache.set(`user:${user.email}`, user, 900), // 15 minutes
-    'cache'
-  ).catch(error => {
-    console.warn('Failed to cache user data during email verification:', error);
-  });
+  await AuthCacheHelper.cacheUserData(user.email, user, 900);
 
   return {
     success: true,

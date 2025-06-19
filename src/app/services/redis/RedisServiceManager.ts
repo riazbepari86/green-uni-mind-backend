@@ -2,7 +2,6 @@ import { Redis } from 'ioredis';
 import { CacheService } from './CacheService';
 import { RedisMonitoringService } from './MonitoringService';
 import { CircuitBreakerFactory } from './CircuitBreakerService';
-import { IRedisConfig } from './interfaces';
 import config from '../../config';
 
 export class RedisServiceManager {
@@ -225,7 +224,7 @@ export class RedisServiceManager {
 
     await Promise.all(clients.map(async (client) => {
       try {
-        await client.disconnect();
+        client.disconnect();
       } catch (error) {
         console.error('Error disconnecting Redis client:', error);
       }

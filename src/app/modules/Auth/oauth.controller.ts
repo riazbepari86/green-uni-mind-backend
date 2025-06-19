@@ -10,12 +10,10 @@ import { IUser } from '../User/user.interface';
 import { Student } from '../Student/student.model';
 import { Teacher } from '../Teacher/teacher.model';
 import AppError from '../../errors/AppError';
-import { createToken } from './auth.utils';
-import { StringValue } from './auth.constant';
-import querystring from 'querystring';
+import { jwtService } from '../../services/auth/JWTService';
 
 // Helper function to generate tokens
-const generateTokens = (user: any) => {
+const generateTokens = async (user: any) => {
   // Ensure we're using the correct role from the user object
   console.log('Generating tokens with user role:', user.role);
 
@@ -29,19 +27,16 @@ const generateTokens = (user: any) => {
   // Log the payload for debugging
   console.log('JWT payload for token generation:', jwtPayload);
 
-  const accessToken = createToken(
-    jwtPayload,
-    config.jwt_access_secret as string,
-    config.jwt_access_expires_in as StringValue,
-  );
-
-  const refreshToken = createToken(
-    jwtPayload,
-    config.jwt_refresh_secret as string,
-    config.jwt_refresh_expires_in as StringValue,
-  );
-
-  return { accessToken, refreshToken };
+  try {
+    const tokenPair = await jwtService.createTokenPair(jwtPayload);
+    return {
+      accessToken: tokenPair.accessToken,
+      refreshToken: tokenPair.refreshToken
+    };
+  } catch (error) {
+    console.error('Error creating token pair with JWT service:', error);
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Token creation failed');
+  }
 };
 
 // Helper function to get role details
@@ -139,7 +134,7 @@ const generateOAuthUrl = catchAsync(async (req: Request, res: Response) => {
 });
 
 // Google OAuth routes
-const googleAuth = (req: Request, res: Response, next: NextFunction) => {
+const googleAuth = (req: Request, res: Response, _next: NextFunction) => {
   const { role = 'student', linking = 'false' } = req.query;
 
   // Store state information to be retrieved in the callback
@@ -321,11 +316,11 @@ const googleCallback = catchAsync(async (req: Request, res: Response) => {
 
       // For regular login flow (not linking)
       // Generate tokens
-      const { accessToken, refreshToken } = generateTokens(user);
+      const { accessToken, refreshToken } = await generateTokens(user);
 
       // Get role details
       const roleDetails = await getRoleDetails(user);
-      const { email: _email, ...safeRoleDetails } = roleDetails;
+      const { email: _email } = roleDetails;
 
       // Get domain from request origin or use default
       const origin = req.get('origin');
@@ -371,7 +366,7 @@ const googleCallback = catchAsync(async (req: Request, res: Response) => {
 });
 
 // Facebook OAuth routes
-const facebookAuth = (req: Request, res: Response, next: NextFunction) => {
+const facebookAuth = (req: Request, res: Response, _next: NextFunction) => {
   const { role = 'student', linking = 'false' } = req.query;
 
   // Store state information to be retrieved in the callback
@@ -507,7 +502,7 @@ const facebookCallback = catchAsync(async (req: Request, res: Response) => {
 
       // For regular login flow (not linking)
       // Generate tokens
-      const { accessToken, refreshToken } = generateTokens(user);
+      const { accessToken, refreshToken } = await generateTokens(user);
 
       // Get role details
       const roleDetails = await getRoleDetails(user);
@@ -557,7 +552,7 @@ const facebookCallback = catchAsync(async (req: Request, res: Response) => {
 });
 
 // Apple OAuth routes
-const appleAuth = (req: Request, res: Response, next: NextFunction) => {
+const appleAuth = (req: Request, res: Response, _next: NextFunction) => {
   const { role = 'student', linking = 'false' } = req.query;
 
   // Store state information to be retrieved in the callback
@@ -694,7 +689,7 @@ const appleCallback = catchAsync(async (req: Request, res: Response) => {
 
       // For regular login flow (not linking)
       // Generate tokens
-      const { accessToken, refreshToken } = generateTokens(user);
+      const { accessToken, refreshToken } = await generateTokens(user);
 
       // Get role details
       const roleDetails = await getRoleDetails(user);
@@ -946,7 +941,7 @@ const exchangeFacebookCode = async (code: string) => {
   }
 };
 
-const exchangeAppleCode = async (code: string) => {
+const exchangeAppleCode = async (_code: string) => {
   try {
     // For Apple, the implementation is more complex and requires JWT client secret generation
     // This is a simplified version - in production, you'd need to generate a client secret JWT
@@ -1446,7 +1441,6 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
       case 'apple':
         // Apple token exchange is more complex and requires client-side JWT validation
         // This is a simplified version
-        const appleTokenUrl = 'https://appleid.apple.com/auth/token';
         const appleParams = new URLSearchParams();
         appleParams.append('client_id', config.oauth.apple.clientId || '');
         appleParams.append('client_secret', ''); // Apple requires a generated JWT token here
@@ -1578,7 +1572,7 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
       }
 
       // Generate tokens for the user
-      const { accessToken, refreshToken } = generateTokens(user);
+      const { accessToken, refreshToken } = await generateTokens(user);
 
       // Get domain from request origin or use default
       const origin = req.get('origin');

@@ -1,4 +1,4 @@
-import { redis } from '../../config/redis';
+import { redisOperations, redis } from '../../config/redis';
 
 /**
  * Service to clean up excessive Redis keys that are consuming storage
@@ -41,20 +41,31 @@ export class RedisCleanupService {
 
       for (const pattern of patterns) {
         try {
-          const keys = await redis.keys(pattern);
+          // Use SCAN instead of KEYS to handle large keysets
+          const keys: string[] = [];
+          let cursor = '0';
+
+          do {
+            const result = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+            cursor = result[0];
+            keys.push(...result[1]);
+          } while (cursor !== '0' && keys.length < 1000); // Limit to 1000 keys per pattern
+
           if (keys.length > 0) {
             console.log(`🗑️ Found ${keys.length} keys matching pattern: ${pattern}`);
-            
+
             // Delete in batches to avoid overwhelming Redis
-            const batchSize = 100;
+            const batchSize = 50; // Reduced batch size for safety
             for (let i = 0; i < keys.length; i += batchSize) {
               const batch = keys.slice(i, i + batchSize);
-              const deleted = await redis.del(...batch);
-              totalDeleted += deleted;
-              console.log(`   Deleted batch of ${deleted} keys`);
-              
+              if (batch.length > 0) {
+                const deleted = await redis.del(...batch);
+                totalDeleted += deleted;
+                console.log(`   Deleted batch of ${deleted} keys`);
+              }
+
               // Small delay between batches
-              await new Promise(resolve => setTimeout(resolve, 100));
+              await new Promise(resolve => setTimeout(resolve, 200));
             }
           }
         } catch (error) {
@@ -80,17 +91,25 @@ export class RedisCleanupService {
     console.log('🧹 Cleaning up large cache keys...');
 
     try {
-      // Get all cache keys and check their size
-      const cacheKeys = await redis.keys('cache:*');
+      // Use SCAN to get cache keys instead of KEYS
+      const cacheKeys: string[] = [];
+      let cursor = '0';
+
+      do {
+        const result = await redis.scan(cursor, 'MATCH', 'cache:*', 'COUNT', 100);
+        cursor = result[0];
+        cacheKeys.push(...result[1]);
+      } while (cursor !== '0' && cacheKeys.length < 500); // Limit to 500 keys
+
       let totalFreed = 0;
 
       for (const key of cacheKeys) {
         try {
           const size = await redis.memory('USAGE', key);
-          
+
           // If key is larger than 1MB, consider removing it
           if (size && size > 1024 * 1024) {
-            await redis.del(key);
+            await redisOperations.del(key);
             totalFreed += size;
             console.log(`🗑️ Removed large cache key: ${key} (${(size / 1024 / 1024).toFixed(2)}MB)`);
           }
@@ -151,13 +170,21 @@ export class RedisCleanupService {
         'jwt:*'
       ];
 
-      // Get all keys
-      const allKeys = await redis.keys('*');
+      // Use SCAN to get all keys instead of KEYS
+      const allKeys: string[] = [];
+      let cursor = '0';
+
+      do {
+        const result = await redis.scan(cursor, 'COUNT', 100);
+        cursor = result[0];
+        allKeys.push(...result[1]);
+      } while (cursor !== '0' && allKeys.length < 2000); // Limit to 2000 keys for safety
+
       const keysToDelete: string[] = [];
 
       for (const key of allKeys) {
         let isEssential = false;
-        
+
         for (const pattern of essentialPatterns) {
           const regex = new RegExp('^' + pattern.replace('*', '.*') + '$');
           if (regex.test(key)) {

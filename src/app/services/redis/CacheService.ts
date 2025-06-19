@@ -4,17 +4,15 @@ import { ICacheService, IRedisMonitoringService, CacheStrategy } from './interfa
 
 export class CacheService extends BaseRedisService implements ICacheService {
   private defaultTTL: number = 3600; // 1 hour default TTL
-  private strategy: CacheStrategy = CacheStrategy.CACHE_ASIDE;
 
   constructor(
     client: Redis,
     monitoring?: IRedisMonitoringService,
     defaultTTL: number = 3600,
-    strategy: CacheStrategy = CacheStrategy.CACHE_ASIDE
+    _strategy: CacheStrategy = CacheStrategy.CACHE_ASIDE
   ) {
     super(client, monitoring);
     this.defaultTTL = defaultTTL;
-    this.strategy = strategy;
   }
 
   async get<T>(key: string): Promise<T | null> {

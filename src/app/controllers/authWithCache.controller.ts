@@ -287,10 +287,9 @@ const checkTokenStatus = catchAsync(async (req: Request, res: Response) => {
 });
 
 // Get authentication statistics (admin only)
-const getAuthStats = catchAsync(async (req: Request, res: Response) => {
+const getAuthStats = catchAsync(async (_req: Request, res: Response) => {
   try {
-    const [jwtStats, healthCheck, performanceMetrics] = await Promise.all([
-      jwtService.getJWTStats(),
+    const [healthCheck, performanceMetrics] = await Promise.all([
       redisServiceManager.healthCheck(),
       redisServiceManager.getPerformanceMetrics()
     ]);
@@ -300,7 +299,6 @@ const getAuthStats = catchAsync(async (req: Request, res: Response) => {
       success: true,
       message: 'Authentication statistics retrieved successfully!',
       data: {
-        jwt: jwtStats,
         redis: {
           health: healthCheck,
           performance: performanceMetrics

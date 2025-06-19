@@ -217,7 +217,7 @@ export function withCircuitBreaker(
   config?: Partial<CircuitBreakerConfig>
 ) {
   return function (
-    target: any,
+    _target: any,
     propertyName: string,
     descriptor: PropertyDescriptor
   ) {
