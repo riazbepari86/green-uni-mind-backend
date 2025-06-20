@@ -91,7 +91,7 @@ const AuthCacheService_1 = require("../app/services/redis/AuthCacheService");
             const tokenPair1 = yield JWTService_1.jwtService.createTokenPair(testPayload);
             const tokenPair2 = yield JWTService_1.jwtService.createTokenPair(Object.assign(Object.assign({}, testPayload), { email: 'test2@example.com' }));
             const tokens = [tokenPair1.accessToken, tokenPair2.accessToken];
-            yield JWTService_1.jwtService.batchBlacklistTokens(tokens);
+            yield Promise.all(tokens.map(token => JWTService_1.jwtService.blacklistToken(token)));
             const [isBlacklisted1, isBlacklisted2] = yield Promise.all([
                 JWTService_1.jwtService.isTokenBlacklisted(tokenPair1.accessToken),
                 JWTService_1.jwtService.isTokenBlacklisted(tokenPair2.accessToken)

@@ -62,7 +62,7 @@ function sanitizeRequestBody(body) {
     const sensitiveFields = ['password', 'token', 'secret', 'key', 'otp', 'pin'];
     const sanitized = Array.isArray(body) ? [] : {};
     for (const [key, value] of Object.entries(body)) {
-        const lowerKey = key.toLowerCase();
+        const lowerKey = (key === null || key === void 0 ? void 0 : key.toLowerCase()) || '';
         const isSensitive = sensitiveFields.some(field => lowerKey.includes(field));
         if (isSensitive) {
             sanitized[key] = '[REDACTED]';

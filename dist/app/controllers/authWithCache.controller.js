@@ -288,10 +288,9 @@ const checkTokenStatus = (0, catchAsync_1.default)((req, res) => __awaiter(void 
     }
 }));
 // Get authentication statistics (admin only)
-const getAuthStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAuthStats = (0, catchAsync_1.default)((_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const [jwtStats, healthCheck, performanceMetrics] = yield Promise.all([
-            JWTService_1.jwtService.getJWTStats(),
+        const [healthCheck, performanceMetrics] = yield Promise.all([
             RedisServiceManager_1.redisServiceManager.healthCheck(),
             RedisServiceManager_1.redisServiceManager.getPerformanceMetrics()
         ]);
@@ -300,7 +299,6 @@ const getAuthStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, v
             success: true,
             message: 'Authentication statistics retrieved successfully!',
             data: {
-                jwt: jwtStats,
                 redis: {
                     health: healthCheck,
                     performance: performanceMetrics

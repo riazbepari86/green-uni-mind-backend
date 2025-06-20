@@ -12,379 +12,260 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.testRedisConnection = exports.otpOperations = exports.newRedisSessions = exports.newRedisJobs = exports.newRedisCache = exports.newRedisAuth = exports.newRedis = exports.cacheService = exports.redisMonitoring = exports.redisServiceManager = exports.redisSessions = exports.redisJobs = exports.redisCache = exports.redisAuth = exports.redis = void 0;
+exports.ensureConnection = exports.safeRedisOperation = exports.redisOperations = exports.redis = exports.testRedisConnection = exports.otpOperations = void 0;
+exports.isRedisHealthy = isRedisHealthy;
 const ioredis_1 = __importDefault(require("ioredis"));
 const index_1 = __importDefault(require("./index"));
-// Redis connection configuration with optimized settings
-const redisConfig = (() => {
-    // If REDIS_URL is provided (common in cloud deployments), use it directly
-    if (index_1.default.redis.url) {
-        return {
-            connectionName: 'green-uni-mind',
-            enableReadyCheck: true,
-            maxRetriesPerRequest: 3,
-            lazyConnect: true,
-            // TLS configuration for Upstash Redis
-            tls: index_1.default.redis.url.includes('upstash.io') || index_1.default.redis.url.includes('rediss://') ? {} : undefined,
-            // Connection pool settings for better performance
-            family: 4, // Use IPv4
-            keepAlive: 0,
-            connectTimeout: 10000,
-            commandTimeout: 5000,
-            retryDelayOnFailover: 100,
-            enableOfflineQueue: false,
-            retryDelayOnClusterDown: 300,
-        };
-    }
-    // Fallback to individual host/port/password configuration
-    const host = index_1.default.redis.host || 'localhost';
-    const port = index_1.default.redis.port || 6379;
-    const password = index_1.default.redis.password || '';
-    return {
-        host,
-        port,
-        password,
-        enableReadyCheck: true,
-        maxRetriesPerRequest: 3,
-        lazyConnect: true,
-        // TLS configuration for Upstash Redis
-        tls: host && host.includes('upstash.io') ? {} : undefined,
-        // Connection pool settings for better performance
-        family: 4, // Use IPv4
-        keepAlive: 0,
-        connectTimeout: 10000,
-        commandTimeout: 5000,
-        retryDelayOnFailover: 100,
-        enableOfflineQueue: false,
-        retryDelayOnClusterDown: 300,
-    };
-})();
-// Create primary Redis client instance
-const redis = index_1.default.redis.url
-    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
-    : new ioredis_1.default(redisConfig);
+// Redis connection configuration for Upstash
+const redisConfig = {
+    host: index_1.default.redis.host || 'localhost',
+    port: index_1.default.redis.port || 6379,
+    password: index_1.default.redis.password || '',
+    family: 4,
+    maxRetriesPerRequest: 3,
+    retryDelayOnFailover: 100,
+    enableReadyCheck: false,
+    maxLoadingTimeout: 1000,
+    lazyConnect: true, // Don't connect immediately
+    keepAlive: 30000,
+    connectTimeout: 10000,
+    commandTimeout: 5000,
+    tls: index_1.default.redis.host && index_1.default.redis.host.includes('upstash.io') ? {} : undefined,
+};
+// Create a single Redis client instance
+const redis = new ioredis_1.default(redisConfig);
 exports.redis = redis;
-// Create separate Redis clients for different use cases
-const redisAuth = index_1.default.redis.url
-    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
-    : new ioredis_1.default(redisConfig); // For authentication operations
-exports.redisAuth = redisAuth;
-const redisCache = index_1.default.redis.url
-    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
-    : new ioredis_1.default(redisConfig); // For caching operations
-exports.redisCache = redisCache;
-const redisJobs = index_1.default.redis.url
-    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
-    : new ioredis_1.default(redisConfig); // For job queue operations
-exports.redisJobs = redisJobs;
-const redisSessions = index_1.default.redis.url
-    ? new ioredis_1.default(index_1.default.redis.url, redisConfig)
-    : new ioredis_1.default(redisConfig); // For session management
-exports.redisSessions = redisSessions;
-// Handle Redis connection events for primary client
+// Connection state tracking
+let isConnected = false;
+let isConnecting = false;
+// Setup connection event handlers
 redis.on('connect', () => {
-    console.log('✅ Redis primary client connected successfully');
+    console.log('✅ Redis client connected successfully');
+    isConnecting = false;
 });
 redis.on('ready', () => {
-    console.log('✅ Redis primary client is ready to accept commands');
+    console.log('✅ Redis client is ready to accept commands');
+    isConnected = true;
 });
 redis.on('error', (error) => {
-    console.error('❌ Redis primary client connection error:', error);
+    console.error('❌ Redis client connection error:', error);
+    isConnected = false;
 });
 redis.on('close', () => {
-    console.log('⚠️ Redis primary client connection closed');
+    console.log('⚠️ Redis client connection closed');
+    isConnected = false;
 });
-redis.on('reconnecting', () => {
-    console.log('🔄 Redis primary client reconnecting...');
+redis.on('reconnecting', (delay) => {
+    console.log(`🔄 Redis client reconnecting in ${delay}ms...`);
+    isConnecting = true;
 });
-// Setup connection event handlers for specialized clients
-const setupClientEvents = (client, name) => {
-    client.on('connect', () => console.log(`✅ Redis ${name} client connected`));
-    client.on('error', (error) => console.error(`❌ Redis ${name} client error:`, error));
-    client.on('close', () => console.log(`⚠️ Redis ${name} client connection closed`));
-    client.on('reconnecting', () => console.log(`🔄 Redis ${name} client reconnecting...`));
-};
-setupClientEvents(redisAuth, 'auth');
-setupClientEvents(redisCache, 'cache');
-setupClientEvents(redisJobs, 'jobs');
-setupClientEvents(redisSessions, 'sessions');
-// Import and use the new Redis Service Manager
-const RedisServiceManager_1 = require("../services/redis/RedisServiceManager");
-Object.defineProperty(exports, "redisServiceManager", { enumerable: true, get: function () { return RedisServiceManager_1.redisServiceManager; } });
-Object.defineProperty(exports, "newRedis", { enumerable: true, get: function () { return RedisServiceManager_1.redis; } });
-Object.defineProperty(exports, "newRedisAuth", { enumerable: true, get: function () { return RedisServiceManager_1.redisAuth; } });
-Object.defineProperty(exports, "newRedisCache", { enumerable: true, get: function () { return RedisServiceManager_1.redisCache; } });
-Object.defineProperty(exports, "newRedisJobs", { enumerable: true, get: function () { return RedisServiceManager_1.redisJobs; } });
-Object.defineProperty(exports, "newRedisSessions", { enumerable: true, get: function () { return RedisServiceManager_1.redisSessions; } });
-Object.defineProperty(exports, "redisMonitoring", { enumerable: true, get: function () { return RedisServiceManager_1.redisMonitoring; } });
-Object.defineProperty(exports, "cacheService", { enumerable: true, get: function () { return RedisServiceManager_1.cacheService; } });
-// OTP-related Redis operations
+// Health check function
+function isRedisHealthy() {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const result = yield safeRedisOperation(() => redis.ping(), null, 'health-check');
+            return result === 'PONG';
+        }
+        catch (error) {
+            console.error('Redis health check failed:', error);
+            return false;
+        }
+    });
+}
+// Helper function to ensure connection
+const ensureConnection = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (isConnected)
+        return;
+    if (isConnecting) {
+        // Wait for connection to complete
+        yield new Promise((resolve) => {
+            const checkConnection = () => {
+                if (isConnected || !isConnecting) {
+                    resolve(void 0);
+                }
+                else {
+                    setTimeout(checkConnection, 100);
+                }
+            };
+            checkConnection();
+        });
+        return;
+    }
+    try {
+        isConnecting = true;
+        yield redis.connect();
+    }
+    catch (error) {
+        console.error('Failed to connect to Redis:', error);
+        isConnecting = false;
+        throw error;
+    }
+});
+exports.ensureConnection = ensureConnection;
+// Wrapper function for Redis operations with error handling
+const safeRedisOperation = (operation, fallback, operationName) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield ensureConnection();
+        return yield operation();
+    }
+    catch (error) {
+        console.warn(`Redis operation failed${operationName ? ` (${operationName})` : ''}:`, error);
+        return fallback;
+    }
+});
+exports.safeRedisOperation = safeRedisOperation;
+// OTP-related Redis operations with error handling
 exports.otpOperations = {
-    // Store OTP with TTL (5 minutes = 300 seconds)
-    setOTP(email_1, otp_1) {
+    storeOTP(email_1, otp_1) {
         return __awaiter(this, arguments, void 0, function* (email, otp, ttlSeconds = 300) {
             const key = `otp:${email}`;
-            yield redis.setex(key, ttlSeconds, otp);
+            yield safeRedisOperation(() => redis.setex(key, ttlSeconds, otp), undefined, 'storeOTP');
             console.log(`✅ OTP stored for ${email} with TTL ${ttlSeconds}s`);
         });
     },
-    // Get OTP for email
     getOTP(email) {
         return __awaiter(this, void 0, void 0, function* () {
             const key = `otp:${email}`;
-            const otp = yield redis.get(key);
-            return otp;
+            return (yield safeRedisOperation(() => redis.get(key), null, 'getOTP')) || null;
         });
     },
-    // Delete OTP after successful verification
     deleteOTP(email) {
         return __awaiter(this, void 0, void 0, function* () {
             const key = `otp:${email}`;
-            yield redis.del(key);
+            yield safeRedisOperation(() => redis.del(key), undefined, 'deleteOTP');
             console.log(`✅ OTP deleted for ${email}`);
         });
     },
-    // Check if OTP exists and get TTL
     getOTPTTL(email) {
         return __awaiter(this, void 0, void 0, function* () {
             const key = `otp:${email}`;
-            return yield redis.ttl(key);
+            return (yield safeRedisOperation(() => redis.ttl(key), -1, 'getOTPTTL')) || -1;
         });
     },
-    // Professional-grade rate limiting for OTP requests
-    checkOTPRateLimit(email) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const attemptsKey = `otp_attempts:${email}`;
-            const lockKey = `otp_lock:${email}`;
-            const maxAttempts = 3;
-            const windowSeconds = 1800; // 30 minutes
-            const lockDuration = 1800; // 30 minutes
-            const extendedLockDuration = 3600; // 1 hour
-            try {
-                // Check if account is currently locked
-                const lockData = yield redis.get(lockKey);
-                if (lockData) {
+    // Alias for compatibility
+    setOTP: function (email_1, otp_1) {
+        return __awaiter(this, arguments, void 0, function* (email, otp, ttlSeconds = 300) {
+            return this.storeOTP(email, otp, ttlSeconds);
+        });
+    },
+    checkResendCooldown(email_1) {
+        return __awaiter(this, arguments, void 0, function* (email, cooldownSeconds = 60) {
+            const cooldownKey = `otp:cooldown:${email}`;
+            const exists = yield safeRedisOperation(() => redis.exists(cooldownKey), 0, 'checkResendCooldown-exists');
+            if (exists) {
+                const ttl = yield safeRedisOperation(() => redis.ttl(cooldownKey), 0, 'checkResendCooldown-ttl');
+                return {
+                    allowed: false,
+                    remainingTime: ttl || 0
+                };
+            }
+            yield safeRedisOperation(() => redis.setex(cooldownKey, cooldownSeconds, '1'), undefined, 'checkResendCooldown-set');
+            return {
+                allowed: true,
+                remainingTime: 0
+            };
+        });
+    },
+    checkOTPRateLimit(email_1) {
+        return __awaiter(this, arguments, void 0, function* (email, maxAttempts = 5, windowSeconds = 3600) {
+            const attemptsKey = `otp:attempts:${email}`;
+            const lockKey = `otp:lock:${email}`;
+            // Check if locked
+            const lockData = yield safeRedisOperation(() => redis.get(lockKey), null, 'checkOTPRateLimit-lockData');
+            if (lockData) {
+                try {
                     const lock = JSON.parse(lockData);
-                    const ttl = yield redis.ttl(lockKey);
-                    // If locked account receives more requests, extend lock to 1 hour
+                    const ttl = yield safeRedisOperation(() => redis.ttl(lockKey), 0, 'checkOTPRateLimit-lockTTL');
                     if (lock.attempts >= maxAttempts) {
-                        yield redis.setex(lockKey, extendedLockDuration, JSON.stringify(Object.assign(Object.assign({}, lock), { attempts: lock.attempts + 1, extendedLock: true, lastAttempt: Date.now() })));
-                        console.warn(`🚨 Suspicious activity detected for ${email}: Extended lock applied`);
                         return {
                             allowed: false,
                             remaining: 0,
-                            resetTime: Date.now() + (extendedLockDuration * 1000),
+                            resetTime: Date.now() + ((ttl || 0) * 1000),
                             isLocked: true,
-                            lockReason: 'Too many requests detected. Account locked for 1 hour due to suspicious activity.',
-                            lockDuration: extendedLockDuration
+                            lockDuration: ttl || 0,
+                            lockReason: lock.reason || 'Too many OTP requests'
                         };
                     }
-                    return {
-                        allowed: false,
-                        remaining: 0,
-                        resetTime: Date.now() + (ttl * 1000),
-                        isLocked: true,
-                        lockReason: 'Account temporarily locked due to too many OTP requests. Please try again in 30 minutes.',
-                        lockDuration: ttl
-                    };
                 }
-                // Check current attempts
-                const current = yield redis.get(attemptsKey);
-                const attempts = current ? parseInt(current) : 0;
-                if (attempts >= maxAttempts) {
-                    // Lock the account
-                    const lockInfo = {
-                        attempts: attempts + 1,
-                        lockedAt: Date.now(),
-                        reason: 'rate_limit_exceeded'
-                    };
-                    yield redis.setex(lockKey, lockDuration, JSON.stringify(lockInfo));
-                    yield redis.del(attemptsKey); // Clean up attempts counter
-                    console.warn(`🔒 Account locked for ${email}: Rate limit exceeded (${attempts + 1} attempts)`);
-                    return {
-                        allowed: false,
-                        remaining: 0,
-                        resetTime: Date.now() + (lockDuration * 1000),
-                        isLocked: true,
-                        lockReason: 'Account temporarily locked due to too many OTP requests. Please try again in 30 minutes.',
-                        lockDuration: lockDuration
-                    };
+                catch (parseError) {
+                    console.warn('Failed to parse lock data:', parseError);
                 }
-                // Increment attempts
-                if (current) {
-                    yield redis.incr(attemptsKey);
-                }
-                else {
-                    yield redis.setex(attemptsKey, windowSeconds, '1');
-                }
-                const ttl = yield redis.ttl(attemptsKey);
-                const newAttempts = attempts + 1;
-                console.log(`📊 OTP rate limit check for ${email}: ${newAttempts}/${maxAttempts} attempts`);
+            }
+            const current = yield safeRedisOperation(() => redis.get(attemptsKey), null, 'checkOTPRateLimit-current');
+            const attempts = current ? parseInt(current) : 0;
+            if (attempts >= maxAttempts) {
+                const lockDuration = 1800; // 30 minutes
+                const lockInfo = {
+                    attempts: attempts + 1,
+                    lockedAt: new Date().toISOString(),
+                    reason: 'Exceeded maximum OTP requests'
+                };
+                yield safeRedisOperation(() => redis.setex(lockKey, lockDuration, JSON.stringify(lockInfo)), undefined, 'checkOTPRateLimit-setLock');
+                yield safeRedisOperation(() => redis.del(attemptsKey), undefined, 'checkOTPRateLimit-delAttempts');
                 return {
-                    allowed: true,
-                    remaining: maxAttempts - newAttempts,
-                    resetTime: Date.now() + (ttl * 1000),
-                    isLocked: false
+                    allowed: false,
+                    remaining: 0,
+                    resetTime: Date.now() + (lockDuration * 1000),
+                    isLocked: true,
+                    lockDuration,
+                    lockReason: lockInfo.reason
                 };
             }
-            catch (error) {
-                console.error('❌ Redis rate limiting error:', error);
-                // Graceful degradation - allow request if Redis fails
-                return {
-                    allowed: true,
-                    remaining: 2,
-                    resetTime: Date.now() + (windowSeconds * 1000),
-                    isLocked: false
-                };
+            if (current) {
+                yield safeRedisOperation(() => redis.incr(attemptsKey), undefined, 'checkOTPRateLimit-incr');
             }
+            else {
+                yield safeRedisOperation(() => redis.setex(attemptsKey, windowSeconds, '1'), undefined, 'checkOTPRateLimit-setex');
+            }
+            const ttl = yield safeRedisOperation(() => redis.ttl(attemptsKey), windowSeconds, 'checkOTPRateLimit-ttl');
+            const newAttempts = attempts + 1;
+            return {
+                allowed: true,
+                remaining: maxAttempts - newAttempts,
+                resetTime: Date.now() + ((ttl || windowSeconds) * 1000),
+                isLocked: false
+            };
         });
     },
-    // Resend cooldown management (1-minute cooldown between resend requests)
-    checkResendCooldown(email) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const cooldownKey = `otp_resend_cooldown:${email}`;
-            const cooldownSeconds = 60; // 1 minute
-            try {
-                const exists = yield redis.exists(cooldownKey);
-                if (exists) {
-                    const ttl = yield redis.ttl(cooldownKey);
-                    console.log(`⏰ Resend cooldown active for ${email}: ${ttl} seconds remaining`);
-                    return {
-                        allowed: false,
-                        remainingTime: ttl
-                    };
-                }
-                // Set cooldown
-                yield redis.setex(cooldownKey, cooldownSeconds, '1');
-                console.log(`✅ Resend cooldown set for ${email}: ${cooldownSeconds} seconds`);
-                return {
-                    allowed: true,
-                    remainingTime: 0
-                };
-            }
-            catch (error) {
-                console.error('❌ Redis resend cooldown error:', error);
-                // Graceful degradation - allow resend if Redis fails
-                return {
-                    allowed: true,
-                    remainingTime: 0
-                };
-            }
-        });
-    },
-    // Get comprehensive rate limiting status
     getRateLimitStatus(email) {
         return __awaiter(this, void 0, void 0, function* () {
-            const attemptsKey = `otp_attempts:${email}`;
-            const lockKey = `otp_lock:${email}`;
-            const cooldownKey = `otp_resend_cooldown:${email}`;
-            const maxAttempts = 3;
-            try {
-                const [attempts, lockData, cooldownTTL] = yield Promise.all([
-                    redis.get(attemptsKey),
-                    redis.get(lockKey),
-                    redis.ttl(cooldownKey)
-                ]);
-                const currentAttempts = attempts ? parseInt(attempts) : 0;
-                const isLocked = !!lockData;
-                let lockInfo = null;
-                let lockTimeRemaining = 0;
-                if (isLocked) {
+            const attemptsKey = `otp:attempts:${email}`;
+            const lockKey = `otp:lock:${email}`;
+            const cooldownKey = `otp:cooldown:${email}`;
+            const [attempts, lockData, cooldownTTL] = yield Promise.all([
+                safeRedisOperation(() => redis.get(attemptsKey), null, 'getRateLimitStatus-attempts'),
+                safeRedisOperation(() => redis.get(lockKey), null, 'getRateLimitStatus-lockData'),
+                safeRedisOperation(() => redis.ttl(cooldownKey), -1, 'getRateLimitStatus-cooldownTTL')
+            ]);
+            const currentAttempts = attempts ? parseInt(attempts) : 0;
+            let lockInfo = null;
+            let lockTimeRemaining = 0;
+            if (lockData) {
+                try {
                     lockInfo = JSON.parse(lockData);
-                    lockTimeRemaining = yield redis.ttl(lockKey);
+                    lockTimeRemaining = (yield safeRedisOperation(() => redis.ttl(lockKey), 0, 'getRateLimitStatus-lockTTL')) || 0;
                 }
-                return {
-                    attempts: currentAttempts,
-                    remaining: Math.max(0, maxAttempts - currentAttempts),
-                    isLocked,
-                    lockReason: (lockInfo === null || lockInfo === void 0 ? void 0 : lockInfo.extendedLock)
-                        ? 'Too many requests detected. Account locked for 1 hour due to suspicious activity.'
-                        : isLocked
-                            ? 'Account temporarily locked due to too many OTP requests. Please try again in 30 minutes.'
-                            : undefined,
-                    lockTimeRemaining: lockTimeRemaining > 0 ? lockTimeRemaining : undefined,
-                    resendCooldownRemaining: cooldownTTL > 0 ? cooldownTTL : undefined,
-                    canResend: !isLocked && cooldownTTL <= 0
-                };
+                catch (parseError) {
+                    console.warn('Failed to parse lock data in getRateLimitStatus:', parseError);
+                }
             }
-            catch (error) {
-                console.error('❌ Redis rate limit status error:', error);
-                return {
-                    attempts: 0,
-                    remaining: maxAttempts,
-                    isLocked: false,
-                    canResend: true
-                };
-            }
-        });
-    },
-    // Utility functions for testing and debugging
-    clearOTP(email) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const key = `otp:${email}`;
-            yield redis.del(key);
-            console.log(`✅ OTP cleared for ${email}`);
-        });
-    },
-    clearRateLimit(email) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const attemptsKey = `otp_attempts:${email}`;
-            const lockKey = `otp_lock:${email}`;
-            const cooldownKey = `otp_resend_cooldown:${email}`;
-            yield Promise.all([
-                redis.del(attemptsKey),
-                redis.del(lockKey),
-                redis.del(cooldownKey)
-            ]);
-            console.log(`✅ Rate limit data cleared for ${email}`);
-        });
-    },
-    // Clear all OTP-related data for an email (useful for testing)
-    clearAllOTPData(email) {
-        return __awaiter(this, void 0, void 0, function* () {
-            yield Promise.all([
-                this.clearOTP(email),
-                this.clearRateLimit(email)
-            ]);
-            console.log(`✅ All OTP data cleared for ${email}`);
-        });
-    },
-    // Reset rate limiting for an email (admin function)
-    resetRateLimit(email) {
-        return __awaiter(this, void 0, void 0, function* () {
-            yield this.clearRateLimit(email);
-            console.log(`🔓 Rate limit reset for ${email}`);
+            return {
+                attempts: currentAttempts,
+                remaining: Math.max(5 - currentAttempts, 0),
+                isLocked: !!lockInfo,
+                lockTimeRemaining: Math.max(lockTimeRemaining, 0),
+                cooldownTimeRemaining: Math.max(cooldownTTL || -1, 0)
+            };
         });
     }
 };
-// Test Redis connection (enhanced with service manager)
+// Test Redis connection
 const testRedisConnection = () => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     try {
-        // For Upstash, use a simpler connection test
-        if ((_a = process.env.REDIS_URL) === null || _a === void 0 ? void 0 : _a.includes('upstash')) {
-            console.log('🔍 Testing Upstash Redis connection...');
-            // Simple ping test with timeout
-            const pingPromise = redis.ping();
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000));
-            yield Promise.race([pingPromise, timeoutPromise]);
-            console.log('✅ Upstash Redis connection test successful');
-            return true;
-        }
-        // Test legacy connection for other Redis providers
+        yield ensureConnection();
         yield redis.ping();
-        console.log('✅ Legacy Redis connection test successful');
-        // Test new service manager
-        const healthCheck = yield RedisServiceManager_1.redisServiceManager.healthCheck();
-        console.log('✅ Redis Service Manager health check:', healthCheck.overall);
-        // Test cache service
-        yield RedisServiceManager_1.cacheService.set('test:connection', 'success', 10);
-        const testValue = yield RedisServiceManager_1.cacheService.get('test:connection');
-        yield RedisServiceManager_1.cacheService.del('test:connection');
-        if (testValue === 'success') {
-            console.log('✅ Cache service test successful');
-        }
-        return healthCheck.overall !== 'unhealthy';
+        console.log('✅ Redis connection test successful');
+        return true;
     }
     catch (error) {
         console.error('❌ Redis connection test failed:', error);
@@ -392,4 +273,79 @@ const testRedisConnection = () => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.testRedisConnection = testRedisConnection;
+// Enhanced Redis operations with error handling
+const redisOperations = {
+    get(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const result = yield safeRedisOperation(() => redis.get(key), null, `get:${key}`);
+            return result || null;
+        });
+    },
+    set(key, value, ttlSeconds) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (ttlSeconds) {
+                yield safeRedisOperation(() => redis.setex(key, ttlSeconds, value), undefined, `setex:${key}`);
+            }
+            else {
+                yield safeRedisOperation(() => redis.set(key, value), undefined, `set:${key}`);
+            }
+        });
+    },
+    setex(key, ttlSeconds, value) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield safeRedisOperation(() => redis.setex(key, ttlSeconds, value), undefined, `setex:${key}`);
+        });
+    },
+    del(...keys) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.del(...keys), 0, `del:${keys.join(',')}`)) || 0;
+        });
+    },
+    keys(pattern) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.keys(pattern), [], `keys:${pattern}`)) || [];
+        });
+    },
+    exists(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.exists(key), 0, `exists:${key}`)) || 0;
+        });
+    },
+    ttl(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.ttl(key), -1, `ttl:${key}`)) || -1;
+        });
+    },
+    incr(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.incr(key), 0, `incr:${key}`)) || 0;
+        });
+    },
+    sadd(key, member) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.sadd(key, member), 0, `sadd:${key}`)) || 0;
+        });
+    },
+    smembers(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.smembers(key), [], `smembers:${key}`)) || [];
+        });
+    },
+    expire(key, seconds) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.expire(key, seconds), 0, `expire:${key}`)) || 0;
+        });
+    },
+    ping() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.ping(), 'PONG', 'ping')) || 'PONG';
+        });
+    },
+    // Pipeline operations
+    pipeline() {
+        return redis.pipeline();
+    }
+};
+exports.redisOperations = redisOperations;
+// Export the main Redis client and operations
 exports.default = redis;

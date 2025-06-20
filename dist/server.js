@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -36,29 +69,11 @@ function main() {
             if (!process.env.STRIPE_SECRET_KEY) {
                 logger_1.Logger.warn('STRIPE_SECRET_KEY environment variable is not set. Stripe functionality may not work correctly.');
             }
-            yield mongoose_1.default.connect(config_1.default.database_url);
-            // Skip Redis initialization due to connection issues - using Agenda.js for jobs
-            logger_1.Logger.info('Skipping Redis initialization - using MongoDB-based Agenda.js for job scheduling');
-            // Note: OTP functionality will be limited without Redis
-            logger_1.Logger.info('OTP functionality will use in-memory storage (development mode)');
-            // Seed super admin
-            yield (0, DB_1.default)();
-            // Start payout jobs
-            try {
-                // Start both payout jobs
-                yield (0, payout_job_1.startPayoutJobs)();
-                yield (0, payoutSync_job_1.startPayoutSyncJob)();
-                console_replacement_1.specializedLog.system.startup('Payout jobs');
-                // Log additional information about the payout jobs
-                logger_1.Logger.info('Payout jobs will run on the following schedule:');
-                logger_1.Logger.info('   - Daily payout sync: 1:00 AM');
-                logger_1.Logger.info('   - Daily payout scheduling: Every day');
-                logger_1.Logger.info('   - Hourly payout status checks: Every hour');
-            }
-            catch (error) {
-                logger_1.Logger.error('Failed to start payout jobs', { error });
-            }
+            // Start the server FIRST - don't wait for anything else
+            logger_1.Logger.info('🚀 Starting server on port ' + config_1.default.port);
             server = app_1.default.listen(config_1.default.port, () => {
+                console.log(`🎉 Server is running on http://localhost:${config_1.default.port}`);
+                console.log(`✅ Green Uni Mind API is ready to accept requests!`);
                 console_replacement_1.specializedLog.system.startup('Green Uni Mind API', Number(config_1.default.port));
                 // Start keep-alive service to prevent Render from sleeping
                 try {
@@ -69,6 +84,97 @@ function main() {
                     logger_1.Logger.error('Failed to start keep-alive service', { error });
                 }
             });
+            // Handle server errors
+            server.on('error', (error) => {
+                if (error.syscall !== 'listen') {
+                    throw error;
+                }
+                const bind = typeof config_1.default.port === 'string' ? 'Pipe ' + config_1.default.port : 'Port ' + config_1.default.port;
+                switch (error.code) {
+                    case 'EACCES':
+                        logger_1.Logger.error(bind + ' requires elevated privileges');
+                        process.exit(1);
+                        break;
+                    case 'EADDRINUSE':
+                        logger_1.Logger.error(bind + ' is already in use');
+                        process.exit(1);
+                        break;
+                    default:
+                        throw error;
+                }
+            });
+            // Now start all background processes AFTER server is listening
+            logger_1.Logger.info('🔄 Starting background processes...');
+            // Connect to MongoDB in background (non-blocking)
+            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    logger_1.Logger.info('🔄 Connecting to MongoDB...');
+                    yield mongoose_1.default.connect(config_1.default.database_url);
+                    logger_1.Logger.info('✅ MongoDB connected successfully');
+                }
+                catch (error) {
+                    logger_1.Logger.error('❌ MongoDB connection failed:', { error });
+                    logger_1.Logger.info('Server will continue without MongoDB - API will be limited');
+                }
+            }), 1000); // Wait 1 second after server starts
+            // Initialize Redis in background (non-blocking)
+            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    logger_1.Logger.info('🔄 Testing Redis connection...');
+                    const { testRedisConnection } = yield Promise.resolve().then(() => __importStar(require('./app/config/redis')));
+                    // Set a timeout for Redis connection test
+                    const redisTestPromise = testRedisConnection();
+                    const timeoutPromise = new Promise((resolve) => {
+                        setTimeout(() => {
+                            logger_1.Logger.warn('⚠️ Redis connection test timeout - continuing without Redis');
+                            resolve(false);
+                        }, 5000); // 5 second timeout
+                    });
+                    const redisHealthy = yield Promise.race([redisTestPromise, timeoutPromise]);
+                    if (redisHealthy) {
+                        logger_1.Logger.info('✅ Redis connection established successfully');
+                    }
+                    else {
+                        logger_1.Logger.warn('⚠️ Redis connection failed - running in degraded mode');
+                        logger_1.Logger.info('OTP functionality will use in-memory storage (fallback mode)');
+                    }
+                }
+                catch (error) {
+                    logger_1.Logger.error('❌ Redis initialization failed:', { error });
+                    logger_1.Logger.info('Application will continue without Redis - some features may be limited');
+                }
+            }), 2000); // Wait 2 seconds after server starts
+            // Seed super admin in background (non-blocking)
+            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    logger_1.Logger.info('🔄 Seeding super admin...');
+                    yield (0, DB_1.default)();
+                    logger_1.Logger.info('✅ Super admin seeded successfully');
+                }
+                catch (error) {
+                    logger_1.Logger.error('❌ Super admin seeding failed:', { error });
+                    logger_1.Logger.info('Server will continue without super admin seeding');
+                }
+            }), 3000); // Wait 3 seconds after server starts
+            // Start payout jobs in background (non-blocking)
+            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    logger_1.Logger.info('🔄 Starting payout jobs...');
+                    // Start both payout jobs
+                    yield (0, payout_job_1.startPayoutJobs)();
+                    yield (0, payoutSync_job_1.startPayoutSyncJob)();
+                    console_replacement_1.specializedLog.system.startup('Payout jobs');
+                    // Log additional information about the payout jobs
+                    logger_1.Logger.info('Payout jobs will run on the following schedule:');
+                    logger_1.Logger.info('   - Daily payout sync: 1:00 AM');
+                    logger_1.Logger.info('   - Daily payout scheduling: Every day');
+                    logger_1.Logger.info('   - Hourly payout status checks: Every hour');
+                }
+                catch (error) {
+                    logger_1.Logger.error('❌ Payout jobs initialization failed:', { error });
+                    logger_1.Logger.info('Server will continue without payout jobs');
+                }
+            }), 4000); // Wait 4 seconds after server starts
         }
         catch (err) {
             logger_1.Logger.error('Server startup failed', { error: err });

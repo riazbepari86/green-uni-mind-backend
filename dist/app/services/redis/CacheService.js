@@ -13,12 +13,10 @@ exports.CacheService = void 0;
 const BaseRedisService_1 = require("./BaseRedisService");
 const interfaces_1 = require("./interfaces");
 class CacheService extends BaseRedisService_1.BaseRedisService {
-    constructor(client, monitoring, defaultTTL = 3600, strategy = interfaces_1.CacheStrategy.CACHE_ASIDE) {
+    constructor(client, monitoring, defaultTTL = 3600, _strategy = interfaces_1.CacheStrategy.CACHE_ASIDE) {
         super(client, monitoring);
         this.defaultTTL = 3600; // 1 hour default TTL
-        this.strategy = interfaces_1.CacheStrategy.CACHE_ASIDE;
         this.defaultTTL = defaultTTL;
-        this.strategy = strategy;
     }
     get(key) {
         return __awaiter(this, void 0, void 0, function* () {

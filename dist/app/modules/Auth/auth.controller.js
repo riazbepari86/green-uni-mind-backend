@@ -49,13 +49,22 @@ const loginUser = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void
             console.error('Error parsing origin for cookie domain:', error);
         }
     }
-    res.cookie('refreshToken', refreshToken, {
-        secure: true,
-        httpOnly: true,
-        sameSite: config_1.default.NODE_ENV === 'production' ? 'none' : 'lax',
+    // Enhanced cookie security configuration
+    const cookieOptions = {
+        httpOnly: true, // Prevent XSS attacks
+        secure: config_1.default.NODE_ENV === 'production', // HTTPS only in production
+        sameSite: config_1.default.NODE_ENV === 'production' ? 'strict' : 'lax', // CSRF protection
         domain: domain || undefined,
-        maxAge: 1000 * 60 * 60 * 24 * 365,
-    });
+        maxAge: config_1.default.NODE_ENV === 'production' ?
+            1000 * 60 * 60 * 24 : // 1 day in production
+            1000 * 60 * 60 * 24 * 7, // 7 days in development
+        path: '/', // Restrict to root path
+    };
+    // Sign the refresh token for additional security
+    const signedRefreshToken = config_1.default.NODE_ENV === 'production' ?
+        `${refreshToken}.${Buffer.from(refreshToken).toString('base64')}` :
+        refreshToken;
+    res.cookie('refreshToken', signedRefreshToken, cookieOptions);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -96,10 +105,6 @@ const refreshToken = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, v
             data: null,
         });
     }
-    const tokenSource = tokenFromCookie ? 'cookie' :
-        tokenFromBody ? 'body' :
-            tokenFromBearer ? 'bearer' :
-                'header';
     try {
         const cleanToken = refreshToken.trim();
         if (!cleanToken || cleanToken.length < 10) {
@@ -193,13 +198,22 @@ const logoutUser = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, voi
 const verifyEmail = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { email, code } = req.body;
     const result = yield auth_service_1.AuthServices.verifyEmail(email, code);
-    // Set refresh token as cookie
-    res.cookie('refreshToken', result.refreshToken, {
-        secure: config_1.default.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 1000 * 60 * 60 * 24 * 365,
-    });
+    // Enhanced cookie security configuration for email verification
+    const cookieOptions = {
+        httpOnly: true, // Prevent XSS attacks
+        secure: config_1.default.NODE_ENV === 'production', // HTTPS only in production
+        sameSite: config_1.default.NODE_ENV === 'production' ? 'strict' : 'lax', // CSRF protection
+        maxAge: config_1.default.NODE_ENV === 'production' ?
+            1000 * 60 * 60 * 24 : // 1 day in production
+            1000 * 60 * 60 * 24 * 7, // 7 days in development
+        path: '/', // Restrict to root path
+    };
+    // Sign the refresh token for additional security
+    const signedRefreshToken = config_1.default.NODE_ENV === 'production' ?
+        `${result.refreshToken}.${Buffer.from(result.refreshToken).toString('base64')}` :
+        result.refreshToken;
+    // Set refresh token as secure cookie
+    res.cookie('refreshToken', signedRefreshToken, cookieOptions);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,

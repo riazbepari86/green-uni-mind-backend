@@ -182,7 +182,7 @@ class RedisServiceManager {
             ];
             yield Promise.all(clients.map((client) => __awaiter(this, void 0, void 0, function* () {
                 try {
-                    yield client.disconnect();
+                    client.disconnect();
                 }
                 catch (error) {
                     console.error('Error disconnecting Redis client:', error);

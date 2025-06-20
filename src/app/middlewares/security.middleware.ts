@@ -46,6 +46,11 @@ const createRateLimiter = (windowMs: number, max: number, message: string) => {
     },
     standardHeaders: true,
     legacyHeaders: false,
+    // Skip rate limiting for health check endpoints
+    skip: (req: Request) => {
+      const healthCheckPaths = ['/health', '/ping', '/test'];
+      return healthCheckPaths.includes(req.path);
+    },
     handler: (req: Request, res: Response) => {
       Logger.warn('Rate limit exceeded', {
         ip: req.ip,
@@ -53,7 +58,7 @@ const createRateLimiter = (windowMs: number, max: number, message: string) => {
         path: req.path,
         method: req.method,
       });
-      
+
       res.status(429).json({
         error: 'Too Many Requests',
         message,
@@ -183,6 +188,12 @@ export const hideInternalEndpoints = (req: Request, res: Response, next: NextFun
  * Request logging for security monitoring
  */
 export const securityLogging = (req: Request, _res: Response, next: NextFunction): void => {
+  // Skip security logging for health check endpoints
+  const healthCheckPaths = ['/health', '/ping', '/test'];
+  if (healthCheckPaths.includes(req.path)) {
+    return next();
+  }
+
   // Log suspicious patterns
   const suspiciousPatterns = [
     /\.\./,  // Path traversal
@@ -321,6 +332,12 @@ export const encryptionMiddleware = () => {
  * Enhanced security headers with CSP
  */
 export const enhancedSecurityHeaders = (req: Request, res: Response, next: NextFunction) => {
+  // Skip enhanced security headers for health check endpoints (for faster response)
+  const healthCheckPaths = ['/health', '/ping', '/test'];
+  if (healthCheckPaths.includes(req.path)) {
+    return next();
+  }
+
   // Remove server information
   res.removeHeader('X-Powered-By');
 

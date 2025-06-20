@@ -1,18 +1,31 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requestSizeLimit = exports.validateContentType = exports.ipWhitelist = exports.securityLogging = exports.hideInternalEndpoints = exports.productionRouteProtection = exports.securityHeaders = exports.sensitiveOperationRateLimit = exports.authRateLimit = exports.generalRateLimit = void 0;
+exports.enhancedSecurityHeaders = exports.encryptionMiddleware = exports.requestSizeLimit = exports.validateContentType = exports.ipWhitelist = exports.securityLogging = exports.hideInternalEndpoints = exports.productionRouteProtection = exports.securityHeaders = exports.sensitiveOperationRateLimit = exports.authRateLimit = exports.generalRateLimit = void 0;
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const environment_1 = require("../utils/environment");
 const logger_1 = require("../config/logger");
 const AppError_1 = __importDefault(require("../errors/AppError"));
 const http_status_1 = __importDefault(require("http-status"));
-/**
- * Production Security Middleware
- * Implements comprehensive security measures for production deployment
- */
+const crypto_1 = __importDefault(require("crypto"));
+// Security configuration
+const SECURITY_CONFIG = {
+    ENCRYPTION_ALGORITHM: 'aes-256-gcm',
+    SIGNATURE_ALGORITHM: 'sha256',
+    REQUEST_TIMEOUT: 5 * 60 * 1000, // 5 minutes
+    NONCE_LENGTH: 32,
+};
 // Rate limiting configurations based on environment
 const createRateLimiter = (windowMs, max, message) => {
     return (0, express_rate_limit_1.default)({
@@ -25,6 +38,11 @@ const createRateLimiter = (windowMs, max, message) => {
         },
         standardHeaders: true,
         legacyHeaders: false,
+        // Skip rate limiting for health check endpoints
+        skip: (req) => {
+            const healthCheckPaths = ['/health', '/ping', '/test'];
+            return healthCheckPaths.includes(req.path);
+        },
         handler: (req, res) => {
             logger_1.Logger.warn('Rate limit exceeded', {
                 ip: req.ip,
@@ -75,10 +93,11 @@ exports.securityHeaders = securityHeaders;
  */
 const productionRouteProtection = (allowedRoutes = []) => {
     return (req, res, next) => {
+        var _a;
         if (!environment_1.Environment.isProduction()) {
             return next(); // Allow all routes in non-production environments
         }
-        const path = req.path.toLowerCase();
+        const path = ((_a = req.path) === null || _a === void 0 ? void 0 : _a.toLowerCase()) || '';
         const isAllowed = allowedRoutes.some(route => path.startsWith(route.toLowerCase()) || path === route.toLowerCase());
         if (!isAllowed) {
             logger_1.Logger.warn('Blocked access to protected route in production', {
@@ -98,6 +117,7 @@ exports.productionRouteProtection = productionRouteProtection;
  * Prevents exposure of internal/debug endpoints in production
  */
 const hideInternalEndpoints = (req, res, next) => {
+    var _a;
     if (!environment_1.Environment.isProduction()) {
         return next();
     }
@@ -111,7 +131,7 @@ const hideInternalEndpoints = (req, res, next) => {
         '/metrics',
         '/status',
     ];
-    const path = req.path.toLowerCase();
+    const path = ((_a = req.path) === null || _a === void 0 ? void 0 : _a.toLowerCase()) || '';
     const isInternal = internalPaths.some(internalPath => path.startsWith(internalPath.toLowerCase()));
     if (isInternal) {
         logger_1.Logger.warn('Blocked access to internal endpoint in production', {
@@ -132,6 +152,12 @@ exports.hideInternalEndpoints = hideInternalEndpoints;
  * Request logging for security monitoring
  */
 const securityLogging = (req, _res, next) => {
+    var _a;
+    // Skip security logging for health check endpoints
+    const healthCheckPaths = ['/health', '/ping', '/test'];
+    if (healthCheckPaths.includes(req.path)) {
+        return next();
+    }
     // Log suspicious patterns
     const suspiciousPatterns = [
         /\.\./, // Path traversal
@@ -140,8 +166,8 @@ const securityLogging = (req, _res, next) => {
         /exec\(/i, // Code injection
         /<script/i, // XSS
     ];
-    const url = req.url.toLowerCase();
-    const body = JSON.stringify(req.body).toLowerCase();
+    const url = ((_a = req.url) === null || _a === void 0 ? void 0 : _a.toLowerCase()) || '';
+    const body = JSON.stringify(req.body || {}).toLowerCase();
     const isSuspicious = suspiciousPatterns.some(pattern => pattern.test(url) || pattern.test(body));
     if (isSuspicious) {
         logger_1.Logger.warn('Suspicious request detected', {
@@ -205,13 +231,135 @@ const requestSizeLimit = (maxSize = '10mb') => {
             const sizeInMB = parseInt(contentLength) / (1024 * 1024);
             const maxSizeInMB = parseInt(maxSize.replace('mb', ''));
             if (sizeInMB > maxSizeInMB) {
-                return res.status(413).json({
+                res.status(413).json({
                     error: 'Payload Too Large',
                     message: `Request size exceeds ${maxSize} limit`,
                 });
+                return;
             }
         }
         next();
     };
 };
 exports.requestSizeLimit = requestSizeLimit;
+/**
+ * Request/Response Encryption Middleware
+ * Encrypts sensitive data in production environments
+ */
+const encryptionMiddleware = () => {
+    return (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+        if (!environment_1.Environment.isProduction() || !process.env.ENCRYPTION_KEY) {
+            return next();
+        }
+        try {
+            // Decrypt incoming request if encrypted
+            if (req.body && req.body.encrypted === true) {
+                const decryptedData = yield decryptData(req.body);
+                req.body = decryptedData;
+            }
+            // Override res.json to encrypt outgoing responses
+            const originalJson = res.json;
+            res.json = function (data) {
+                if (shouldEncryptResponse(req, data)) {
+                    const encryptedData = encryptData(data);
+                    return originalJson.call(this, { encrypted: true, data: encryptedData });
+                }
+                return originalJson.call(this, data);
+            };
+            next();
+        }
+        catch (error) {
+            logger_1.Logger.error('Encryption middleware error', { error });
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Invalid encrypted data');
+        }
+    });
+};
+exports.encryptionMiddleware = encryptionMiddleware;
+/**
+ * Enhanced security headers with CSP
+ */
+const enhancedSecurityHeaders = (req, res, next) => {
+    // Skip enhanced security headers for health check endpoints (for faster response)
+    const healthCheckPaths = ['/health', '/ping', '/test'];
+    if (healthCheckPaths.includes(req.path)) {
+        return next();
+    }
+    // Remove server information
+    res.removeHeader('X-Powered-By');
+    // Basic security headers
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-DNS-Prefetch-Control', 'off');
+    res.setHeader('X-Download-Options', 'noopen');
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+    if (environment_1.Environment.isProduction()) {
+        // HSTS
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+        // Content Security Policy
+        const csp = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com",
+            "img-src 'self' data: https: blob:",
+            "connect-src 'self' https: wss:",
+            "media-src 'self' blob: https:",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-ancestors 'none'",
+            "upgrade-insecure-requests"
+        ].join('; ');
+        res.setHeader('Content-Security-Policy', csp);
+        // Permissions Policy
+        res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()');
+    }
+    next();
+};
+exports.enhancedSecurityHeaders = enhancedSecurityHeaders;
+// Helper functions for encryption
+function encryptData(data) {
+    const encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production';
+    // Create a 32-byte key from the provided key
+    const key = crypto_1.default.createHash('sha256').update(encryptionKey).digest();
+    const iv = crypto_1.default.randomBytes(16);
+    const cipher = crypto_1.default.createCipheriv('aes-256-cbc', key, iv);
+    let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return {
+        data: encrypted,
+        iv: iv.toString('hex'),
+        tag: '', // For compatibility with interface
+        timestamp: Date.now(),
+    };
+}
+function decryptData(encryptedPayload) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const encryptionKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production';
+        // Create a 32-byte key from the provided key
+        const key = crypto_1.default.createHash('sha256').update(encryptionKey).digest();
+        const iv = Buffer.from(encryptedPayload.iv, 'hex');
+        const decipher = crypto_1.default.createDecipheriv('aes-256-cbc', key, iv);
+        let decrypted = decipher.update(encryptedPayload.data, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return JSON.parse(decrypted);
+    });
+}
+function shouldEncryptResponse(req, data) {
+    // Encrypt responses for sensitive endpoints
+    const sensitiveEndpoints = [
+        '/api/v1/auth',
+        '/api/v1/users',
+        '/api/v1/payments',
+    ];
+    const isSensitiveEndpoint = sensitiveEndpoints.some(endpoint => req.path.startsWith(endpoint));
+    // Also encrypt if response contains sensitive data
+    const hasSensitiveData = data && (data.token ||
+        data.password ||
+        data.email ||
+        data.phone ||
+        data.paymentMethod);
+    return isSensitiveEndpoint || hasSensitiveData;
+}

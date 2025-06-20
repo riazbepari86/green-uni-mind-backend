@@ -23,6 +23,12 @@ declare global {
  * Request performance tracking middleware
  */
 export const performanceTracker = (req: Request, res: Response, next: NextFunction) => {
+  // Skip performance tracking for health check endpoints
+  const healthCheckPaths = ['/health', '/ping', '/test'];
+  if (healthCheckPaths.includes(req.path)) {
+    return next();
+  }
+
   // Record start time
   req.startTime = Date.now();
   req.requestId = generateRequestId();
@@ -122,10 +128,16 @@ export const trackRedisOperation = (operation: string, startTime: number) => {
  * Memory usage monitoring middleware
  */
 export const memoryMonitor = (req: Request, res: Response, next: NextFunction) => {
+  // Skip memory monitoring for health check endpoints
+  const healthCheckPaths = ['/health', '/ping', '/test'];
+  if (healthCheckPaths.includes(req.path)) {
+    return next();
+  }
+
   // Check memory usage before processing request
   const memUsage = process.memoryUsage();
   const heapUsedMB = memUsage.heapUsed / 1024 / 1024;
-  
+
   // Log high memory usage
   if (heapUsedMB > 400) { // > 400MB
     Logger.warn('High memory usage detected', {
@@ -150,6 +162,12 @@ export const memoryMonitor = (req: Request, res: Response, next: NextFunction) =
  */
 export const requestTimeout = (timeoutMs: number = 30000) => {
   return (req: Request, res: Response, next: NextFunction) => {
+    // Skip timeout for health check endpoints
+    const healthCheckPaths = ['/health', '/ping', '/test'];
+    if (healthCheckPaths.includes(req.path)) {
+      return next();
+    }
+
     // Set timeout for the request
     const timeout = setTimeout(() => {
       if (!res.headersSent) {
@@ -159,7 +177,7 @@ export const requestTimeout = (timeoutMs: number = 30000) => {
           timeout: timeoutMs,
           requestId: req.requestId,
         });
-        
+
         res.status(408).json({
           error: 'Request Timeout',
           message: 'The request took too long to process',
@@ -251,11 +269,17 @@ export const cacheHeaders = (req: Request, res: Response, next: NextFunction) =>
  * Request size monitoring
  */
 export const requestSizeMonitor = (req: Request, res: Response, next: NextFunction) => {
+  // Skip request size monitoring for health check endpoints
+  const healthCheckPaths = ['/health', '/ping', '/test'];
+  if (healthCheckPaths.includes(req.path)) {
+    return next();
+  }
+
   const contentLength = req.get('content-length');
-  
+
   if (contentLength) {
     const sizeInMB = parseInt(contentLength) / (1024 * 1024);
-    
+
     // Log large requests
     if (sizeInMB > 5) { // > 5MB
       Logger.warn('Large request detected', {

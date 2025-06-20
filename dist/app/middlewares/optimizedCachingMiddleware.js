@@ -276,7 +276,7 @@ const featureAwareCacheStats = () => {
         const cacheStatus = res.get('X-Cache');
         if (cacheStatus) {
             // Use memory-only storage for stats to reduce Redis usage
-            const statsKey = `cache:stats:${cacheStatus.toLowerCase()}`;
+            const statsKey = `cache:stats:${(cacheStatus === null || cacheStatus === void 0 ? void 0 : cacheStatus.toLowerCase()) || 'unknown'}`;
             try {
                 yield SmartCacheService_1.smartCacheService.set(`${statsKey}:${Date.now()}`, {
                     endpoint: `${req.method} ${req.path}`,

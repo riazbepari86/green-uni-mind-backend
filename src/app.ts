@@ -31,6 +31,30 @@ import { redisCleanupService } from './app/services/redis/RedisCleanupService';
 
 const app: Application = express();
 
+// CRITICAL: Ultra-lightweight health check BEFORE any middleware
+// This endpoint MUST be first to ensure UptimeRobot can always reach it
+app.get('/health', (_req, res) => {
+  // Set headers immediately for fastest response
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+  // Send minimal response as fast as possible
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Ultra-fast ping endpoint for basic connectivity checks
+app.get('/ping', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).json({
+    message: 'pong',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Test route BEFORE any middleware to check if Express is working
 app.get('/test', (_req, res) => {
   console.log('🧪 Test endpoint hit! Express is working!');
@@ -189,13 +213,12 @@ app.get('/', (req, res) => {
   res.send('🚀 Welcome to the Green Uni Mind API!');
 });
 
-// Robust health check route for Docker and monitoring
-// This endpoint MUST respond quickly and reliably for Render.com deployment
-app.get('/health', async (_req, res) => {
+// Detailed health check route for internal monitoring (with Redis status)
+app.get('/health/detailed', async (_req, res) => {
   const startTime = Date.now();
 
   try {
-    // Basic health check - always responds quickly
+    // Detailed health check with Redis status
     const healthData: any = {
       status: 'OK',
       message: 'Green Uni Mind API is healthy',
@@ -222,7 +245,7 @@ app.get('/health', async (_req, res) => {
     res.status(200).json(healthData);
   } catch (error) {
     // Even if something goes wrong, return a basic health response
-    console.error('Health check error:', error);
+    console.error('Detailed health check error:', error);
     res.status(200).json({
       status: 'OK',
       message: 'Green Uni Mind API is running',
@@ -232,15 +255,6 @@ app.get('/health', async (_req, res) => {
       note: 'Basic health check - some services may be degraded'
     });
   }
-});
-
-// Ultra-fast ping endpoint for basic connectivity checks
-app.get('/ping', (req, res) => {
-  console.log('🏓 Ping endpoint hit!', req.method, req.url);
-  res.status(200).json({
-    message: 'pong',
-    timestamp: new Date().toISOString()
-  });
 });
 
 // Apply auth rate limiting to authentication routes

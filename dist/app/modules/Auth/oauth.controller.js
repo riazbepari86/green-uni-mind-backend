@@ -41,17 +41,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -67,9 +56,9 @@ const user_model_1 = require("../User/user.model");
 const student_model_1 = require("../Student/student.model");
 const teacher_model_1 = require("../Teacher/teacher.model");
 const AppError_1 = __importDefault(require("../../errors/AppError"));
-const auth_utils_1 = require("./auth.utils");
+const JWTService_1 = require("../../services/auth/JWTService");
 // Helper function to generate tokens
-const generateTokens = (user) => {
+const generateTokens = (user) => __awaiter(void 0, void 0, void 0, function* () {
     // Ensure we're using the correct role from the user object
     console.log('Generating tokens with user role:', user.role);
     // Make sure we include the user's ID and role in the token
@@ -80,10 +69,18 @@ const generateTokens = (user) => {
     };
     // Log the payload for debugging
     console.log('JWT payload for token generation:', jwtPayload);
-    const accessToken = (0, auth_utils_1.createToken)(jwtPayload, config_1.default.jwt_access_secret, config_1.default.jwt_access_expires_in);
-    const refreshToken = (0, auth_utils_1.createToken)(jwtPayload, config_1.default.jwt_refresh_secret, config_1.default.jwt_refresh_expires_in);
-    return { accessToken, refreshToken };
-};
+    try {
+        const tokenPair = yield JWTService_1.jwtService.createTokenPair(jwtPayload);
+        return {
+            accessToken: tokenPair.accessToken,
+            refreshToken: tokenPair.refreshToken
+        };
+    }
+    catch (error) {
+        console.error('Error creating token pair with JWT service:', error);
+        throw new AppError_1.default(http_status_1.default.INTERNAL_SERVER_ERROR, 'Token creation failed');
+    }
+});
 // Helper function to get role details
 const getRoleDetails = (user) => __awaiter(void 0, void 0, void 0, function* () {
     let roleDetails = null;
@@ -166,7 +163,7 @@ const generateOAuthUrl = (0, catchAsync_1.default)((req, res) => __awaiter(void 
     });
 }));
 // Google OAuth routes
-const googleAuth = (req, res, next) => {
+const googleAuth = (req, res, _next) => {
     const { role = 'student', linking = 'false' } = req.query;
     // Store state information to be retrieved in the callback
     const state = JSON.stringify({ role, linking });
@@ -323,10 +320,10 @@ const googleCallback = (0, catchAsync_1.default)((req, res) => __awaiter(void 0,
             }
             // For regular login flow (not linking)
             // Generate tokens
-            const { accessToken, refreshToken } = generateTokens(user);
+            const { accessToken, refreshToken } = yield generateTokens(user);
             // Get role details
             const roleDetails = yield getRoleDetails(user);
-            const { email: _email } = roleDetails, safeRoleDetails = __rest(roleDetails, ["email"]);
+            const { email: _email } = roleDetails;
             // Get domain from request origin or use default
             const origin = req.get('origin');
             let domain;
@@ -366,7 +363,7 @@ const googleCallback = (0, catchAsync_1.default)((req, res) => __awaiter(void 0,
     }))(req, res);
 }));
 // Facebook OAuth routes
-const facebookAuth = (req, res, next) => {
+const facebookAuth = (req, res, _next) => {
     const { role = 'student', linking = 'false' } = req.query;
     // Store state information to be retrieved in the callback
     const state = JSON.stringify({ role, linking });
@@ -477,7 +474,7 @@ const facebookCallback = (0, catchAsync_1.default)((req, res) => __awaiter(void 
             }
             // For regular login flow (not linking)
             // Generate tokens
-            const { accessToken, refreshToken } = generateTokens(user);
+            const { accessToken, refreshToken } = yield generateTokens(user);
             // Get role details
             const roleDetails = yield getRoleDetails(user);
             const { email: _email } = roleDetails;
@@ -520,7 +517,7 @@ const facebookCallback = (0, catchAsync_1.default)((req, res) => __awaiter(void 
     }))(req, res);
 }));
 // Apple OAuth routes
-const appleAuth = (req, res, next) => {
+const appleAuth = (req, res, _next) => {
     const { role = 'student', linking = 'false' } = req.query;
     // Store state information to be retrieved in the callback
     const state = JSON.stringify({ role, linking });
@@ -632,7 +629,7 @@ const appleCallback = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, 
             }
             // For regular login flow (not linking)
             // Generate tokens
-            const { accessToken, refreshToken } = generateTokens(user);
+            const { accessToken, refreshToken } = yield generateTokens(user);
             // Get role details
             const roleDetails = yield getRoleDetails(user);
             const { email: _email } = roleDetails;
@@ -847,7 +844,7 @@ const exchangeFacebookCode = (code) => __awaiter(void 0, void 0, void 0, functio
         throw error;
     }
 });
-const exchangeAppleCode = (code) => __awaiter(void 0, void 0, void 0, function* () {
+const exchangeAppleCode = (_code) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // For Apple, the implementation is more complex and requires JWT client secret generation
         // This is a simplified version - in production, you'd need to generate a client secret JWT
@@ -1297,7 +1294,6 @@ const handleOAuthCallback = (0, catchAsync_1.default)((req, res) => __awaiter(vo
             case 'apple':
                 // Apple token exchange is more complex and requires client-side JWT validation
                 // This is a simplified version
-                const appleTokenUrl = 'https://appleid.apple.com/auth/token';
                 const appleParams = new URLSearchParams();
                 appleParams.append('client_id', config_1.default.oauth.apple.clientId || '');
                 appleParams.append('client_secret', ''); // Apple requires a generated JWT token here
@@ -1414,7 +1410,7 @@ const handleOAuthCallback = (0, catchAsync_1.default)((req, res) => __awaiter(vo
                 throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Failed to find or create user');
             }
             // Generate tokens for the user
-            const { accessToken, refreshToken } = generateTokens(user);
+            const { accessToken, refreshToken } = yield generateTokens(user);
             // Get domain from request origin or use default
             const origin = req.get('origin');
             let domain;

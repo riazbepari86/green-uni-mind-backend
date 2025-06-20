@@ -36,7 +36,7 @@ const student_model_1 = require("../Student/student.model");
 const teacher_model_1 = require("../Teacher/teacher.model");
 const redis_1 = require("../../config/redis");
 const JWTService_1 = require("../../services/auth/JWTService");
-const RedisServiceManager_1 = require("../../services/redis/RedisServiceManager");
+const AuthCacheHelper_1 = require("../../services/auth/AuthCacheHelper");
 const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const user = yield user_model_1.User.isUserExists(payload.email);
@@ -160,10 +160,7 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     // Use the new JWT service for token creation with Redis caching
     const tokenPair = yield JWTService_1.jwtService.createTokenPair(jwtPayload);
     // Cache user data for faster subsequent requests
-    yield RedisServiceManager_1.redisServiceManager.executeWithCircuitBreaker(() => RedisServiceManager_1.redisServiceManager.cache.set(`user:${user.email}`, user, 900), // 15 minutes
-    'cache').catch(error => {
-        console.warn('Failed to cache user data during login:', error);
-    });
+    yield AuthCacheHelper_1.AuthCacheHelper.cacheUserData(user.email, user, 900);
     let roleDetails = null;
     switch (user.role) {
         case 'student':
@@ -367,10 +364,7 @@ const verifyEmail = (email, code) => __awaiter(void 0, void 0, void 0, function*
     };
     const tokenPair = yield JWTService_1.jwtService.createTokenPair(jwtPayload);
     // Cache user data for faster subsequent requests
-    yield RedisServiceManager_1.redisServiceManager.executeWithCircuitBreaker(() => RedisServiceManager_1.redisServiceManager.cache.set(`user:${user.email}`, user, 900), // 15 minutes
-    'cache').catch(error => {
-        console.warn('Failed to cache user data during email verification:', error);
-    });
+    yield AuthCacheHelper_1.AuthCacheHelper.cacheUserData(user.email, user, 900);
     return {
         success: true,
         message: 'Email verified successfully',

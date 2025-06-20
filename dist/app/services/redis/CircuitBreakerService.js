@@ -173,7 +173,7 @@ exports.CircuitBreakerFactory = CircuitBreakerFactory;
 CircuitBreakerFactory.instances = new Map();
 // Decorator for automatic circuit breaker integration
 function withCircuitBreaker(circuitBreakerName, config) {
-    return function (target, propertyName, descriptor) {
+    return function (_target, propertyName, descriptor) {
         const method = descriptor.value;
         descriptor.value = function (...args) {
             return __awaiter(this, void 0, void 0, function* () {

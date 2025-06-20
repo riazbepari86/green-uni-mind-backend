@@ -43,7 +43,7 @@ class BaseRedisService {
     disconnect() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.client.disconnect();
+                this.client.disconnect();
             }
             catch (error) {
                 console.error(`Error disconnecting Redis client in ${this.constructor.name}:`, error);
