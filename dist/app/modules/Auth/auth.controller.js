@@ -78,6 +78,9 @@ const loginUser = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void
 }));
 const changePassword = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const passwordData = __rest(req.body, []);
+    if (!req.user) {
+        throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'User not authenticated');
+    }
     const result = yield auth_service_1.AuthServices.changePassword(req.user, passwordData);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,

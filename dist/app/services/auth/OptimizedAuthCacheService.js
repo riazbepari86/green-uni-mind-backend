@@ -19,16 +19,29 @@ class OptimizedAuthCacheService {
         this.RATE_LIMIT_TTL = 1800; // 30 minutes
         this.TOKEN_CACHE_TTL = 3600; // 1 hour
         this.RESEND_COOLDOWN = 60; // 1 minute
+        this.MAX_OTP_ATTEMPTS = 3; // Maximum verification attempts per OTP
+        this.MAX_RESEND_ATTEMPTS = 5; // Maximum resend attempts per hour
     }
-    // Optimized OTP operations
+    // Enhanced OTP operations with cooldown checking
     setOTP(email, otp) {
         return __awaiter(this, void 0, void 0, function* () {
+            // Check if user is in cooldown period
+            const cooldownCheck = yield this.checkResendCooldown(email);
+            if (!cooldownCheck.canResend) {
+                return {
+                    success: false,
+                    cooldownRemaining: cooldownCheck.remainingTime,
+                    expiresAt: Date.now() + this.OTP_TTL * 1000
+                };
+            }
+            const now = Date.now();
+            const expiresAt = now + this.OTP_TTL * 1000;
             const otpData = {
                 otp,
                 email,
                 attempts: 0,
-                createdAt: Date.now(),
-                expiresAt: Date.now() + this.OTP_TTL * 1000
+                createdAt: now,
+                expiresAt
             };
             // Use hybrid storage with high priority for OTP
             yield HybridStorageService_1.hybridStorageService.set(`otp:${email}`, otpData, {
@@ -36,7 +49,13 @@ class OptimizedAuthCacheService {
                 priority: 'critical',
                 fallbackToMemory: true
             });
-            console.log(`✅ OTP stored for ${email} with TTL ${this.OTP_TTL}s`);
+            // Set resend cooldown
+            yield this.setResendCooldown(email);
+            console.log(`✅ OTP stored for ${email} with TTL ${this.OTP_TTL}s, expires at ${new Date(expiresAt).toISOString()}`);
+            return {
+                success: true,
+                expiresAt
+            };
         });
     }
     getOTP(email) {
@@ -109,6 +128,50 @@ class OptimizedAuthCacheService {
             }
             catch (error) {
                 console.error(`Error deleting OTP for ${email}:`, error);
+            }
+        });
+    }
+    // Resend cooldown management
+    setResendCooldown(email) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const cooldownKey = `otp:cooldown:${email}`;
+            const cooldownData = {
+                email,
+                setAt: Date.now(),
+                expiresAt: Date.now() + (this.RESEND_COOLDOWN * 1000)
+            };
+            yield HybridStorageService_1.hybridStorageService.set(cooldownKey, cooldownData, {
+                ttl: this.RESEND_COOLDOWN,
+                priority: 'high',
+                fallbackToMemory: true
+            });
+            console.log(`✅ Resend cooldown set for ${email} for ${this.RESEND_COOLDOWN}s`);
+        });
+    }
+    checkResendCooldown(email) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const cooldownKey = `otp:cooldown:${email}`;
+                const cooldownData = yield HybridStorageService_1.hybridStorageService.get(cooldownKey);
+                if (!cooldownData) {
+                    return { canResend: true };
+                }
+                const now = Date.now();
+                const remainingTime = Math.max(0, Math.ceil((cooldownData.expiresAt - now) / 1000));
+                if (remainingTime > 0) {
+                    return {
+                        canResend: false,
+                        remainingTime
+                    };
+                }
+                // Cooldown expired, clean up
+                yield HybridStorageService_1.hybridStorageService.del(cooldownKey);
+                return { canResend: true };
+            }
+            catch (error) {
+                console.error(`Error checking resend cooldown for ${email}:`, error);
+                // On error, allow resend to prevent blocking users
+                return { canResend: true };
             }
         });
     }

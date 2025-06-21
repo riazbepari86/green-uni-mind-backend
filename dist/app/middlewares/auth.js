@@ -18,6 +18,7 @@ const config_1 = __importDefault(require("../config"));
 const AppError_1 = __importDefault(require("../errors/AppError"));
 const catchAsync_1 = __importDefault(require("../utils/catchAsync"));
 const user_model_1 = require("../modules/User/user.model");
+// Express Request type extension is now handled in types/express.d.ts
 const auth = (...requiredRoles) => {
     return (0, catchAsync_1.default)((req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
         var _a, _b;

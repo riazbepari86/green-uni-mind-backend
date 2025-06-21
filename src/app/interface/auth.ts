@@ -1,9 +1,10 @@
 import { JwtPayload } from 'jsonwebtoken';
 
 export interface JwtUserPayload extends JwtPayload {
+  _id: string;
+  id?: string; 
   email: string;
   role: 'user' | 'teacher' | 'student';
-  _id?: string;
   iat?: number;
   exp?: number;
 }

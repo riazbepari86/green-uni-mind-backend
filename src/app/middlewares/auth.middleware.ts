@@ -1,12 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { JwtUserPayload } from '../interface/jwt.interface';
+import { JwtUserPayload } from '../interface/auth';
 
-declare module 'express' {
-  interface Request {
-    user: JwtUserPayload;
-  }
-}
+// Express Request type extension is now handled in types/express.d.ts
 
 export const authenticate = async (
   req: Request,

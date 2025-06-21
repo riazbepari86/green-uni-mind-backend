@@ -8,12 +8,7 @@ import { IUserRole } from '../modules/User/user.interface';
 import { User } from '../modules/User/user.model';
 import { JwtUserPayload } from '../interface/auth';
 
-// Extend Express Request type to include user property
-declare module 'express-serve-static-core' {
-  interface Request {
-    user: JwtUserPayload;
-  }
-}
+// Express Request type extension is now handled in types/express.d.ts
 
 const auth = (...requiredRoles: IUserRole[]): RequestHandler => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {

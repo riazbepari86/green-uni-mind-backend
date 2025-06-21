@@ -8,7 +8,7 @@ import router from './app/routes';
 import { configurePassport } from './app/config/passport';
 
 
-import { middlewareFactory } from './app/middlewares/MiddlewareFactory';
+
 import { registerMiddleware } from './app/middlewares/MiddlewareRegistry';
 import { startPhase, completePhase } from './app/utils/StartupProfiler';
 
@@ -190,6 +190,7 @@ app.get('/', (req, res) => {
 // Health routes are now handled by dedicated health router for better organization
 // Import and use health routes
 import healthRoutes from './app/routes/health.routes';
+import { middlewareFactory } from './app/middlewares/MiddlewareFactory';
 app.use('/health', healthRoutes);
 
 

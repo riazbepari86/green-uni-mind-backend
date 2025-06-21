@@ -23,6 +23,9 @@ const redis_1 = require("../config/redis");
 const crypto_1 = __importDefault(require("crypto"));
 const logger_1 = require("../config/logger");
 const console_replacement_1 = require("../utils/console-replacement");
+// Import centralized types
+require("../types/express");
+// Express Request type extension is now handled in types/express.d.ts
 // Helper function to generate token ID from JWT
 function generateTokenId(token) {
     return crypto_1.default.createHash('sha256').update(token).digest('hex').substring(0, 16);

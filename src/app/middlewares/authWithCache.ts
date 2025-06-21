@@ -13,14 +13,10 @@ import crypto from 'crypto';
 import { Logger } from '../config/logger';
 import { conditionalLog, specializedLog } from '../utils/console-replacement';
 
-// Extend Express Request type to include user property
-declare module 'express-serve-static-core' {
-  interface Request {
-    user: JwtUserPayload;
-    sessionId?: string;
-    tokenId?: string;
-  }
-}
+// Import centralized types
+import '../types/express';
+
+// Express Request type extension is now handled in types/express.d.ts
 
 // Helper function to generate token ID from JWT
 function generateTokenId(token: string): string {
