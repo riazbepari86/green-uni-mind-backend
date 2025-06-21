@@ -56,19 +56,8 @@ app.get('/test', (_req, res) => {
 });
 
 
-startPhase('Security Middleware Loading');
-const securityStack = middlewareFactory.getSecurityStack();
-securityStack.forEach((middleware: any) => app.use(middleware));
-completePhase('Security Middleware Loading');
-
-startPhase('Performance Middleware Loading');
-
-const performanceStack = middlewareFactory.getPerformanceStack();
-performanceStack.forEach((middleware: any) => app.use(middleware));
-completePhase('Performance Middleware Loading');
-
-const currentEnv = process.env.NODE_ENV || 'development';
-console.log(`✅ Loaded ${securityStack.length + performanceStack.length} middleware functions for ${currentEnv} environment`);
+// Middleware loading will be done after basic Express setup to avoid circular dependencies
+console.log('⏳ Middleware loading deferred to avoid circular dependencies');
 
 
 setTimeout(async () => {
@@ -187,14 +176,72 @@ app.get('/', (req, res) => {
 });
 
 
+// ========================================
+// OPTIMIZED MIDDLEWARE LOADING (Simplified Approach)
+// ========================================
+
+startPhase('Security Middleware Loading');
+
+// Load essential security middleware conditionally
+const currentEnv = process.env.NODE_ENV || 'development';
+
+// Only load necessary middleware based on environment
+if (currentEnv === 'production') {
+  // Production middleware stack
+  const {
+    enhancedSecurityHeaders,
+    generalRateLimit,
+    securityLogging,
+    requestSizeLimit
+  } = require('./app/middlewares/security.middleware');
+
+  app.use(enhancedSecurityHeaders);
+  app.use(generalRateLimit);
+  app.use(securityLogging);
+  app.use(requestSizeLimit('10mb'));
+
+  console.log('✅ Loaded 4 production security middleware');
+} else {
+  // Development middleware stack (minimal)
+  const {
+    enhancedSecurityHeaders,
+    generalRateLimit
+  } = require('./app/middlewares/security.middleware');
+
+  app.use(enhancedSecurityHeaders);
+  app.use(generalRateLimit);
+
+  console.log('✅ Loaded 2 development security middleware');
+}
+
+completePhase('Security Middleware Loading');
+
+startPhase('Performance Middleware Loading');
+
+// Load performance middleware conditionally
+const { responseCompression, cacheHeaders } = require('./app/middlewares/performance.middleware');
+app.use(responseCompression);
+app.use(cacheHeaders);
+
+// Only load monitoring in production or when explicitly enabled
+if (currentEnv === 'production' || process.env.ENABLE_PERFORMANCE_MONITORING === 'true') {
+  const { performanceTracker, memoryMonitor } = require('./app/middlewares/performance.middleware');
+  app.use(performanceTracker);
+  app.use(memoryMonitor);
+  console.log('✅ Loaded 4 performance middleware (with monitoring)');
+} else {
+  console.log('✅ Loaded 2 performance middleware (basic)');
+}
+
+completePhase('Performance Middleware Loading');
+
 // Health routes are now handled by dedicated health router for better organization
-// Import and use health routes
 import healthRoutes from './app/routes/health.routes';
-import { middlewareFactory } from './app/middlewares/MiddlewareFactory';
 app.use('/health', healthRoutes);
 
-
-app.use('/api/v1/auth', middlewareFactory.getMiddleware('authRateLimit'));
+// Apply auth rate limiting to authentication routes (conditionally loaded)
+const { authRateLimit } = require('./app/middlewares/security.middleware');
+app.use('/api/v1/auth', authRateLimit);
 
 // application routes
 app.use('/api/v1', router);

@@ -84,16 +84,8 @@ app.get('/test', (_req, res) => {
     console.log('🧪 Test endpoint hit! Express is working!');
     res.json({ message: 'Express is working!', timestamp: new Date().toISOString() });
 });
-(0, StartupProfiler_1.startPhase)('Security Middleware Loading');
-const securityStack = MiddlewareFactory_1.middlewareFactory.getSecurityStack();
-securityStack.forEach((middleware) => app.use(middleware));
-(0, StartupProfiler_1.completePhase)('Security Middleware Loading');
-(0, StartupProfiler_1.startPhase)('Performance Middleware Loading');
-const performanceStack = MiddlewareFactory_1.middlewareFactory.getPerformanceStack();
-performanceStack.forEach((middleware) => app.use(middleware));
-(0, StartupProfiler_1.completePhase)('Performance Middleware Loading');
-const currentEnv = process.env.NODE_ENV || 'development';
-console.log(`✅ Loaded ${securityStack.length + performanceStack.length} middleware functions for ${currentEnv} environment`);
+// Middleware loading will be done after basic Express setup to avoid circular dependencies
+console.log('⏳ Middleware loading deferred to avoid circular dependencies');
 setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
     (0, StartupProfiler_1.startPhase)('Redis Initialization');
     try {
@@ -188,12 +180,52 @@ app.get('/', (req, res) => {
     console.log('🏠 Root endpoint hit!', req.method, req.url);
     res.send('🚀 Welcome to the Green Uni Mind API!');
 });
+// ========================================
+// OPTIMIZED MIDDLEWARE LOADING (Simplified Approach)
+// ========================================
+(0, StartupProfiler_1.startPhase)('Security Middleware Loading');
+// Load essential security middleware conditionally
+const currentEnv = process.env.NODE_ENV || 'development';
+// Only load necessary middleware based on environment
+if (currentEnv === 'production') {
+    // Production middleware stack
+    const { enhancedSecurityHeaders, generalRateLimit, securityLogging, requestSizeLimit } = require('./app/middlewares/security.middleware');
+    app.use(enhancedSecurityHeaders);
+    app.use(generalRateLimit);
+    app.use(securityLogging);
+    app.use(requestSizeLimit('10mb'));
+    console.log('✅ Loaded 4 production security middleware');
+}
+else {
+    // Development middleware stack (minimal)
+    const { enhancedSecurityHeaders, generalRateLimit } = require('./app/middlewares/security.middleware');
+    app.use(enhancedSecurityHeaders);
+    app.use(generalRateLimit);
+    console.log('✅ Loaded 2 development security middleware');
+}
+(0, StartupProfiler_1.completePhase)('Security Middleware Loading');
+(0, StartupProfiler_1.startPhase)('Performance Middleware Loading');
+// Load performance middleware conditionally
+const { responseCompression, cacheHeaders } = require('./app/middlewares/performance.middleware');
+app.use(responseCompression);
+app.use(cacheHeaders);
+// Only load monitoring in production or when explicitly enabled
+if (currentEnv === 'production' || process.env.ENABLE_PERFORMANCE_MONITORING === 'true') {
+    const { performanceTracker, memoryMonitor } = require('./app/middlewares/performance.middleware');
+    app.use(performanceTracker);
+    app.use(memoryMonitor);
+    console.log('✅ Loaded 4 performance middleware (with monitoring)');
+}
+else {
+    console.log('✅ Loaded 2 performance middleware (basic)');
+}
+(0, StartupProfiler_1.completePhase)('Performance Middleware Loading');
 // Health routes are now handled by dedicated health router for better organization
-// Import and use health routes
 const health_routes_1 = __importDefault(require("./app/routes/health.routes"));
-const MiddlewareFactory_1 = require("./app/middlewares/MiddlewareFactory");
 app.use('/health', health_routes_1.default);
-app.use('/api/v1/auth', MiddlewareFactory_1.middlewareFactory.getMiddleware('authRateLimit'));
+// Apply auth rate limiting to authentication routes (conditionally loaded)
+const { authRateLimit } = require('./app/middlewares/security.middleware');
+app.use('/api/v1/auth', authRateLimit);
 // application routes
 app.use('/api/v1', routes_1.default);
 console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
