@@ -176,7 +176,7 @@ app.use(express_1.default.json({
 }));
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use((0, cookie_parser_1.default)());
-// Simple CORS configuration for development
+// Enhanced CORS configuration for development and security headers
 app.use((0, cors_1.default)({
     origin: [
         'http://localhost:3000',
@@ -195,7 +195,21 @@ app.use((0, cors_1.default)({
         'x-user-id',
         'x-provider',
         'x-provider-id',
-        'x-role'
+        'x-role',
+        // Security headers for request signing and encryption
+        'x-nonce',
+        'x-timestamp',
+        'x-request-signature',
+        'x-api-version',
+        'x-client-version'
+    ],
+    // Expose headers that the frontend might need to read
+    exposedHeaders: [
+        'x-total-count',
+        'x-page-count',
+        'x-current-page',
+        'x-rate-limit-remaining',
+        'x-rate-limit-reset'
     ]
 }));
 // Initialize Passport

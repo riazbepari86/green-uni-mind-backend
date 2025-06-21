@@ -1,0 +1,41 @@
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:00:55:055"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:01:55:155"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:02:55:255"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:03:55:355"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:04:55:455"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:05:55:555"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:06:55:655"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:07:55:755"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:08:55:855"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:09:55:955"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:10:55:1055"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:11:55:1155"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:12:55:1255"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:13:55:1355"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:14:55:1455"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:15:55:1555"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:16:55:1655"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:17:55:1755"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:18:55:1855"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:19:55:1955"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:20:55:2055"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:21:55:2155"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:22:55:2255"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:23:55:2355"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:24:55:2455"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:25:55:2555"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:26:55:2655"}
+{"alerts":["High error rate: 40.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:27:55:2755"}
+{"level":"warn","message":"⚠️ Redis connection test timeout - continuing without Redis","timestamp":"2025-06-21 00:29:58:2958"}
+{"level":"warn","message":"⚠️ Redis connection test timeout - continuing without Redis","timestamp":"2025-06-21 00:49:42:4942"}
+{"alerts":["High error rate: 100.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:51:26:5126"}
+{"alerts":["High error rate: 100.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:52:26:5226"}
+{"alerts":["High error rate: 50.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:53:26:5326"}
+{"alerts":["High error rate: 50.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:54:26:5426"}
+{"alerts":["High error rate: 50.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:55:26:5526"}
+{"method":"POST","path":"/api/v1/auth/login","responseTime":4513,"statusCode":401,"requestId":"req_1750445761630_5qy6vs6jw","level":"warn","message":"Slow request detected","timestamp":"2025-06-21 00:56:06:566"}
+{"alerts":["High error rate: 50.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:56:26:5626"}
+{"alerts":["High error rate: 50.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:57:26:5726"}
+{"alerts":["High error rate: 50.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 00:58:26:5826"}
+{"level":"warn","message":"⚠️ Redis connection test timeout - continuing without Redis","timestamp":"2025-06-21 00:59:26:5926"}
+{"alerts":["High error rate: 100.00%"],"level":"warn","message":"Performance alerts detected","timestamp":"2025-06-21 01:00:18:018"}

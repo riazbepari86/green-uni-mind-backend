@@ -48,6 +48,15 @@ const loginUser = async (payload: ILoginUser) => {
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     await otpOperations.setOTP(user.email, verificationCode, 300);
 
+    // Calculate exact expiration time for login OTP
+    const loginExpirationTime = new Date(Date.now() + 300000); // 5 minutes from now
+    const loginExpirationTimeString = loginExpirationTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'UTC'
+    });
+
     // Send verification email
     const emailSubject = 'Verify Your Email - Green Uni Mind';
     const emailBody = `
@@ -119,7 +128,14 @@ const loginUser = async (payload: ILoginUser) => {
             <h2>Verify Your Email Address</h2>
             <p>Please verify your email address to complete the login process:</p>
             <div class="code">${verificationCode}</div>
-            <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; padding: 15px; margin: 20px 0;">
+              <p class="note" style="margin: 0; color: #856404;">
+                ⏰ <strong>Important:</strong> This code will <span class="expires">expire at ${loginExpirationTimeString} UTC</span> (in 5 minutes).
+              </p>
+              <p style="margin: 5px 0 0 0; font-size: 12px; color: #6c757d;">
+                Please verify your email before this time to complete your login.
+              </p>
+            </div>
             <p>If you did not request this verification, please ignore this email.</p>
           </div>
           <div class="footer">
@@ -139,7 +155,8 @@ const loginUser = async (payload: ILoginUser) => {
       {
         requiresVerification: true,
         email: user.email,
-        otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+        otpExpiresAt: loginExpirationTime.toISOString(),
+        cooldownSeconds: 60 // 1 minute cooldown for resend
       }
     );
   }
@@ -529,7 +546,16 @@ const resendVerificationEmail = async (email: string) => {
   // Store OTP in Redis with 5-minute expiration
   await otpOperations.setOTP(email, verificationCode, 300);
 
-  // Send verification email with modern template
+  // Calculate exact expiration time
+  const expirationTime = new Date(Date.now() + 300000); // 5 minutes from now
+  const expirationTimeString = expirationTime.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC'
+  });
+
+  // Send verification email with enhanced template
   const emailSubject = 'Verify Your Email - Green Uni Mind';
   const emailBody = `
     <!DOCTYPE html>
@@ -600,7 +626,14 @@ const resendVerificationEmail = async (email: string) => {
           <h2>Verify Your Email Address</h2>
           <p>Thank you for registering with Green Uni Mind. Please use the following code to verify your email address:</p>
           <div class="code">${verificationCode}</div>
-          <p class="note">This code will <span class="expires">expire in 5 minutes</span>.</p>
+          <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; padding: 15px; margin: 20px 0;">
+            <p class="note" style="margin: 0; color: #856404;">
+              ⏰ <strong>Important:</strong> This code will <span class="expires">expire at ${expirationTimeString} UTC</span> (in 5 minutes).
+            </p>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #6c757d;">
+              Please verify your email before this time to complete your registration.
+            </p>
+          </div>
           <p>If you did not request this verification, please ignore this email.</p>
         </div>
         <div class="footer">
@@ -618,6 +651,8 @@ const resendVerificationEmail = async (email: string) => {
     success: true,
     message: 'Verification email sent successfully',
     expiresIn: 300, // 5 minutes in seconds
+    expiresAt: expirationTime.toISOString(),
+    cooldownSeconds: 60 // 1 minute cooldown for resend
   };
 };
 

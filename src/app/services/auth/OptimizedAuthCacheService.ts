@@ -11,6 +11,12 @@ interface OTPData {
   expiresAt: number;
 }
 
+interface CooldownData {
+  email: string;
+  setAt: number;
+  expiresAt: number;
+}
+
 interface AuthTokenData {
   userId: string;
   email: string;
@@ -30,15 +36,30 @@ export class OptimizedAuthCacheService {
   private readonly RATE_LIMIT_TTL = 1800; // 30 minutes
   private readonly TOKEN_CACHE_TTL = 3600; // 1 hour
   private readonly RESEND_COOLDOWN = 60; // 1 minute
+  private readonly MAX_OTP_ATTEMPTS = 3; // Maximum verification attempts per OTP
+  private readonly MAX_RESEND_ATTEMPTS = 5; // Maximum resend attempts per hour
 
-  // Optimized OTP operations
-  async setOTP(email: string, otp: string): Promise<void> {
+  // Enhanced OTP operations with cooldown checking
+  async setOTP(email: string, otp: string): Promise<{ success: boolean; cooldownRemaining?: number; expiresAt: number }> {
+    // Check if user is in cooldown period
+    const cooldownCheck = await this.checkResendCooldown(email);
+    if (!cooldownCheck.canResend) {
+      return {
+        success: false,
+        cooldownRemaining: cooldownCheck.remainingTime,
+        expiresAt: Date.now() + this.OTP_TTL * 1000
+      };
+    }
+
+    const now = Date.now();
+    const expiresAt = now + this.OTP_TTL * 1000;
+
     const otpData: OTPData = {
       otp,
       email,
       attempts: 0,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + this.OTP_TTL * 1000
+      createdAt: now,
+      expiresAt
     };
 
     // Use hybrid storage with high priority for OTP
@@ -52,7 +73,15 @@ export class OptimizedAuthCacheService {
       }
     );
 
-    console.log(`✅ OTP stored for ${email} with TTL ${this.OTP_TTL}s`);
+    // Set resend cooldown
+    await this.setResendCooldown(email);
+
+    console.log(`✅ OTP stored for ${email} with TTL ${this.OTP_TTL}s, expires at ${new Date(expiresAt).toISOString()}`);
+
+    return {
+      success: true,
+      expiresAt
+    };
   }
 
   async getOTP(email: string): Promise<OTPData | null> {
@@ -133,6 +162,57 @@ export class OptimizedAuthCacheService {
       console.log(`✅ OTP deleted for ${email}`);
     } catch (error) {
       console.error(`Error deleting OTP for ${email}:`, error);
+    }
+  }
+
+  // Resend cooldown management
+  async setResendCooldown(email: string): Promise<void> {
+    const cooldownKey = `otp:cooldown:${email}`;
+    const cooldownData = {
+      email,
+      setAt: Date.now(),
+      expiresAt: Date.now() + (this.RESEND_COOLDOWN * 1000)
+    };
+
+    await hybridStorageService.set(
+      cooldownKey,
+      cooldownData,
+      {
+        ttl: this.RESEND_COOLDOWN,
+        priority: 'high',
+        fallbackToMemory: true
+      }
+    );
+
+    console.log(`✅ Resend cooldown set for ${email} for ${this.RESEND_COOLDOWN}s`);
+  }
+
+  async checkResendCooldown(email: string): Promise<{ canResend: boolean; remainingTime?: number }> {
+    try {
+      const cooldownKey = `otp:cooldown:${email}`;
+      const cooldownData = await hybridStorageService.get(cooldownKey) as CooldownData | null;
+
+      if (!cooldownData) {
+        return { canResend: true };
+      }
+
+      const now = Date.now();
+      const remainingTime = Math.max(0, Math.ceil((cooldownData.expiresAt - now) / 1000));
+
+      if (remainingTime > 0) {
+        return {
+          canResend: false,
+          remainingTime
+        };
+      }
+
+      // Cooldown expired, clean up
+      await hybridStorageService.del(cooldownKey);
+      return { canResend: true };
+    } catch (error) {
+      console.error(`Error checking resend cooldown for ${email}:`, error);
+      // On error, allow resend to prevent blocking users
+      return { canResend: true };
     }
   }
 

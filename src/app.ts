@@ -6,33 +6,27 @@ import globalErrorHandler from './app/middlewares/globalErrorhandler';
 import notFound from './app/middlewares/notFound';
 import router from './app/routes';
 import { configurePassport } from './app/config/passport';
-// Security middleware imports
-import {
-  authRateLimit,
-  enhancedSecurityHeaders,
-  encryptionMiddleware,
-  generalRateLimit,
-  securityLogging,
-  requestSizeLimit,
-} from './app/middlewares/security.middleware';
 
-// Performance middleware imports
-import {
-  performanceTracker,
-  responseCompression,
-  memoryMonitor,
-  requestTimeout,
-  cacheHeaders,
-  requestSizeMonitor,
-} from './app/middlewares/performance.middleware';
-// import monitoringRoutes from './app/routes/monitoring.routes'; // Disabled to prevent Redis overload
-import { redisConservativeConfig } from './app/services/redis/RedisConservativeConfig';
-import { redisCleanupService } from './app/services/redis/RedisCleanupService';
+
+import { middlewareFactory } from './app/middlewares/MiddlewareFactory';
+import { registerMiddleware } from './app/middlewares/MiddlewareRegistry';
+import { startPhase, completePhase } from './app/utils/StartupProfiler';
+
+
+startPhase('Middleware Registration');
+
+
+registerMiddleware();
+
+completePhase('Middleware Registration');
+
+
+const lazyImports = {
+  optimizedRedisConfig: () => import('./app/config/OptimizedRedisConfig').then(m => m.optimizedRedisConfig),
+};
 
 const app: Application = express();
 
-// CRITICAL: Ultra-lightweight health check BEFORE any middleware
-// This endpoint MUST be first to ensure UptimeRobot can always reach it
 app.get('/health', (_req, res) => {
   // Set headers immediately for fastest response
   res.setHeader('Content-Type', 'application/json');
@@ -46,7 +40,7 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// Ultra-fast ping endpoint for basic connectivity checks
+
 app.get('/ping', (_req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.status(200).json({
@@ -55,96 +49,62 @@ app.get('/ping', (_req, res) => {
   });
 });
 
-// Test route BEFORE any middleware to check if Express is working
+
 app.get('/test', (_req, res) => {
   console.log('🧪 Test endpoint hit! Express is working!');
   res.json({ message: 'Express is working!', timestamp: new Date().toISOString() });
 });
 
-// Apply enhanced security headers first
-app.use(enhancedSecurityHeaders);
 
-// Apply response compression for better performance
-app.use(responseCompression);
+startPhase('Security Middleware Loading');
+const securityStack = middlewareFactory.getSecurityStack();
+securityStack.forEach((middleware: any) => app.use(middleware));
+completePhase('Security Middleware Loading');
 
-// Apply performance tracking
-app.use(performanceTracker);
+startPhase('Performance Middleware Loading');
 
-// Apply memory monitoring
-app.use(memoryMonitor);
+const performanceStack = middlewareFactory.getPerformanceStack();
+performanceStack.forEach((middleware: any) => app.use(middleware));
+completePhase('Performance Middleware Loading');
 
-// Apply request timeout (30 seconds)
-app.use(requestTimeout(30000));
+const currentEnv = process.env.NODE_ENV || 'development';
+console.log(`✅ Loaded ${securityStack.length + performanceStack.length} middleware functions for ${currentEnv} environment`);
 
-// Apply cache headers
-app.use(cacheHeaders);
 
-// Apply request size monitoring
-app.use(requestSizeMonitor);
-
-// Apply general rate limiting (production-ready)
-app.use(generalRateLimit);
-
-// Apply security logging for suspicious requests
-app.use(securityLogging);
-
-// Apply request/response encryption in production
-app.use(encryptionMiddleware());
-
-// Apply request size limiting
-app.use(requestSizeLimit('10mb'));
-
-// Initialize conservative Redis configuration to minimize usage (non-blocking)
-setTimeout(() => {
-  try {
-    console.log('🔧 Initializing Redis configuration in background...');
-    redisConservativeConfig.initialize();
-  } catch (error) {
-    console.error('❌ Redis configuration initialization failed:', error);
-    console.log('⚠️ Server will continue without Redis optimization');
-  }
-}, 100); // Initialize Redis config after a short delay
-
-// Clean up excessive Redis keys on startup (non-blocking)
 setTimeout(async () => {
+  startPhase('Redis Initialization');
   try {
-    console.log('🧹 Starting Redis cleanup to remove excessive monitoring data...');
+    console.log('🔧 Initializing optimized Redis configuration...');
 
-    // Run cleanup operations in parallel with timeout
-    const cleanupPromises = [
-      redisCleanupService.cleanupPerformanceMetrics(),
-      redisCleanupService.getMemoryStats()
-    ];
+    // Lazy load optimized Redis configuration
+    const optimizedRedisConfig = await lazyImports.optimizedRedisConfig();
 
-    // Set a timeout for cleanup operations to prevent blocking startup
-    const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        console.warn('⚠️ Redis cleanup timeout - continuing with startup');
-        resolve();
-      }, 10000); // 10 second timeout
+    // Initialize with timeout to prevent blocking
+    const initPromise = optimizedRedisConfig.initialize();
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error('Redis initialization timeout')), 8000);
     });
 
-    await Promise.race([
-      Promise.allSettled(cleanupPromises),
-      timeoutPromise
-    ]);
+    await Promise.race([initPromise, timeoutPromise]);
 
-    console.log('✅ Redis cleanup completed (or timed out)');
+    console.log('✅ Optimized Redis configuration initialized successfully');
+    completePhase('Redis Initialization');
+
   } catch (error) {
-    console.error('❌ Redis cleanup failed:', error);
-    // Don't throw the error - just log it and continue with startup
+    console.error('❌ Redis initialization failed:', error);
+    console.log('⚠️ Server will continue without Redis - some features may be limited');
+    completePhase('Redis Initialization'); // Mark as complete even if failed to prevent hanging
   }
-}, 2000); // Reduced wait time to 2 seconds
+}, 500); 
 
-// Set up webhook route first (before body parsers)
-// This ensures the raw body is preserved for Stripe signature verification
+
 const stripeWebhookPath = '/api/v1/payments/webhook';
 app.post(
   stripeWebhookPath,
   express.raw({ type: 'application/json' })
 );
 
-// Regular parsers for all other routes (except webhook)
+
 app.use((req, _res, next) => {
   if (req.originalUrl === stripeWebhookPath) {
     console.log('Webhook request detected, preserving raw body');
@@ -156,7 +116,7 @@ app.use((req, _res, next) => {
   }
 });
 
-// Apply JSON parser for all routes except webhook
+
 app.use(express.json({
   limit: '10mb',
   strict: false, // Allow any JSON-like content
@@ -173,7 +133,6 @@ app.use(cookieParser());
 
 
 
-// Simple CORS configuration for development
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -192,14 +151,28 @@ app.use(cors({
     'x-user-id',
     'x-provider',
     'x-provider-id',
-    'x-role'
+    'x-role',
+    // Security headers for request signing and encryption
+    'x-nonce',
+    'x-timestamp',
+    'x-request-signature',
+    'x-api-version',
+    'x-client-version'
+  ],
+  // Expose headers that the frontend might need to read
+  exposedHeaders: [
+    'x-total-count',
+    'x-page-count',
+    'x-current-page',
+    'x-rate-limit-remaining',
+    'x-rate-limit-reset'
   ]
 }));
 
-// Initialize Passport
+
 app.use(passport.initialize());
 
-// Configure Passport strategies if OAuth is configured
+
 try {
   configurePassport();
 } catch (error) {
@@ -213,61 +186,21 @@ app.get('/', (req, res) => {
   res.send('🚀 Welcome to the Green Uni Mind API!');
 });
 
-// Detailed health check route for internal monitoring (with Redis status)
-app.get('/health/detailed', async (_req, res) => {
-  const startTime = Date.now();
 
-  try {
-    // Detailed health check with Redis status
-    const healthData: any = {
-      status: 'OK',
-      message: 'Green Uni Mind API is healthy',
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
-      uptime: process.uptime(),
-      responseTime: Date.now() - startTime
-    };
+// Health routes are now handled by dedicated health router for better organization
+// Import and use health routes
+import healthRoutes from './app/routes/health.routes';
+app.use('/health', healthRoutes);
 
-    // Optional: Add Redis status if available (but don't fail if Redis is down)
-    try {
-      const { isRedisHealthy } = await import('./app/config/redis');
-      const redisHealthy = await Promise.race([
-        isRedisHealthy(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)) // 1 second timeout
-      ]);
 
-      healthData.redis = redisHealthy ? 'connected' : 'disconnected';
-    } catch (error) {
-      // Redis check failed, but don't fail the health check
-      healthData.redis = 'unavailable';
-    }
-
-    res.status(200).json(healthData);
-  } catch (error) {
-    // Even if something goes wrong, return a basic health response
-    console.error('Detailed health check error:', error);
-    res.status(200).json({
-      status: 'OK',
-      message: 'Green Uni Mind API is running',
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
-      responseTime: Date.now() - startTime,
-      note: 'Basic health check - some services may be degraded'
-    });
-  }
-});
-
-// Apply auth rate limiting to authentication routes
-app.use('/api/v1/auth', authRateLimit);
+app.use('/api/v1/auth', middlewareFactory.getMiddleware('authRateLimit'));
 
 // application routes
 app.use('/api/v1', router);
 
-// monitoring routes (admin only) - DISABLED to prevent Redis overload
-// app.use('/api/v1/monitoring', monitoringRoutes);
+
 console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
 
-// global error handler
 app.use(globalErrorHandler);
 
 // Not found

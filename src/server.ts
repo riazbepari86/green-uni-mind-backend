@@ -11,11 +11,14 @@ import keepAliveService from './utils/keepAlive';
 // Import production-safe logging
 import { Logger } from './app/config/logger';
 import { specializedLog } from './app/utils/console-replacement';
+// Import startup profiler
+import { startPhase, completePhase, failPhase, completeStartup } from './app/utils/StartupProfiler';
 
 let server: Server;
 
 async function main() {
   try {
+    startPhase('Environment Validation');
     // Check for required environment variables
     if (!process.env.FRONTEND_URL) {
       Logger.warn('FRONTEND_URL environment variable is not set. Using https://example.com as fallback.');
@@ -25,21 +28,33 @@ async function main() {
     if (!process.env.STRIPE_SECRET_KEY) {
       Logger.warn('STRIPE_SECRET_KEY environment variable is not set. Stripe functionality may not work correctly.');
     }
+    completePhase('Environment Validation');
 
+    startPhase('Server Initialization');
     // Start the server FIRST - don't wait for anything else
     Logger.info('🚀 Starting server on port ' + config.port);
     server = app.listen(config.port, () => {
+      completePhase('Server Initialization');
+
       console.log(`🎉 Server is running on http://localhost:${config.port}`);
       console.log(`✅ Green Uni Mind API is ready to accept requests!`);
       specializedLog.system.startup('Green Uni Mind API', Number(config.port));
 
+      startPhase('Keep-alive Service');
       // Start keep-alive service to prevent Render from sleeping
       try {
         keepAliveService.start();
         specializedLog.system.startup('Keep-alive service');
+        completePhase('Keep-alive Service');
       } catch (error) {
         Logger.error('Failed to start keep-alive service', { error });
+        failPhase('Keep-alive Service', error);
       }
+
+      // Complete startup profiling after all immediate tasks
+      setTimeout(() => {
+        completeStartup();
+      }, 100);
     });
 
     // Handle server errors
@@ -69,13 +84,16 @@ async function main() {
 
     // Connect to MongoDB in background (non-blocking)
     setTimeout(async () => {
+      startPhase('MongoDB Connection');
       try {
         Logger.info('🔄 Connecting to MongoDB...');
         await mongoose.connect(config.database_url as string);
         Logger.info('✅ MongoDB connected successfully');
+        completePhase('MongoDB Connection');
       } catch (error) {
         Logger.error('❌ MongoDB connection failed:', { error });
         Logger.info('Server will continue without MongoDB - API will be limited');
+        failPhase('MongoDB Connection', error);
       }
     }, 1000); // Wait 1 second after server starts
 
