@@ -19,6 +19,8 @@ const QueryBuilder_1 = __importDefault(require("../../builder/QueryBuilder"));
 const AppError_1 = __importDefault(require("../../errors/AppError"));
 const sendImageToCloudinary_1 = require("../../utils/sendImageToCloudinary");
 const teacher_model_1 = require("../Teacher/teacher.model");
+const category_model_1 = require("../Category/category.model");
+const subCategory_model_1 = require("../SubCategory/subCategory.model");
 const course_constant_1 = require("./course.constant");
 const course_model_1 = require("./course.model");
 const http_status_1 = __importDefault(require("http-status"));
@@ -32,6 +34,21 @@ const createCourse = (payload, id, file) => __awaiter(void 0, void 0, void 0, fu
         const teacher = yield teacher_model_1.Teacher.findById(id);
         if (!teacher) {
             throw new Error('Teacher not found');
+        }
+        if (payload.categoryId) {
+            const category = yield category_model_1.Category.findById(payload.categoryId);
+            if (!category) {
+                throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Invalid category ID');
+            }
+        }
+        if (payload.subcategoryId) {
+            const subcategory = yield subCategory_model_1.SubCategory.findById(payload.subcategoryId);
+            if (!subcategory) {
+                throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Invalid subcategory ID');
+            }
+            if (payload.categoryId && subcategory.categoryId.toString() !== payload.categoryId.toString()) {
+                throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Subcategory does not belong to the selected category');
+            }
         }
         const promises = [];
         if (file === null || file === void 0 ? void 0 : file.path) {
@@ -61,9 +78,18 @@ const createCourse = (payload, id, file) => __awaiter(void 0, void 0, void 0, fu
     }
 });
 const searchCourse = (query) => __awaiter(void 0, void 0, void 0, function* () {
-    const searchableQuery = new QueryBuilder_1.default(course_model_1.Course.find({ isPublished: true }).populate({
+    const searchableQuery = new QueryBuilder_1.default(course_model_1.Course.find({ isPublished: true })
+        .populate({
         path: 'creator',
         select: 'name profileImg',
+    })
+        .populate({
+        path: 'categoryId',
+        select: 'name slug icon',
+    })
+        .populate({
+        path: 'subcategoryId',
+        select: 'name slug',
     }), query)
         .search(course_constant_1.courseSearchableFields)
         .filter()
@@ -78,9 +104,18 @@ const searchCourse = (query) => __awaiter(void 0, void 0, void 0, function* () {
     };
 });
 const getPublishedCourse = (query) => __awaiter(void 0, void 0, void 0, function* () {
-    const publishableQuery = new QueryBuilder_1.default(course_model_1.Course.find({ isPublished: true }).populate({
+    const publishableQuery = new QueryBuilder_1.default(course_model_1.Course.find({ isPublished: true })
+        .populate({
         path: 'creator',
         select: 'name profileImg',
+    })
+        .populate({
+        path: 'categoryId',
+        select: 'name slug icon',
+    })
+        .populate({
+        path: 'subcategoryId',
+        select: 'name slug',
     }), query)
         .search(course_constant_1.courseSearchableFields)
         .filter()
@@ -142,6 +177,14 @@ const getCourseById = (id) => __awaiter(void 0, void 0, void 0, function* () {
         .populate({
         path: 'creator',
         select: 'name profileImg',
+    })
+        .populate({
+        path: 'categoryId',
+        select: 'name slug icon',
+    })
+        .populate({
+        path: 'subcategoryId',
+        select: 'name slug',
     })
         .populate({
         path: 'lectures',

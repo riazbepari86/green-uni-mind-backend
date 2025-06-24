@@ -341,6 +341,36 @@ const redisOperations = {
             return (yield safeRedisOperation(() => redis.ping(), 'PONG', 'ping')) || 'PONG';
         });
     },
+    mget(keys) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.mget(...keys), keys.map(() => null), `mget:${keys.join(',')}`)) || keys.map(() => null);
+        });
+    },
+    zadd(key, score, member) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.zadd(key, score, member), 0, `zadd:${key}`)) || 0;
+        });
+    },
+    zremrangebyscore(key, min, max) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.zremrangebyscore(key, min, max), 0, `zremrangebyscore:${key}`)) || 0;
+        });
+    },
+    zcard(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.zcard(key), 0, `zcard:${key}`)) || 0;
+        });
+    },
+    zrange(key, start, stop, withScores) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => withScores ? redis.zrange(key, start, stop, withScores) : redis.zrange(key, start, stop), [], `zrange:${key}`)) || [];
+        });
+    },
+    zcount(key, min, max) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (yield safeRedisOperation(() => redis.zcount(key, min, max), 0, `zcount:${key}`)) || 0;
+        });
+    },
     // Pipeline operations
     pipeline() {
         return redis.pipeline();

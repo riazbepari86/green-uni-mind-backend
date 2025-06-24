@@ -53,6 +53,11 @@ const globalErrorhandler_1 = __importDefault(require("./app/middlewares/globalEr
 const notFound_1 = __importDefault(require("./app/middlewares/notFound"));
 const routes_1 = __importDefault(require("./app/routes"));
 const passport_2 = require("./app/config/passport");
+const PerformanceMonitoringService_1 = __importDefault(require("./app/services/monitoring/PerformanceMonitoringService"));
+const emailService_1 = require("./app/services/emailService");
+const complianceService_1 = require("./app/services/complianceService");
+const retryService_1 = require("./app/services/retryService");
+const payoutManagement_service_1 = require("./app/modules/Payment/payoutManagement.service");
 const MiddlewareRegistry_1 = require("./app/middlewares/MiddlewareRegistry");
 const StartupProfiler_1 = require("./app/utils/StartupProfiler");
 (0, StartupProfiler_1.startPhase)('Middleware Registration');
@@ -214,20 +219,44 @@ if (currentEnv === 'production' || process.env.ENABLE_PERFORMANCE_MONITORING ===
     const { performanceTracker, memoryMonitor } = require('./app/middlewares/performance.middleware');
     app.use(performanceTracker);
     app.use(memoryMonitor);
-    console.log('✅ Loaded 4 performance middleware (with monitoring)');
+    // Add enhanced performance monitoring
+    app.use(PerformanceMonitoringService_1.default.getInstance().trackPerformance());
+    console.log('✅ Loaded 4 performance middleware (with enhanced monitoring)');
 }
 else {
     console.log('✅ Loaded 2 performance middleware (basic)');
 }
 (0, StartupProfiler_1.completePhase)('Performance Middleware Loading');
-// Health routes are now handled by dedicated health router for better organization
-const health_routes_1 = __importDefault(require("./app/routes/health.routes"));
-app.use('/health', health_routes_1.default);
 // Apply auth rate limiting to authentication routes (conditionally loaded)
 const { authRateLimit } = require('./app/middlewares/security.middleware');
 app.use('/api/v1/auth', authRateLimit);
+// Health routes are now handled by dedicated health router for better organization
+const health_routes_1 = __importDefault(require("./app/routes/health.routes"));
+app.use('/', health_routes_1.default); // Mount health routes at root level for /health endpoint
 // application routes
 app.use('/api/v1', routes_1.default);
+// Initialize enterprise services
+setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log('🚀 Initializing enterprise services...');
+        // Initialize email service
+        yield emailService_1.emailService.initialize();
+        console.log('✅ Email service initialized');
+        // Initialize compliance monitoring
+        complianceService_1.complianceService.initializeComplianceMonitoring();
+        console.log('✅ Compliance monitoring initialized');
+        // Initialize retry services
+        retryService_1.RetryService.initializeRetryJobs();
+        console.log('✅ Retry services initialized');
+        // Initialize payout management
+        payoutManagement_service_1.PayoutManagementService.initializePayoutJobs();
+        console.log('✅ Payout management initialized');
+        console.log('🎉 All enterprise services initialized successfully');
+    }
+    catch (error) {
+        console.error('❌ Error initializing enterprise services:', error);
+    }
+}), 1000);
 console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
 app.use(globalErrorhandler_1.default);
 // Not found

@@ -449,6 +449,54 @@ const redisOperations = {
     ) || 'PONG';
   },
 
+  async mget(keys: string[]): Promise<(string | null)[]> {
+    return await safeRedisOperation(
+      () => redis.mget(...keys),
+      keys.map(() => null),
+      `mget:${keys.join(',')}`
+    ) || keys.map(() => null);
+  },
+
+  async zadd(key: string, score: number, member: string): Promise<number> {
+    return await safeRedisOperation(
+      () => redis.zadd(key, score, member),
+      0,
+      `zadd:${key}`
+    ) || 0;
+  },
+
+  async zremrangebyscore(key: string, min: number, max: number): Promise<number> {
+    return await safeRedisOperation(
+      () => redis.zremrangebyscore(key, min, max),
+      0,
+      `zremrangebyscore:${key}`
+    ) || 0;
+  },
+
+  async zcard(key: string): Promise<number> {
+    return await safeRedisOperation(
+      () => redis.zcard(key),
+      0,
+      `zcard:${key}`
+    ) || 0;
+  },
+
+  async zrange(key: string, start: number, stop: number, withScores?: 'WITHSCORES'): Promise<string[]> {
+    return await safeRedisOperation(
+      () => withScores ? redis.zrange(key, start, stop, withScores) : redis.zrange(key, start, stop),
+      [],
+      `zrange:${key}`
+    ) || [];
+  },
+
+  async zcount(key: string, min: number, max: number): Promise<number> {
+    return await safeRedisOperation(
+      () => redis.zcount(key, min, max),
+      0,
+      `zcount:${key}`
+    ) || 0;
+  },
+
   // Pipeline operations
   pipeline() {
     return redis.pipeline();

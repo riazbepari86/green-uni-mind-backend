@@ -8,6 +8,7 @@ import { Transaction } from './transaction.model';
 import AppError from '../../errors/AppError';
 import httpStatus from 'http-status';
 import { PayoutSummary } from './payoutSummary.model';
+import { InvoiceService } from '../Invoice/invoice.service';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-04-30.basil',
@@ -71,7 +72,77 @@ const createPaymentIntent = async (
   };
 };
 
-// Helper function to process checkout session completed events
+// Enhanced retry mechanism for failed operations
+const retryOperation = async <T>(
+  operation: () => Promise<T>,
+  maxRetries: number = PAYMENT_SPLIT_CONFIG.RETRY_ATTEMPTS,
+  delay: number = PAYMENT_SPLIT_CONFIG.RETRY_DELAY,
+): Promise<T> => {
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      console.warn(`Operation failed on attempt ${attempt}/${maxRetries}:`, lastError.message);
+
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+      }
+    }
+  }
+
+  throw lastError!;
+};
+
+// Enhanced metadata validation
+const validateSessionMetadata = (session: Stripe.Checkout.Session) => {
+  const metadata = session.metadata || {};
+  const { courseId, studentId, teacherId, teacherShare, platformFee, version } = metadata;
+
+  // Check for required fields
+  if (!courseId || !studentId || !teacherId) {
+    throw new Error(`Missing required metadata in checkout session ${session.id}: courseId=${courseId}, studentId=${studentId}, teacherId=${teacherId}`);
+  }
+
+  // Validate ObjectIds
+  try {
+    new Types.ObjectId(courseId);
+    new Types.ObjectId(studentId);
+    new Types.ObjectId(teacherId);
+  } catch (error) {
+    throw new Error(`Invalid ObjectId in metadata for session ${session.id}: ${error}`);
+  }
+
+  // Validate payment amounts
+  const teacherShareCents = parseInt(teacherShare || '0');
+  const platformFeeCents = parseInt(platformFee || '0');
+  const totalAmount = session.amount_total || 0;
+
+  if (teacherShareCents + platformFeeCents !== totalAmount) {
+    console.warn(`Payment split mismatch in session ${session.id}:`, {
+      total: totalAmount,
+      teacher: teacherShareCents,
+      platform: platformFeeCents,
+      difference: totalAmount - (teacherShareCents + platformFeeCents)
+    });
+  }
+
+  return {
+    courseId,
+    studentId,
+    teacherId,
+    teacherShareCents,
+    platformFeeCents,
+    teacherShareDollars: teacherShareCents / 100,
+    platformFeeDollars: platformFeeCents / 100,
+    totalAmountDollars: totalAmount / 100,
+    version: version || '1.0',
+  };
+};
+
+// Helper function to process checkout session completed events with enhanced error handling
 const processCheckoutSessionCompleted = async (
   session: Stripe.Checkout.Session,
 ) => {
@@ -85,99 +156,81 @@ const processCheckoutSessionCompleted = async (
     customer_details: session.customer_details,
   });
 
-  // Extract metadata
-  const { courseId, studentId, teacherId, teacherShare, platformFee } =
-    session.metadata || {};
+  // Enhanced metadata validation
+  const validatedData = validateSessionMetadata(session);
+  console.log('Validated metadata:', validatedData);
 
-  console.log('Extracted metadata:', {
+  // Use validated data for processing
+  const {
     courseId,
     studentId,
     teacherId,
-    teacherShare,
-    platformFee,
+    teacherShareDollars,
+    platformFeeDollars,
+    totalAmountDollars,
+  } = validatedData;
+
+  console.log('Processing payment with validated amounts:', {
+    total: totalAmountDollars,
+    teacherShare: teacherShareDollars,
+    platformFee: platformFeeDollars,
+    sessionId: session.id,
   });
 
-  if (!courseId || !studentId || !teacherId) {
-    console.error(
-      'Missing required metadata in checkout session:',
-      session.id,
-      'Metadata:',
-      session.metadata,
-    );
-    throw new Error('Missing required metadata in checkout session');
-  }
+  // Enhanced database transaction with retry mechanism
+  const processPaymentTransaction = async () => {
+    const mongoSession = await mongoose.startSession();
+    mongoSession.startTransaction();
 
-  // Validate ObjectIds
-  try {
-    new Types.ObjectId(courseId);
-    new Types.ObjectId(studentId);
-    new Types.ObjectId(teacherId);
-  } catch (error) {
-    console.error('Invalid ObjectId in metadata:', error);
-    throw new Error('Invalid ObjectId in metadata');
-  }
+    try {
+      // Get customer email from session
+      const customerEmail = session.customer_details?.email || '';
+      console.log('Processing checkout session for customer:', customerEmail);
 
-  // Create payment record
-  const amount = (session.amount_total || 0) / 100; // Convert from cents
-  // Convert from cents to dollars and ensure we're using the teacher's 70% share
-  const teacherShareAmount = (parseFloat(teacherShare || '0') / 100) || (amount * 0.7);
-  const platformShareAmount = (parseFloat(platformFee || '0') / 100) || (amount * 0.3);
+      // Validate all entities exist with enhanced error messages
+      const student = await Student.findById(studentId).session(mongoSession);
+      if (!student) {
+        throw new Error(`Student not found with ID: ${studentId}. Session: ${session.id}`);
+      }
 
-  console.log('Calculated amounts:', {
-    amount,
-    teacherShareAmount,
-    platformShareAmount,
-    originalTeacherShare: teacherShare,
-    originalPlatformFee: platformFee,
-  });
+      const course = await Course.findById(courseId).session(mongoSession);
+      if (!course) {
+        throw new Error(`Course not found with ID: ${courseId}. Session: ${session.id}`);
+      }
 
-  // Start a MongoDB transaction
-  const mongoSession = await mongoose.startSession();
-  mongoSession.startTransaction();
+      const teacher = await Teacher.findById(teacherId).session(mongoSession);
+      if (!teacher) {
+        throw new Error(`Teacher not found with ID: ${teacherId}. Session: ${session.id}`);
+      }
 
-  try {
-    // Get customer email from session
-    const customerEmail = session.customer_details?.email || '';
-    console.log('Processing checkout session for customer:', customerEmail);
+      console.log('All entities validated successfully:', {
+        student: student.email,
+        course: course.title,
+        teacher: `${teacher.name.firstName} ${teacher.name.lastName}`,
+      });
 
-    // Check if student exists
-    const student = await Student.findById(studentId).session(mongoSession);
-    if (!student) {
-      throw new Error(`Student not found with ID: ${studentId}`);
-    }
-
-    // Check if course exists
-    const course = await Course.findById(courseId).session(mongoSession);
-    if (!course) {
-      throw new Error(`Course not found with ID: ${courseId}`);
-    }
-
-    // Check if teacher exists
-    const teacher = await Teacher.findById(teacherId).session(mongoSession);
-    if (!teacher) {
-      throw new Error(`Teacher not found with ID: ${teacherId}`);
-    }
-
-    // Check if student is already enrolled in this course
-    const isEnrolled = student.enrolledCourses.some(
-      (enrolledCourse) => enrolledCourse.courseId.toString() === courseId,
-    );
-
-    if (isEnrolled) {
-      console.log(
-        `Student ${studentId} is already enrolled in course ${courseId}`,
+      // Check if student is already enrolled in this course
+      const isEnrolled = student.enrolledCourses.some(
+        (enrolledCourse) => enrolledCourse.courseId.toString() === courseId,
       );
-    } else {
+
+      if (isEnrolled) {
+        console.log(
+          `Student ${studentId} is already enrolled in course ${courseId}`,
+        );
+        return { success: true, message: 'Student already enrolled' };
+      }
+
       console.log(`Enrolling student ${studentId} in course ${courseId}`);
 
-      // Create payment record
-      console.log('Creating payment record with data:', {
+      // Create payment record with validated data
+      console.log('Creating payment record with validated data:', {
         studentId,
         courseId,
         teacherId,
-        amount,
-        teacherShareAmount,
-        platformShareAmount,
+        totalAmount: totalAmountDollars,
+        teacherShare: teacherShareDollars,
+        platformFee: platformFeeDollars,
         paymentIntent: session.payment_intent,
         customerEmail,
         status: session.payment_status,
@@ -189,11 +242,11 @@ const processCheckoutSessionCompleted = async (
             studentId: new Types.ObjectId(studentId),
             courseId: new Types.ObjectId(courseId),
             teacherId: new Types.ObjectId(teacherId),
-            amount,
-            teacherShare: teacherShareAmount,
-            platformShare: platformShareAmount,
+            amount: totalAmountDollars,
+            teacherShare: teacherShareDollars,
+            platformShare: platformFeeDollars,
             stripeAccountId: session.payment_intent as string,
-            stripePaymentId: session.payment_intent as string, // Set the stripePaymentId to avoid duplicate key error
+            stripePaymentId: session.payment_intent as string,
             stripeEmail: customerEmail,
             status: session.payment_status === 'paid' ? 'success' : 'pending',
             receiptUrl: '',
@@ -206,19 +259,19 @@ const processCheckoutSessionCompleted = async (
       console.log('Payment record created with ID:', payment[0]._id);
       console.log('Payment record created:', payment);
 
-      // Create transaction record
+      // Create transaction record with validated data
       console.log('Creating transaction record');
       const transactionData = {
         courseId: new Types.ObjectId(courseId),
         studentId: new Types.ObjectId(studentId),
         teacherId: new Types.ObjectId(teacherId),
-        totalAmount: amount,
-        teacherEarning: teacherShareAmount,
-        platformEarning: platformShareAmount,
+        totalAmount: totalAmountDollars,
+        teacherEarning: teacherShareDollars,
+        platformEarning: platformFeeDollars,
         stripeInvoiceUrl: '',
         stripePdfUrl: '',
         stripeTransactionId: session.payment_intent as string,
-        stripeTransferStatus: 'pending', // Set the transfer status
+        stripeTransferStatus: 'pending',
         status: 'success',
       };
 
@@ -253,8 +306,8 @@ const processCheckoutSessionCompleted = async (
           'Found existing payout summary:',
           existingPayoutSummary._id,
         );
-        // Update existing summary
-        existingPayoutSummary.totalEarned += teacherShareAmount;
+        // Update existing summary with validated data
+        existingPayoutSummary.totalEarned += teacherShareDollars;
         existingPayoutSummary.transactions.push(transaction[0]._id as unknown as Types.ObjectId);
 
         // Check if course already exists in coursesSold
@@ -266,13 +319,13 @@ const processCheckoutSessionCompleted = async (
           // Update existing course
           existingPayoutSummary.coursesSold[existingCourseIndex].count += 1;
           existingPayoutSummary.coursesSold[existingCourseIndex].earnings +=
-            teacherShareAmount;
+            teacherShareDollars;
         } else {
           // Add new course
           existingPayoutSummary.coursesSold.push({
             courseId: new Types.ObjectId(courseId),
             count: 1,
-            earnings: teacherShareAmount,
+            earnings: teacherShareDollars,
           });
         }
 
@@ -280,12 +333,12 @@ const processCheckoutSessionCompleted = async (
         console.log('Updated existing payout summary');
       } else {
         console.log('Creating new payout summary');
-        // Create new summary
+        // Create new summary with validated data
         const newPayoutSummary = await PayoutSummary.create(
           [
             {
               teacherId: new Types.ObjectId(teacherId),
-              totalEarned: teacherShareAmount,
+              totalEarned: teacherShareDollars,
               month,
               year,
               transactions: [transaction[0]._id],
@@ -293,7 +346,7 @@ const processCheckoutSessionCompleted = async (
                 {
                   courseId: new Types.ObjectId(courseId),
                   count: 1,
-                  earnings: teacherShareAmount,
+                  earnings: teacherShareDollars,
                 },
               ],
             },
@@ -344,10 +397,10 @@ const processCheckoutSessionCompleted = async (
       );
       console.log('Course updated:', courseUpdate ? 'Success' : 'Failed');
 
-      // Update teacher earnings and courses
+      // Update teacher earnings and courses with validated data
       console.log('Updating teacher earnings:', {
         teacherId,
-        teacherShareAmount,
+        teacherShare: teacherShareDollars,
       });
 
       // Make sure transaction is created successfully before updating teacher
@@ -364,15 +417,15 @@ const processCheckoutSessionCompleted = async (
         teacherId,
         {
           $inc: {
-            totalEarnings: teacherShareAmount, // Already converted to dollars
-            'earnings.total': teacherShareAmount, // Already converted to dollars
-            'earnings.monthly': teacherShareAmount, // Already converted to dollars
-            'earnings.yearly': teacherShareAmount, // Already converted to dollars
-            'earnings.weekly': teacherShareAmount, // Already converted to dollars
+            totalEarnings: teacherShareDollars,
+            'earnings.total': teacherShareDollars,
+            'earnings.monthly': teacherShareDollars,
+            'earnings.yearly': teacherShareDollars,
+            'earnings.weekly': teacherShareDollars,
           },
           $addToSet: {
             courses: new Types.ObjectId(courseId),
-            payments: transaction[0]._id, // Add the transaction ID to the payments array
+            payments: transaction[0]._id,
           },
         },
         { session: mongoSession, new: true },
@@ -385,30 +438,51 @@ const processCheckoutSessionCompleted = async (
 
       console.log(
         'Teacher updated successfully with earnings:',
-        teacherShareAmount,
+        teacherShareDollars,
       );
-      console.log('Teacher updated:', teacherUpdate ? 'Success' : 'Failed');
-    }
 
-    // Commit the transaction
-    await mongoSession.commitTransaction();
-    console.log(
-      'Transaction committed successfully for checkout session:',
-      session.id,
-    );
-  } catch (error) {
-    // If an error occurs, abort the transaction
-    await mongoSession.abortTransaction();
-    console.error(
-      'Transaction aborted for checkout session:',
-      session.id,
-      error,
-    );
-    throw error;
-  } finally {
-    // End the session
-    mongoSession.endSession();
-  }
+      // Commit the transaction
+      await mongoSession.commitTransaction();
+      console.log(
+        'Transaction committed successfully for checkout session:',
+        session.id,
+      );
+
+      // Generate invoice after successful payment processing
+      try {
+        console.log('Generating invoice for completed transaction:', transaction[0]._id);
+        await InvoiceService.processInvoiceGeneration(
+          studentId,
+          courseId,
+          transaction[0]._id.toString(),
+          totalAmountDollars,
+          teacher.stripeAccountId || ''
+        );
+        console.log('Invoice generated successfully');
+      } catch (invoiceError) {
+        // Log the error but don't fail the payment processing
+        console.error('Failed to generate invoice (payment still successful):', invoiceError);
+      }
+
+      return { success: true, message: 'Payment processed successfully' };
+
+    } catch (error) {
+      // If an error occurs, abort the transaction
+      await mongoSession.abortTransaction();
+      console.error(
+        'Transaction aborted for checkout session:',
+        session.id,
+        error,
+      );
+      throw error;
+    } finally {
+      // End the session
+      mongoSession.endSession();
+    }
+  };
+
+  // Execute the payment transaction with retry mechanism
+  return await retryOperation(processPaymentTransaction);
 };
 
 const handleStripeWebhook = async (event: Stripe.Event) => {
@@ -1117,12 +1191,107 @@ const getTeacherEarnings = async (teacherId: string) => {
   };
 };
 
+// Enhanced payment split configuration
+const PAYMENT_SPLIT_CONFIG = {
+  TEACHER_PERCENTAGE: 0.7, // 70%
+  PLATFORM_PERCENTAGE: 0.3, // 30%
+  MINIMUM_AMOUNT: 1, // $1 minimum
+  MAXIMUM_AMOUNT: 10000, // $10,000 maximum
+  CURRENCY: 'usd',
+  RETRY_ATTEMPTS: 3,
+  RETRY_DELAY: 1000, // 1 second
+};
+
+// Enhanced split calculation with validation
+const calculatePaymentSplits = (amount: number) => {
+  // Validate amount
+  if (amount < PAYMENT_SPLIT_CONFIG.MINIMUM_AMOUNT) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Amount must be at least $${PAYMENT_SPLIT_CONFIG.MINIMUM_AMOUNT}`,
+    );
+  }
+
+  if (amount > PAYMENT_SPLIT_CONFIG.MAXIMUM_AMOUNT) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Amount cannot exceed $${PAYMENT_SPLIT_CONFIG.MAXIMUM_AMOUNT}`,
+    );
+  }
+
+  // Calculate amounts in cents for Stripe
+  const totalAmountCents = Math.round(amount * 100);
+  const platformFeeCents = Math.round(totalAmountCents * PAYMENT_SPLIT_CONFIG.PLATFORM_PERCENTAGE);
+  const teacherShareCents = totalAmountCents - platformFeeCents;
+
+  // Validate splits add up correctly
+  if (teacherShareCents + platformFeeCents !== totalAmountCents) {
+    console.warn('Payment split calculation mismatch:', {
+      total: totalAmountCents,
+      teacher: teacherShareCents,
+      platform: platformFeeCents,
+      difference: totalAmountCents - (teacherShareCents + platformFeeCents)
+    });
+  }
+
+  return {
+    totalAmountCents,
+    teacherShareCents,
+    platformFeeCents,
+    teacherShareDollars: teacherShareCents / 100,
+    platformFeeDollars: platformFeeCents / 100,
+    teacherPercentage: PAYMENT_SPLIT_CONFIG.TEACHER_PERCENTAGE,
+    platformPercentage: PAYMENT_SPLIT_CONFIG.PLATFORM_PERCENTAGE,
+  };
+};
+
+// Enhanced Stripe account validation
+const validateStripeAccount = async (stripeAccountId: string) => {
+  try {
+    const account = await stripe.accounts.retrieve(stripeAccountId);
+
+    const validation = {
+      exists: true,
+      chargesEnabled: account.charges_enabled || false,
+      payoutsEnabled: account.payouts_enabled || false,
+      detailsSubmitted: account.details_submitted || false,
+      requirements: account.requirements?.currently_due || [],
+      isFullyVerified: false,
+      canReceivePayments: false,
+    };
+
+    // Check if account is fully verified and can receive payments
+    validation.isFullyVerified = validation.chargesEnabled &&
+                                validation.payoutsEnabled &&
+                                validation.detailsSubmitted &&
+                                validation.requirements.length === 0;
+
+    validation.canReceivePayments = validation.chargesEnabled && validation.detailsSubmitted;
+
+    return validation;
+  } catch (error) {
+    console.error('Error validating Stripe account:', error);
+    return {
+      exists: false,
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      detailsSubmitted: false,
+      requirements: [],
+      isFullyVerified: false,
+      canReceivePayments: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+};
+
 const createCheckoutSession = async (
   studentId: string,
   courseId: string,
   amount?: number,
 ) => {
   try {
+    console.log('Creating checkout session:', { studentId, courseId, amount });
+
     // Validate course exists
     const course = await Course.findById(courseId);
     if (!course) {
@@ -1143,7 +1312,7 @@ const createCheckoutSession = async (
 
     if (
       student.enrolledCourses.some(
-        (course) => course.courseId.toString() === courseId,
+        (enrolledCourse) => enrolledCourse.courseId.toString() === courseId,
       )
     ) {
       throw new AppError(
@@ -1152,31 +1321,60 @@ const createCheckoutSession = async (
       );
     }
 
-    // Calculate the price and fee
+    // Calculate the price and validate
     const coursePrice = amount !== undefined ? amount : course.coursePrice || 0;
-    const platformFeePercent = 0.3; // 30%
 
-    // Calculate amounts in cents
-    const priceInCents = Math.round(coursePrice * 100);
-    const platformFeeInCents = Math.round(priceInCents * platformFeePercent);
-    const teacherShareInCents = priceInCents - platformFeeInCents;
+    if (coursePrice <= 0) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Course price must be greater than 0',
+      );
+    }
+
+    // Calculate payment splits with enhanced validation
+    const splits = calculatePaymentSplits(coursePrice);
+    console.log('Payment splits calculated:', splits);
+
+    // Validate teacher's Stripe account
+    let stripeAccountValidation = null;
+    if (teacher.stripeAccountId) {
+      stripeAccountValidation = await validateStripeAccount(teacher.stripeAccountId);
+      console.log('Stripe account validation:', stripeAccountValidation);
+
+      if (!stripeAccountValidation.canReceivePayments) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Teacher\'s payment account is not ready to receive payments. Please complete account setup.',
+        );
+      }
+    } else {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Teacher has not connected their payment account yet.',
+      );
+    }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const successUrl = `${frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${frontendUrl}/payment/cancel`;
 
-    // Create session parameters
+    // Create enhanced session parameters
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ['card'],
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: PAYMENT_SPLIT_CONFIG.CURRENCY,
             product_data: {
               name: course.title,
               description: course.description || 'Course enrollment',
+              images: course.courseThumbnail ? [course.courseThumbnail] : [],
+              metadata: {
+                courseId: courseId,
+                teacherId: teacher._id.toString(),
+              },
             },
-            unit_amount: priceInCents,
+            unit_amount: splits.totalAmountCents,
           },
           quantity: 1,
         },
@@ -1184,42 +1382,60 @@ const createCheckoutSession = async (
       mode: 'payment',
       success_url: successUrl,
       cancel_url: cancelUrl,
+      customer_email: student.email,
       metadata: {
         courseId: courseId,
         studentId: studentId,
-        teacherId: course.creator.toString(),
-        teacherShare: teacherShareInCents.toString(),
-        platformFee: platformFeeInCents.toString(),
+        teacherId: teacher._id.toString(),
+        teacherShare: splits.teacherShareCents.toString(),
+        platformFee: splits.platformFeeCents.toString(),
+        teacherPercentage: splits.teacherPercentage.toString(),
+        platformPercentage: splits.platformPercentage.toString(),
+        version: '2.0', // Version for tracking enhanced processing
       },
-    };
-
-    let isValidStripeAccount = false;
-
-    if (teacher.stripeAccountId) {
-      try {
-        // Verify the account exists and is valid
-        const account = await stripe.accounts.retrieve(teacher.stripeAccountId);
-        isValidStripeAccount =
-          account.id === teacher.stripeAccountId && account.charges_enabled;
-      } catch (error) {
-        console.error('Error verifying Stripe account:', error);
-        isValidStripeAccount = false;
-      }
-    }
-
-    // Only add transfer data if the account is valid
-    if (isValidStripeAccount) {
-      sessionParams.payment_intent_data = {
-        application_fee_amount: platformFeeInCents,
+      // Enhanced payment configuration
+      payment_intent_data: {
+        application_fee_amount: splits.platformFeeCents,
         transfer_data: {
           destination: teacher.stripeAccountId!,
         },
-      };
-    } else {
-      console.log('Not using Stripe Connect - account invalid or not found');
-    }
+        metadata: {
+          courseId: courseId,
+          studentId: studentId,
+          teacherId: teacher._id.toString(),
+          teacherShare: splits.teacherShareDollars.toString(),
+          platformFee: splits.platformFeeDollars.toString(),
+        },
+      },
+      // Enhanced session configuration
+      expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
+      allow_promotion_codes: true,
+      billing_address_collection: 'auto',
+      shipping_address_collection: {
+        allowed_countries: ['US', 'CA', 'GB', 'AU', 'DE', 'FR', 'IT', 'ES', 'NL', 'SE', 'NO', 'DK', 'FI'],
+      },
+    };
+
+    console.log('Creating Stripe checkout session with params:', {
+      ...sessionParams,
+      payment_intent_data: {
+        ...sessionParams.payment_intent_data,
+        transfer_data: {
+          destination: teacher.stripeAccountId,
+        },
+      },
+    });
 
     const session = await stripe.checkout.sessions.create(sessionParams);
+
+    console.log('Checkout session created successfully:', {
+      sessionId: session.id,
+      url: session.url,
+      amount: splits.totalAmountCents,
+      teacherShare: splits.teacherShareCents,
+      platformFee: splits.platformFeeCents,
+    });
+
     return session;
   } catch (error) {
     console.error('Error in createCheckoutSession:', error);

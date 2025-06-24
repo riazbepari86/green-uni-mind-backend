@@ -6,7 +6,7 @@ export interface IUser {
   email: string;
   password: string;
   passwordChangedAt?: Date;
-  role: 'user' | 'teacher' | 'student';
+  role: 'user' | 'teacher' | 'student' | 'admin';
   photoUrl?: string;
   status: 'in-progress' | 'blocked';
   isDeleted: boolean;

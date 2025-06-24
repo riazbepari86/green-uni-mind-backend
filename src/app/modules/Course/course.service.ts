@@ -8,6 +8,8 @@ import {
   sendFileToCloudinary,
 } from '../../utils/sendImageToCloudinary';
 import { Teacher } from '../Teacher/teacher.model';
+import { Category } from '../Category/category.model';
+import { SubCategory } from '../SubCategory/subCategory.model';
 import { courseSearchableFields } from './course.constant';
 import { ICourse } from './course.interface';
 import { Course } from './course.model';
@@ -28,6 +30,24 @@ const createCourse = async (
     const teacher = await Teacher.findById(id);
     if (!teacher) {
       throw new Error('Teacher not found');
+    }
+
+    if (payload.categoryId) {
+      const category = await Category.findById(payload.categoryId);
+      if (!category) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid category ID');
+      }
+    }
+
+    if (payload.subcategoryId) {
+      const subcategory = await SubCategory.findById(payload.subcategoryId);
+      if (!subcategory) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid subcategory ID');
+      }
+
+      if (payload.categoryId && subcategory.categoryId.toString() !== payload.categoryId.toString()) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Subcategory does not belong to the selected category');
+      }
     }
 
     const promises: Promise<any>[] = [];
@@ -74,10 +94,19 @@ const createCourse = async (
 
 const searchCourse = async (query: Record<string, unknown>) => {
   const searchableQuery = new QueryBuilder(
-    Course.find({ isPublished: true }).populate({
-      path: 'creator',
-      select: 'name profileImg',
-    }),
+    Course.find({ isPublished: true })
+      .populate({
+        path: 'creator',
+        select: 'name profileImg',
+      })
+      .populate({
+        path: 'categoryId',
+        select: 'name slug icon',
+      })
+      .populate({
+        path: 'subcategoryId',
+        select: 'name slug',
+      }),
     query,
   )
     .search(courseSearchableFields)
@@ -97,10 +126,19 @@ const searchCourse = async (query: Record<string, unknown>) => {
 
 const getPublishedCourse = async (query: Record<string, unknown>) => {
   const publishableQuery = new QueryBuilder(
-    Course.find({ isPublished: true }).populate({
-      path: 'creator',
-      select: 'name profileImg',
-    }),
+    Course.find({ isPublished: true })
+      .populate({
+        path: 'creator',
+        select: 'name profileImg',
+      })
+      .populate({
+        path: 'categoryId',
+        select: 'name slug icon',
+      })
+      .populate({
+        path: 'subcategoryId',
+        select: 'name slug',
+      }),
     query,
   )
     .search(courseSearchableFields)
@@ -109,7 +147,7 @@ const getPublishedCourse = async (query: Record<string, unknown>) => {
     .paginate()
     .fields();
 
-     const result = await publishableQuery.modelQuery;
+  const result = await publishableQuery.modelQuery;
   const meta = await publishableQuery.countTotal();
 
   return {
@@ -186,6 +224,14 @@ const getCourseById = async (id: string) => {
     .populate({
       path: 'creator',
       select: 'name profileImg',
+    })
+    .populate({
+      path: 'categoryId',
+      select: 'name slug icon',
+    })
+    .populate({
+      path: 'subcategoryId',
+      select: 'name slug',
     })
     .populate({
       path: 'lectures',

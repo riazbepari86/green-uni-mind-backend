@@ -6,6 +6,11 @@ import globalErrorHandler from './app/middlewares/globalErrorhandler';
 import notFound from './app/middlewares/notFound';
 import router from './app/routes';
 import { configurePassport } from './app/config/passport';
+import PerformanceMonitoringService from './app/services/monitoring/PerformanceMonitoringService';
+import { emailService } from './app/services/emailService';
+import { complianceService } from './app/services/complianceService';
+import { RetryService } from './app/services/retryService';
+import { PayoutManagementService } from './app/modules/Payment/payoutManagement.service';
 
 
 
@@ -228,24 +233,54 @@ if (currentEnv === 'production' || process.env.ENABLE_PERFORMANCE_MONITORING ===
   const { performanceTracker, memoryMonitor } = require('./app/middlewares/performance.middleware');
   app.use(performanceTracker);
   app.use(memoryMonitor);
-  console.log('✅ Loaded 4 performance middleware (with monitoring)');
+
+  // Add enhanced performance monitoring
+  app.use(PerformanceMonitoringService.getInstance().trackPerformance());
+
+  console.log('✅ Loaded 4 performance middleware (with enhanced monitoring)');
 } else {
   console.log('✅ Loaded 2 performance middleware (basic)');
 }
 
 completePhase('Performance Middleware Loading');
 
-// Health routes are now handled by dedicated health router for better organization
-import healthRoutes from './app/routes/health.routes';
-app.use('/health', healthRoutes);
-
 // Apply auth rate limiting to authentication routes (conditionally loaded)
 const { authRateLimit } = require('./app/middlewares/security.middleware');
 app.use('/api/v1/auth', authRateLimit);
 
+// Health routes are now handled by dedicated health router for better organization
+import healthRoutes from './app/routes/health.routes';
+app.use('/', healthRoutes); // Mount health routes at root level for /health endpoint
+
 // application routes
 app.use('/api/v1', router);
 
+// Initialize enterprise services
+setTimeout(async () => {
+  try {
+    console.log('🚀 Initializing enterprise services...');
+
+    // Initialize email service
+    await emailService.initialize();
+    console.log('✅ Email service initialized');
+
+    // Initialize compliance monitoring
+    complianceService.initializeComplianceMonitoring();
+    console.log('✅ Compliance monitoring initialized');
+
+    // Initialize retry services
+    RetryService.initializeRetryJobs();
+    console.log('✅ Retry services initialized');
+
+    // Initialize payout management
+    PayoutManagementService.initializePayoutJobs();
+    console.log('✅ Payout management initialized');
+
+    console.log('🎉 All enterprise services initialized successfully');
+  } catch (error) {
+    console.error('❌ Error initializing enterprise services:', error);
+  }
+}, 1000);
 
 console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
 

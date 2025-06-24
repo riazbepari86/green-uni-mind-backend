@@ -8,11 +8,17 @@ import { SubCategoryRoutes } from '../modules/SubCategory/subCategory.route';
 import { CourseRoutes } from '../modules/Course/course.route';
 import { LectureRoutes } from '../modules/Lecture/lecture.route';
 import { PaymentRoutes } from '../modules/Payment/payment.route';
+import { InvoiceRoutes } from '../modules/Invoice/invoice.routes';
+import { StripeConnectRoutes } from '../modules/StripeConnect/stripeConnect.routes';
 import { StudentRoutes } from '../modules/Student/student.route';
 import { TeacherRoutes } from '../modules/Teacher/teacher.route';
 import { BookmarkRoutes } from '../modules/Bookmark/bookmark.route';
 import { QuestionRoutes } from '../modules/Question/question.route';
 import { NoteRoutes } from '../modules/Note/note.route';
+import { AIRoutes } from '../modules/AI/ai.route';
+import { AnalyticsRoutes } from '../modules/Analytics/analytics.route';
+import { MessagingRoutes } from '../modules/Messaging/messaging.route';
+import { ReviewRoutes } from '../modules/Payment/review.route';
 
 type TModuleRoutes = {
   path: string;
@@ -59,6 +65,14 @@ const moduleRoutes: TModuleRoutes[] = [
     route: PaymentRoutes,
   },
   {
+    path: '/invoices',
+    route: InvoiceRoutes,
+  },
+  {
+    path: '/stripe-connect',
+    route: StripeConnectRoutes,
+  },
+  {
     path: '/students',
     route: StudentRoutes,
   },
@@ -77,6 +91,22 @@ const moduleRoutes: TModuleRoutes[] = [
   {
     path: '/notes',
     route: NoteRoutes,
+  },
+  {
+    path: '/ai',
+    route: AIRoutes,
+  },
+  {
+    path: '/analytics',
+    route: AnalyticsRoutes,
+  },
+  {
+    path: '/messaging',
+    route: MessagingRoutes,
+  },
+  {
+    path: '/reviews',
+    route: ReviewRoutes,
   },
 ];
 

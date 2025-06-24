@@ -22,4 +22,11 @@ export interface ICourse {
   status: keyof typeof courseStatus;
   courseThumbnailPublicId?: string;
   isFree?: keyof typeof courseIsFree;
+  learningObjectives?: string[];
+  prerequisites?: string;
+  targetAudience?: string;
+  estimatedDuration?: string;
+  language?: string;
+  hasSubtitles?: boolean;
+  hasCertificate?: boolean;
 }

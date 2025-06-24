@@ -12,9 +12,16 @@ const createCourseZodSchema = zod_1.z.object({
             .min(1, { message: 'Title cannot be empty' }),
         subtitle: zod_1.z.string().optional(),
         description: zod_1.z.string().optional(),
-        category: zod_1.z.enum(course_constant_1.courseCategories, {
-            required_error: 'Category is required',
-        }),
+        categoryId: zod_1.z
+            .string({
+            required_error: 'Category ID is required',
+        })
+            .min(1, { message: 'Category ID cannot be empty' }),
+        subcategoryId: zod_1.z
+            .string({
+            required_error: 'Subcategory ID is required',
+        })
+            .min(1, { message: 'Subcategory ID cannot be empty' }),
         courseLevel: zod_1.z.enum(course_constant_1.courseLevel, {
             required_error: 'Course level is required',
         }),
@@ -35,6 +42,13 @@ const createCourseZodSchema = zod_1.z.object({
         isFree: zod_1.z.enum(course_constant_1.courseIsFree).optional(),
         courseThumbnail: zod_1.z.string().optional(),
         courseThumbnailPublicId: zod_1.z.string().optional(),
+        learningObjectives: zod_1.z.array(zod_1.z.string()).optional(),
+        prerequisites: zod_1.z.string().optional(),
+        targetAudience: zod_1.z.string().optional(),
+        estimatedDuration: zod_1.z.string().optional(),
+        language: zod_1.z.string().optional(),
+        hasSubtitles: zod_1.z.boolean().optional(),
+        hasCertificate: zod_1.z.boolean().optional(),
     }),
 });
 const updateCourseZodSchema = zod_1.z.object({
@@ -42,7 +56,8 @@ const updateCourseZodSchema = zod_1.z.object({
         title: zod_1.z.string().min(1, { message: 'Title cannot be empty' }).optional(),
         subtitle: zod_1.z.string().optional(),
         description: zod_1.z.string().optional(),
-        category: zod_1.z.enum(course_constant_1.courseCategories).optional(),
+        categoryId: zod_1.z.string().optional(),
+        subcategoryId: zod_1.z.string().optional(),
         courseLevel: zod_1.z.enum(course_constant_1.courseLevel).optional(),
         courseThumbnail: zod_1.z.string().optional(),
         courseThumbnailPublicId: zod_1.z.string().optional(),
@@ -55,6 +70,13 @@ const updateCourseZodSchema = zod_1.z.object({
         ]).optional(),
         status: zod_1.z.enum(course_constant_1.courseStatus).optional(),
         isFree: zod_1.z.enum(course_constant_1.courseIsFree).optional(),
+        learningObjectives: zod_1.z.array(zod_1.z.string()).optional(),
+        prerequisites: zod_1.z.string().optional(),
+        targetAudience: zod_1.z.string().optional(),
+        estimatedDuration: zod_1.z.string().optional(),
+        language: zod_1.z.string().optional(),
+        hasSubtitles: zod_1.z.boolean().optional(),
+        hasCertificate: zod_1.z.boolean().optional(),
     }),
 });
 // We can reuse the updateCourseZodSchema for editCourse since they have the same validation requirements

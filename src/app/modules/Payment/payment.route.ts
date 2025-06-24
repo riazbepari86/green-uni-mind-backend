@@ -14,8 +14,13 @@ router.post(
   PaymentControllers.createCheckoutSession
 );
 
-// Webhook route - no auth middleware to allow Stripe to call it
+// Legacy webhook route - maintained for backward compatibility
 router.post('/webhook', PaymentControllers.handleWebhook as any);
+
+// Enhanced webhook routes with dual endpoint support
+// Import and use the new webhook event routes
+import { WebhookEventRoutes } from '../WebhookEvent/webhookEvent.routes';
+router.use('/webhook', WebhookEventRoutes);
 
 // Stripe Connect for teachers
 router.post(
@@ -120,6 +125,44 @@ router.get(
   '/payouts/preferences/:teacherId',
   auth(USER_ROLE.teacher),
   PayoutController.getPayoutPreferences
+);
+
+// Enhanced financial analytics routes
+router.get(
+  '/financial-summary/:teacherId',
+  auth(USER_ROLE.teacher),
+  PaymentControllers.getFinancialSummary
+);
+
+router.get(
+  '/earnings-growth/:teacherId',
+  auth(USER_ROLE.teacher),
+  PaymentControllers.getEarningsGrowth
+);
+
+router.get(
+  '/top-courses/:teacherId',
+  auth(USER_ROLE.teacher),
+  PaymentControllers.getTopPerformingCourses
+);
+
+router.get(
+  '/revenue-chart/:teacherId',
+  auth(USER_ROLE.teacher),
+  PaymentControllers.getRevenueChart
+);
+
+router.post(
+  '/export-financial-data/:teacherId',
+  auth(USER_ROLE.teacher),
+  PaymentControllers.exportFinancialData
+);
+
+// Payout request route
+router.post(
+  '/payout-request/:teacherId',
+  auth(USER_ROLE.teacher),
+  PayoutController.createPayoutRequest
 );
 
 export const PaymentRoutes = router;

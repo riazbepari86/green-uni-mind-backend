@@ -86,6 +86,35 @@ const courseSchema = new mongoose_1.Schema({
             message: 'Invalid course Is Free',
         },
     },
+    learningObjectives: {
+        type: [String],
+        default: [],
+    },
+    prerequisites: {
+        type: String,
+        trim: true,
+    },
+    targetAudience: {
+        type: String,
+        trim: true,
+    },
+    estimatedDuration: {
+        type: String,
+        trim: true,
+    },
+    language: {
+        type: String,
+        trim: true,
+        default: 'English',
+    },
+    hasSubtitles: {
+        type: Boolean,
+        default: false,
+    },
+    hasCertificate: {
+        type: Boolean,
+        default: false,
+    },
 }, { timestamps: true });
 // Create indexes for better searching and filtering
 courseSchema.index({ title: 'text', description: 'text' });

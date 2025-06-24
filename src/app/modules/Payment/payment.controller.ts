@@ -554,6 +554,101 @@ const getTransactionAnalytics = catchAsync(async (req: Request, res: Response) =
   });
 });
 
+// Enhanced financial analytics controllers
+const getFinancialSummary = catchAsync(async (req: Request, res: Response) => {
+  const { teacherId } = req.params;
+  const { period } = req.query;
+
+  // Mock implementation - replace with actual service call
+  const result = {
+    totalRevenue: 5000,
+    growthRate: 15.5,
+    totalStudents: 120,
+    averageCoursePrice: 99.99,
+  };
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Financial summary retrieved successfully',
+    data: result,
+  });
+});
+
+const getEarningsGrowth = catchAsync(async (req: Request, res: Response) => {
+  const { teacherId } = req.params;
+  const { period } = req.query;
+
+  // Mock implementation - replace with actual service call
+  const result = {
+    currentPeriod: 3500,
+    previousPeriod: 3000,
+    growthRate: 16.7,
+    chartData: [],
+  };
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Earnings growth retrieved successfully',
+    data: result,
+  });
+});
+
+const getTopPerformingCourses = catchAsync(async (req: Request, res: Response) => {
+  const { teacherId } = req.params;
+  const { period } = req.query;
+
+  // Mock implementation - replace with actual service call
+  const result = [
+    { id: '1', title: 'React Masterclass', revenue: 2500, enrollments: 50 },
+    { id: '2', title: 'Node.js Complete Guide', revenue: 2000, enrollments: 40 },
+  ];
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Top performing courses retrieved successfully',
+    data: result,
+  });
+});
+
+const getRevenueChart = catchAsync(async (req: Request, res: Response) => {
+  const { teacherId } = req.params;
+  const { period, groupBy } = req.query;
+
+  // Mock implementation - replace with actual service call
+  const result = {
+    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+    data: [1000, 1500, 2000, 2500, 3000],
+  };
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Revenue chart data retrieved successfully',
+    data: result,
+  });
+});
+
+const exportFinancialData = catchAsync(async (req: Request, res: Response) => {
+  const { teacherId } = req.params;
+  const { period } = req.query;
+
+  // Mock implementation - replace with actual service call
+  const result = {
+    downloadUrl: 'https://example.com/financial-report.csv',
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+  };
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Financial data export initiated successfully',
+    data: result,
+  });
+});
+
 export const PaymentControllers = {
   createPaymentIntent,
   createCheckoutSession,
@@ -570,4 +665,9 @@ export const PaymentControllers = {
   getTransactionBySessionId,
   getTeacherUpcomingPayout,
   getTransactionAnalytics,
+  getFinancialSummary,
+  getEarningsGrowth,
+  getTopPerformingCourses,
+  getRevenueChart,
+  exportFinancialData,
 };

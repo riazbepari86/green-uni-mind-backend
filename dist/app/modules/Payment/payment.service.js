@@ -56,6 +56,7 @@ const transaction_model_1 = require("./transaction.model");
 const AppError_1 = __importDefault(require("../../errors/AppError"));
 const http_status_1 = __importDefault(require("http-status"));
 const payoutSummary_model_1 = require("./payoutSummary.model");
+const invoice_service_1 = require("../Invoice/invoice.service");
 const stripe = new stripe_1.default(process.env.STRIPE_SECRET_KEY, {
     apiVersion: '2025-04-30.basil',
 });
@@ -93,9 +94,66 @@ const createPaymentIntent = (studentId, courseId, amount) => __awaiter(void 0, v
         paymentIntentId: retrievedPaymentIntent.id,
     };
 });
-// Helper function to process checkout session completed events
+// Enhanced retry mechanism for failed operations
+const retryOperation = (operation_1, ...args_1) => __awaiter(void 0, [operation_1, ...args_1], void 0, function* (operation, maxRetries = PAYMENT_SPLIT_CONFIG.RETRY_ATTEMPTS, delay = PAYMENT_SPLIT_CONFIG.RETRY_DELAY) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return yield operation();
+        }
+        catch (error) {
+            lastError = error instanceof Error ? error : new Error('Unknown error');
+            console.warn(`Operation failed on attempt ${attempt}/${maxRetries}:`, lastError.message);
+            if (attempt < maxRetries) {
+                yield new Promise(resolve => setTimeout(resolve, delay * attempt));
+            }
+        }
+    }
+    throw lastError;
+});
+// Enhanced metadata validation
+const validateSessionMetadata = (session) => {
+    const metadata = session.metadata || {};
+    const { courseId, studentId, teacherId, teacherShare, platformFee, version } = metadata;
+    // Check for required fields
+    if (!courseId || !studentId || !teacherId) {
+        throw new Error(`Missing required metadata in checkout session ${session.id}: courseId=${courseId}, studentId=${studentId}, teacherId=${teacherId}`);
+    }
+    // Validate ObjectIds
+    try {
+        new mongoose_1.Types.ObjectId(courseId);
+        new mongoose_1.Types.ObjectId(studentId);
+        new mongoose_1.Types.ObjectId(teacherId);
+    }
+    catch (error) {
+        throw new Error(`Invalid ObjectId in metadata for session ${session.id}: ${error}`);
+    }
+    // Validate payment amounts
+    const teacherShareCents = parseInt(teacherShare || '0');
+    const platformFeeCents = parseInt(platformFee || '0');
+    const totalAmount = session.amount_total || 0;
+    if (teacherShareCents + platformFeeCents !== totalAmount) {
+        console.warn(`Payment split mismatch in session ${session.id}:`, {
+            total: totalAmount,
+            teacher: teacherShareCents,
+            platform: platformFeeCents,
+            difference: totalAmount - (teacherShareCents + platformFeeCents)
+        });
+    }
+    return {
+        courseId,
+        studentId,
+        teacherId,
+        teacherShareCents,
+        platformFeeCents,
+        teacherShareDollars: teacherShareCents / 100,
+        platformFeeDollars: platformFeeCents / 100,
+        totalAmountDollars: totalAmount / 100,
+        version: version || '1.0',
+    };
+};
+// Helper function to process checkout session completed events with enhanced error handling
 const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     console.log('Processing checkout session completed:', session.id);
     console.log('Session details:', {
         id: session.id,
@@ -105,78 +163,59 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
         amount_total: session.amount_total,
         customer_details: session.customer_details,
     });
-    // Extract metadata
-    const { courseId, studentId, teacherId, teacherShare, platformFee } = session.metadata || {};
-    console.log('Extracted metadata:', {
-        courseId,
-        studentId,
-        teacherId,
-        teacherShare,
-        platformFee,
+    // Enhanced metadata validation
+    const validatedData = validateSessionMetadata(session);
+    console.log('Validated metadata:', validatedData);
+    // Use validated data for processing
+    const { courseId, studentId, teacherId, teacherShareDollars, platformFeeDollars, totalAmountDollars, } = validatedData;
+    console.log('Processing payment with validated amounts:', {
+        total: totalAmountDollars,
+        teacherShare: teacherShareDollars,
+        platformFee: platformFeeDollars,
+        sessionId: session.id,
     });
-    if (!courseId || !studentId || !teacherId) {
-        console.error('Missing required metadata in checkout session:', session.id, 'Metadata:', session.metadata);
-        throw new Error('Missing required metadata in checkout session');
-    }
-    // Validate ObjectIds
-    try {
-        new mongoose_1.Types.ObjectId(courseId);
-        new mongoose_1.Types.ObjectId(studentId);
-        new mongoose_1.Types.ObjectId(teacherId);
-    }
-    catch (error) {
-        console.error('Invalid ObjectId in metadata:', error);
-        throw new Error('Invalid ObjectId in metadata');
-    }
-    // Create payment record
-    const amount = (session.amount_total || 0) / 100; // Convert from cents
-    // Convert from cents to dollars and ensure we're using the teacher's 70% share
-    const teacherShareAmount = (parseFloat(teacherShare || '0') / 100) || (amount * 0.7);
-    const platformShareAmount = (parseFloat(platformFee || '0') / 100) || (amount * 0.3);
-    console.log('Calculated amounts:', {
-        amount,
-        teacherShareAmount,
-        platformShareAmount,
-        originalTeacherShare: teacherShare,
-        originalPlatformFee: platformFee,
-    });
-    // Start a MongoDB transaction
-    const mongoSession = yield mongoose_1.default.startSession();
-    mongoSession.startTransaction();
-    try {
-        // Get customer email from session
-        const customerEmail = ((_a = session.customer_details) === null || _a === void 0 ? void 0 : _a.email) || '';
-        console.log('Processing checkout session for customer:', customerEmail);
-        // Check if student exists
-        const student = yield student_model_1.Student.findById(studentId).session(mongoSession);
-        if (!student) {
-            throw new Error(`Student not found with ID: ${studentId}`);
-        }
-        // Check if course exists
-        const course = yield course_model_1.Course.findById(courseId).session(mongoSession);
-        if (!course) {
-            throw new Error(`Course not found with ID: ${courseId}`);
-        }
-        // Check if teacher exists
-        const teacher = yield teacher_model_1.Teacher.findById(teacherId).session(mongoSession);
-        if (!teacher) {
-            throw new Error(`Teacher not found with ID: ${teacherId}`);
-        }
-        // Check if student is already enrolled in this course
-        const isEnrolled = student.enrolledCourses.some((enrolledCourse) => enrolledCourse.courseId.toString() === courseId);
-        if (isEnrolled) {
-            console.log(`Student ${studentId} is already enrolled in course ${courseId}`);
-        }
-        else {
+    // Enhanced database transaction with retry mechanism
+    const processPaymentTransaction = () => __awaiter(void 0, void 0, void 0, function* () {
+        var _a;
+        const mongoSession = yield mongoose_1.default.startSession();
+        mongoSession.startTransaction();
+        try {
+            // Get customer email from session
+            const customerEmail = ((_a = session.customer_details) === null || _a === void 0 ? void 0 : _a.email) || '';
+            console.log('Processing checkout session for customer:', customerEmail);
+            // Validate all entities exist with enhanced error messages
+            const student = yield student_model_1.Student.findById(studentId).session(mongoSession);
+            if (!student) {
+                throw new Error(`Student not found with ID: ${studentId}. Session: ${session.id}`);
+            }
+            const course = yield course_model_1.Course.findById(courseId).session(mongoSession);
+            if (!course) {
+                throw new Error(`Course not found with ID: ${courseId}. Session: ${session.id}`);
+            }
+            const teacher = yield teacher_model_1.Teacher.findById(teacherId).session(mongoSession);
+            if (!teacher) {
+                throw new Error(`Teacher not found with ID: ${teacherId}. Session: ${session.id}`);
+            }
+            console.log('All entities validated successfully:', {
+                student: student.email,
+                course: course.title,
+                teacher: `${teacher.name.firstName} ${teacher.name.lastName}`,
+            });
+            // Check if student is already enrolled in this course
+            const isEnrolled = student.enrolledCourses.some((enrolledCourse) => enrolledCourse.courseId.toString() === courseId);
+            if (isEnrolled) {
+                console.log(`Student ${studentId} is already enrolled in course ${courseId}`);
+                return { success: true, message: 'Student already enrolled' };
+            }
             console.log(`Enrolling student ${studentId} in course ${courseId}`);
-            // Create payment record
-            console.log('Creating payment record with data:', {
+            // Create payment record with validated data
+            console.log('Creating payment record with validated data:', {
                 studentId,
                 courseId,
                 teacherId,
-                amount,
-                teacherShareAmount,
-                platformShareAmount,
+                totalAmount: totalAmountDollars,
+                teacherShare: teacherShareDollars,
+                platformFee: platformFeeDollars,
                 paymentIntent: session.payment_intent,
                 customerEmail,
                 status: session.payment_status,
@@ -186,11 +225,11 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
                     studentId: new mongoose_1.Types.ObjectId(studentId),
                     courseId: new mongoose_1.Types.ObjectId(courseId),
                     teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                    amount,
-                    teacherShare: teacherShareAmount,
-                    platformShare: platformShareAmount,
+                    amount: totalAmountDollars,
+                    teacherShare: teacherShareDollars,
+                    platformShare: platformFeeDollars,
                     stripeAccountId: session.payment_intent,
-                    stripePaymentId: session.payment_intent, // Set the stripePaymentId to avoid duplicate key error
+                    stripePaymentId: session.payment_intent,
                     stripeEmail: customerEmail,
                     status: session.payment_status === 'paid' ? 'success' : 'pending',
                     receiptUrl: '',
@@ -199,19 +238,19 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
             // Log the created payment
             console.log('Payment record created with ID:', payment[0]._id);
             console.log('Payment record created:', payment);
-            // Create transaction record
+            // Create transaction record with validated data
             console.log('Creating transaction record');
             const transactionData = {
                 courseId: new mongoose_1.Types.ObjectId(courseId),
                 studentId: new mongoose_1.Types.ObjectId(studentId),
                 teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                totalAmount: amount,
-                teacherEarning: teacherShareAmount,
-                platformEarning: platformShareAmount,
+                totalAmount: totalAmountDollars,
+                teacherEarning: teacherShareDollars,
+                platformEarning: platformFeeDollars,
                 stripeInvoiceUrl: '',
                 stripePdfUrl: '',
                 stripeTransactionId: session.payment_intent,
-                stripeTransferStatus: 'pending', // Set the transfer status
+                stripeTransferStatus: 'pending',
                 status: 'success',
             };
             const transaction = yield transaction_model_1.Transaction.create([transactionData], {
@@ -231,8 +270,8 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
             }).session(mongoSession);
             if (existingPayoutSummary) {
                 console.log('Found existing payout summary:', existingPayoutSummary._id);
-                // Update existing summary
-                existingPayoutSummary.totalEarned += teacherShareAmount;
+                // Update existing summary with validated data
+                existingPayoutSummary.totalEarned += teacherShareDollars;
                 existingPayoutSummary.transactions.push(transaction[0]._id);
                 // Check if course already exists in coursesSold
                 const existingCourseIndex = existingPayoutSummary.coursesSold.findIndex((c) => c.courseId.toString() === courseId);
@@ -240,14 +279,14 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
                     // Update existing course
                     existingPayoutSummary.coursesSold[existingCourseIndex].count += 1;
                     existingPayoutSummary.coursesSold[existingCourseIndex].earnings +=
-                        teacherShareAmount;
+                        teacherShareDollars;
                 }
                 else {
                     // Add new course
                     existingPayoutSummary.coursesSold.push({
                         courseId: new mongoose_1.Types.ObjectId(courseId),
                         count: 1,
-                        earnings: teacherShareAmount,
+                        earnings: teacherShareDollars,
                     });
                 }
                 yield existingPayoutSummary.save({ session: mongoSession });
@@ -255,11 +294,11 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
             }
             else {
                 console.log('Creating new payout summary');
-                // Create new summary
+                // Create new summary with validated data
                 const newPayoutSummary = yield payoutSummary_model_1.PayoutSummary.create([
                     {
                         teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                        totalEarned: teacherShareAmount,
+                        totalEarned: teacherShareDollars,
                         month,
                         year,
                         transactions: [transaction[0]._id],
@@ -267,7 +306,7 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
                             {
                                 courseId: new mongoose_1.Types.ObjectId(courseId),
                                 count: 1,
-                                earnings: teacherShareAmount,
+                                earnings: teacherShareDollars,
                             },
                         ],
                     },
@@ -300,10 +339,10 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
                 $inc: { totalEnrollment: 1 },
             }, { session: mongoSession, new: true });
             console.log('Course updated:', courseUpdate ? 'Success' : 'Failed');
-            // Update teacher earnings and courses
+            // Update teacher earnings and courses with validated data
             console.log('Updating teacher earnings:', {
                 teacherId,
-                teacherShareAmount,
+                teacherShare: teacherShareDollars,
             });
             // Make sure transaction is created successfully before updating teacher
             if (!transaction || !transaction[0] || !transaction[0]._id) {
@@ -312,38 +351,50 @@ const processCheckoutSessionCompleted = (session) => __awaiter(void 0, void 0, v
             console.log('Updating teacher earnings and payments with transaction ID:', transaction[0]._id);
             const teacherUpdate = yield teacher_model_1.Teacher.findByIdAndUpdate(teacherId, {
                 $inc: {
-                    totalEarnings: teacherShareAmount, // Already converted to dollars
-                    'earnings.total': teacherShareAmount, // Already converted to dollars
-                    'earnings.monthly': teacherShareAmount, // Already converted to dollars
-                    'earnings.yearly': teacherShareAmount, // Already converted to dollars
-                    'earnings.weekly': teacherShareAmount, // Already converted to dollars
+                    totalEarnings: teacherShareDollars,
+                    'earnings.total': teacherShareDollars,
+                    'earnings.monthly': teacherShareDollars,
+                    'earnings.yearly': teacherShareDollars,
+                    'earnings.weekly': teacherShareDollars,
                 },
                 $addToSet: {
                     courses: new mongoose_1.Types.ObjectId(courseId),
-                    payments: transaction[0]._id, // Add the transaction ID to the payments array
+                    payments: transaction[0]._id,
                 },
             }, { session: mongoSession, new: true });
             if (!teacherUpdate) {
                 console.error('Failed to update teacher:', teacherId);
                 throw new Error('Failed to update teacher earnings');
             }
-            console.log('Teacher updated successfully with earnings:', teacherShareAmount);
-            console.log('Teacher updated:', teacherUpdate ? 'Success' : 'Failed');
+            console.log('Teacher updated successfully with earnings:', teacherShareDollars);
+            // Commit the transaction
+            yield mongoSession.commitTransaction();
+            console.log('Transaction committed successfully for checkout session:', session.id);
+            // Generate invoice after successful payment processing
+            try {
+                console.log('Generating invoice for completed transaction:', transaction[0]._id);
+                yield invoice_service_1.InvoiceService.processInvoiceGeneration(studentId, courseId, transaction[0]._id.toString(), totalAmountDollars, teacher.stripeAccountId || '');
+                console.log('Invoice generated successfully');
+            }
+            catch (invoiceError) {
+                // Log the error but don't fail the payment processing
+                console.error('Failed to generate invoice (payment still successful):', invoiceError);
+            }
+            return { success: true, message: 'Payment processed successfully' };
         }
-        // Commit the transaction
-        yield mongoSession.commitTransaction();
-        console.log('Transaction committed successfully for checkout session:', session.id);
-    }
-    catch (error) {
-        // If an error occurs, abort the transaction
-        yield mongoSession.abortTransaction();
-        console.error('Transaction aborted for checkout session:', session.id, error);
-        throw error;
-    }
-    finally {
-        // End the session
-        mongoSession.endSession();
-    }
+        catch (error) {
+            // If an error occurs, abort the transaction
+            yield mongoSession.abortTransaction();
+            console.error('Transaction aborted for checkout session:', session.id, error);
+            throw error;
+        }
+        finally {
+            // End the session
+            mongoSession.endSession();
+        }
+    });
+    // Execute the payment transaction with retry mechanism
+    return yield retryOperation(processPaymentTransaction);
 });
 const handleStripeWebhook = (event) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
@@ -880,8 +931,87 @@ const getTeacherEarnings = (teacherId) => __awaiter(void 0, void 0, void 0, func
         avgPerCourse,
     };
 });
+// Enhanced payment split configuration
+const PAYMENT_SPLIT_CONFIG = {
+    TEACHER_PERCENTAGE: 0.7, // 70%
+    PLATFORM_PERCENTAGE: 0.3, // 30%
+    MINIMUM_AMOUNT: 1, // $1 minimum
+    MAXIMUM_AMOUNT: 10000, // $10,000 maximum
+    CURRENCY: 'usd',
+    RETRY_ATTEMPTS: 3,
+    RETRY_DELAY: 1000, // 1 second
+};
+// Enhanced split calculation with validation
+const calculatePaymentSplits = (amount) => {
+    // Validate amount
+    if (amount < PAYMENT_SPLIT_CONFIG.MINIMUM_AMOUNT) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Amount must be at least $${PAYMENT_SPLIT_CONFIG.MINIMUM_AMOUNT}`);
+    }
+    if (amount > PAYMENT_SPLIT_CONFIG.MAXIMUM_AMOUNT) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Amount cannot exceed $${PAYMENT_SPLIT_CONFIG.MAXIMUM_AMOUNT}`);
+    }
+    // Calculate amounts in cents for Stripe
+    const totalAmountCents = Math.round(amount * 100);
+    const platformFeeCents = Math.round(totalAmountCents * PAYMENT_SPLIT_CONFIG.PLATFORM_PERCENTAGE);
+    const teacherShareCents = totalAmountCents - platformFeeCents;
+    // Validate splits add up correctly
+    if (teacherShareCents + platformFeeCents !== totalAmountCents) {
+        console.warn('Payment split calculation mismatch:', {
+            total: totalAmountCents,
+            teacher: teacherShareCents,
+            platform: platformFeeCents,
+            difference: totalAmountCents - (teacherShareCents + platformFeeCents)
+        });
+    }
+    return {
+        totalAmountCents,
+        teacherShareCents,
+        platformFeeCents,
+        teacherShareDollars: teacherShareCents / 100,
+        platformFeeDollars: platformFeeCents / 100,
+        teacherPercentage: PAYMENT_SPLIT_CONFIG.TEACHER_PERCENTAGE,
+        platformPercentage: PAYMENT_SPLIT_CONFIG.PLATFORM_PERCENTAGE,
+    };
+};
+// Enhanced Stripe account validation
+const validateStripeAccount = (stripeAccountId) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const account = yield stripe.accounts.retrieve(stripeAccountId);
+        const validation = {
+            exists: true,
+            chargesEnabled: account.charges_enabled || false,
+            payoutsEnabled: account.payouts_enabled || false,
+            detailsSubmitted: account.details_submitted || false,
+            requirements: ((_a = account.requirements) === null || _a === void 0 ? void 0 : _a.currently_due) || [],
+            isFullyVerified: false,
+            canReceivePayments: false,
+        };
+        // Check if account is fully verified and can receive payments
+        validation.isFullyVerified = validation.chargesEnabled &&
+            validation.payoutsEnabled &&
+            validation.detailsSubmitted &&
+            validation.requirements.length === 0;
+        validation.canReceivePayments = validation.chargesEnabled && validation.detailsSubmitted;
+        return validation;
+    }
+    catch (error) {
+        console.error('Error validating Stripe account:', error);
+        return {
+            exists: false,
+            chargesEnabled: false,
+            payoutsEnabled: false,
+            detailsSubmitted: false,
+            requirements: [],
+            isFullyVerified: false,
+            canReceivePayments: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        };
+    }
+});
 const createCheckoutSession = (studentId, courseId, amount) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        console.log('Creating checkout session:', { studentId, courseId, amount });
         // Validate course exists
         const course = yield course_model_1.Course.findById(courseId);
         if (!course) {
@@ -897,31 +1027,49 @@ const createCheckoutSession = (studentId, courseId, amount) => __awaiter(void 0,
         if (!student) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Student not found');
         }
-        if (student.enrolledCourses.some((course) => course.courseId.toString() === courseId)) {
+        if (student.enrolledCourses.some((enrolledCourse) => enrolledCourse.courseId.toString() === courseId)) {
             throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Already enrolled in this course');
         }
-        // Calculate the price and fee
+        // Calculate the price and validate
         const coursePrice = amount !== undefined ? amount : course.coursePrice || 0;
-        const platformFeePercent = 0.3; // 30%
-        // Calculate amounts in cents
-        const priceInCents = Math.round(coursePrice * 100);
-        const platformFeeInCents = Math.round(priceInCents * platformFeePercent);
-        const teacherShareInCents = priceInCents - platformFeeInCents;
+        if (coursePrice <= 0) {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Course price must be greater than 0');
+        }
+        // Calculate payment splits with enhanced validation
+        const splits = calculatePaymentSplits(coursePrice);
+        console.log('Payment splits calculated:', splits);
+        // Validate teacher's Stripe account
+        let stripeAccountValidation = null;
+        if (teacher.stripeAccountId) {
+            stripeAccountValidation = yield validateStripeAccount(teacher.stripeAccountId);
+            console.log('Stripe account validation:', stripeAccountValidation);
+            if (!stripeAccountValidation.canReceivePayments) {
+                throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Teacher\'s payment account is not ready to receive payments. Please complete account setup.');
+            }
+        }
+        else {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Teacher has not connected their payment account yet.');
+        }
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         const successUrl = `${frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${frontendUrl}/payment/cancel`;
-        // Create session parameters
+        // Create enhanced session parameters
         const sessionParams = {
             payment_method_types: ['card'],
             line_items: [
                 {
                     price_data: {
-                        currency: 'usd',
+                        currency: PAYMENT_SPLIT_CONFIG.CURRENCY,
                         product_data: {
                             name: course.title,
                             description: course.description || 'Course enrollment',
+                            images: course.courseThumbnail ? [course.courseThumbnail] : [],
+                            metadata: {
+                                courseId: courseId,
+                                teacherId: teacher._id.toString(),
+                            },
                         },
-                        unit_amount: priceInCents,
+                        unit_amount: splits.totalAmountCents,
                     },
                     quantity: 1,
                 },
@@ -929,40 +1077,50 @@ const createCheckoutSession = (studentId, courseId, amount) => __awaiter(void 0,
             mode: 'payment',
             success_url: successUrl,
             cancel_url: cancelUrl,
+            customer_email: student.email,
             metadata: {
                 courseId: courseId,
                 studentId: studentId,
-                teacherId: course.creator.toString(),
-                teacherShare: teacherShareInCents.toString(),
-                platformFee: platformFeeInCents.toString(),
+                teacherId: teacher._id.toString(),
+                teacherShare: splits.teacherShareCents.toString(),
+                platformFee: splits.platformFeeCents.toString(),
+                teacherPercentage: splits.teacherPercentage.toString(),
+                platformPercentage: splits.platformPercentage.toString(),
+                version: '2.0', // Version for tracking enhanced processing
             },
-        };
-        let isValidStripeAccount = false;
-        if (teacher.stripeAccountId) {
-            try {
-                // Verify the account exists and is valid
-                const account = yield stripe.accounts.retrieve(teacher.stripeAccountId);
-                isValidStripeAccount =
-                    account.id === teacher.stripeAccountId && account.charges_enabled;
-            }
-            catch (error) {
-                console.error('Error verifying Stripe account:', error);
-                isValidStripeAccount = false;
-            }
-        }
-        // Only add transfer data if the account is valid
-        if (isValidStripeAccount) {
-            sessionParams.payment_intent_data = {
-                application_fee_amount: platformFeeInCents,
+            // Enhanced payment configuration
+            payment_intent_data: {
+                application_fee_amount: splits.platformFeeCents,
                 transfer_data: {
                     destination: teacher.stripeAccountId,
                 },
-            };
-        }
-        else {
-            console.log('Not using Stripe Connect - account invalid or not found');
-        }
+                metadata: {
+                    courseId: courseId,
+                    studentId: studentId,
+                    teacherId: teacher._id.toString(),
+                    teacherShare: splits.teacherShareDollars.toString(),
+                    platformFee: splits.platformFeeDollars.toString(),
+                },
+            },
+            // Enhanced session configuration
+            expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
+            allow_promotion_codes: true,
+            billing_address_collection: 'auto',
+            shipping_address_collection: {
+                allowed_countries: ['US', 'CA', 'GB', 'AU', 'DE', 'FR', 'IT', 'ES', 'NL', 'SE', 'NO', 'DK', 'FI'],
+            },
+        };
+        console.log('Creating Stripe checkout session with params:', Object.assign(Object.assign({}, sessionParams), { payment_intent_data: Object.assign(Object.assign({}, sessionParams.payment_intent_data), { transfer_data: {
+                    destination: teacher.stripeAccountId,
+                } }) }));
         const session = yield stripe.checkout.sessions.create(sessionParams);
+        console.log('Checkout session created successfully:', {
+            sessionId: session.id,
+            url: session.url,
+            amount: splits.totalAmountCents,
+            teacherShare: splits.teacherShareCents,
+            platformFee: splits.platformFeeCents,
+        });
         return session;
     }
     catch (error) {

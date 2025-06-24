@@ -12,8 +12,12 @@ const payout_controller_1 = require("./payout.controller");
 const router = (0, express_1.Router)();
 // Checkout and payment processing
 router.post('/create-checkout-session', (0, auth_1.default)(user_constant_1.USER_ROLE.student), payment_controller_1.PaymentControllers.createCheckoutSession);
-// Webhook route - no auth middleware to allow Stripe to call it
+// Legacy webhook route - maintained for backward compatibility
 router.post('/webhook', payment_controller_1.PaymentControllers.handleWebhook);
+// Enhanced webhook routes with dual endpoint support
+// Import and use the new webhook event routes
+const webhookEvent_routes_1 = require("../WebhookEvent/webhookEvent.routes");
+router.use('/webhook', webhookEvent_routes_1.WebhookEventRoutes);
 // Stripe Connect for teachers
 router.post('/connect-stripe/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payment_controller_1.PaymentControllers.connectStripeAccount);
 router.post('/create-onboarding-link/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payment_controller_1.PaymentControllers.createOnboardingLink);
@@ -34,4 +38,12 @@ router.get('/payouts/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.
 router.get('/payouts/details/:payoutId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.getPayoutById);
 router.put('/payouts/preferences/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.updatePayoutPreferences);
 router.get('/payouts/preferences/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.getPayoutPreferences);
+// Enhanced financial analytics routes
+router.get('/financial-summary/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payment_controller_1.PaymentControllers.getFinancialSummary);
+router.get('/earnings-growth/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payment_controller_1.PaymentControllers.getEarningsGrowth);
+router.get('/top-courses/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payment_controller_1.PaymentControllers.getTopPerformingCourses);
+router.get('/revenue-chart/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payment_controller_1.PaymentControllers.getRevenueChart);
+router.post('/export-financial-data/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payment_controller_1.PaymentControllers.exportFinancialData);
+// Payout request route
+router.post('/payout-request/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.createPayoutRequest);
 exports.PaymentRoutes = router;

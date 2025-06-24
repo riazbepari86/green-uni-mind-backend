@@ -5,8 +5,9 @@ exports.USER_ROLE = {
     user: 'user',
     student: 'student',
     teacher: 'teacher',
+    admin: 'admin',
 };
-exports.UserRole = ['teacher', 'student', 'user'];
+exports.UserRole = ['teacher', 'student', 'user', 'admin'];
 exports.UserStatus = ['in-progress', 'blocked'];
 exports.AdminSearchableFields = [
     'name',

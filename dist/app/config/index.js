@@ -24,8 +24,11 @@ exports.default = {
     invite_teacher_link: process.env.INVITE_TEACHER_LINK,
     stripe_secret_key: process.env.STRIPE_SECRET_KEY,
     stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
+    stripe_connect_webhook_secret: process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
+    stripe_webhook_endpoint_url: process.env.STRIPE_WEBHOOK_ENDPOINT_URL,
     stripe_mother_account_id: process.env.MOTHER_STRIPE_ACCOUNT_ID,
     frontend_url: process.env.FRONTEND_URL || 'http://localhost:8080',
+    gemini_api_key: process.env.GEMINI_API_KEY,
     redis: {
         host: process.env.REDIS_HOST || ((_b = (_a = process.env.REDIS_URL) === null || _a === void 0 ? void 0 : _a.split('@')[1]) === null || _b === void 0 ? void 0 : _b.split(':')[0]) || 'localhost',
         port: parseInt(process.env.REDIS_PORT || ((_d = (_c = process.env.REDIS_URL) === null || _c === void 0 ? void 0 : _c.split(':').pop()) === null || _d === void 0 ? void 0 : _d.split('/')[0]) || '6379'),

@@ -13,8 +13,15 @@ import { Logger } from './app/config/logger';
 import { specializedLog } from './app/utils/console-replacement';
 // Import startup profiler
 import { startPhase, completePhase, failPhase, completeStartup } from './app/utils/StartupProfiler';
+// Import WebSocket and related services
+import WebSocketService from './app/services/websocket/WebSocketService';
+import ActivityTrackingService from './app/services/activity/ActivityTrackingService';
+import MessagingService from './app/services/messaging/MessagingService';
 
 let server: Server;
+let webSocketService: WebSocketService;
+let activityTrackingService: ActivityTrackingService;
+let messagingService: MessagingService;
 
 async function main() {
   try {
@@ -49,6 +56,25 @@ async function main() {
       } catch (error) {
         Logger.error('Failed to start keep-alive service', { error });
         failPhase('Keep-alive Service', error);
+      }
+
+      // Initialize WebSocket service
+      startPhase('WebSocket Service');
+      try {
+        webSocketService = new WebSocketService(server);
+        activityTrackingService = new ActivityTrackingService(webSocketService);
+        messagingService = new MessagingService();
+
+        // Set up service dependencies
+        messagingService.setWebSocketService(webSocketService);
+        messagingService.setActivityTrackingService(activityTrackingService);
+
+        Logger.info('✅ WebSocket service initialized successfully');
+        specializedLog.system.startup('WebSocket service');
+        completePhase('WebSocket Service');
+      } catch (error) {
+        Logger.error('❌ WebSocket service initialization failed:', { error });
+        failPhase('WebSocket Service', error);
       }
 
       // Complete startup profiling after all immediate tasks

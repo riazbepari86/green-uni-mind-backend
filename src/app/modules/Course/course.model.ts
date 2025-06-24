@@ -90,6 +90,35 @@ const courseSchema = new Schema<ICourse>(
         message: 'Invalid course Is Free',
       },
     },
+    learningObjectives: {
+      type: [String],
+      default: [],
+    },
+    prerequisites: {
+      type: String,
+      trim: true,
+    },
+    targetAudience: {
+      type: String,
+      trim: true,
+    },
+    estimatedDuration: {
+      type: String,
+      trim: true,
+    },
+    language: {
+      type: String,
+      trim: true,
+      default: 'English',
+    },
+    hasSubtitles: {
+      type: Boolean,
+      default: false,
+    },
+    hasCertificate: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

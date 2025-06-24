@@ -51,9 +51,11 @@ const payout_model_1 = require("./payout.model");
 const payout_interface_1 = require("./payout.interface");
 const teacher_model_1 = require("../Teacher/teacher.model");
 const transaction_model_1 = require("./transaction.model");
+const auditLog_service_1 = require("../AuditLog/auditLog.service");
 const AppError_1 = __importDefault(require("../../errors/AppError"));
 const http_status_1 = __importDefault(require("http-status"));
 const stripe_1 = require("../../utils/stripe");
+const auditLog_interface_1 = require("../AuditLog/auditLog.interface");
 /**
  * Create a payout request for a teacher
  */
@@ -250,8 +252,216 @@ const getPayoutById = (payoutId) => __awaiter(void 0, void 0, void 0, function* 
         throw new AppError_1.default(http_status_1.default.INTERNAL_SERVER_ERROR, 'Failed to get payout details');
     }
 });
+/**
+ * Create or update payout preferences for a teacher
+ */
+const createOrUpdatePayoutPreferences = (teacherId, preferences) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const teacher = yield teacher_model_1.Teacher.findById(teacherId);
+        if (!teacher) {
+            throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Teacher not found');
+        }
+        const existingPreferences = yield payout_model_1.PayoutPreference.findOne({ teacherId });
+        if (existingPreferences) {
+            Object.assign(existingPreferences, preferences);
+            existingPreferences.lastUpdated = new Date();
+            yield existingPreferences.save();
+            yield auditLog_service_1.AuditLogService.createAuditLog({
+                action: auditLog_interface_1.AuditLogAction.USER_PROFILE_UPDATED,
+                category: auditLog_interface_1.AuditLogCategory.PAYOUT,
+                level: auditLog_interface_1.AuditLogLevel.INFO,
+                message: 'Payout preferences updated',
+                userId: teacherId,
+                userType: 'teacher',
+                resourceType: 'payout_preferences',
+                resourceId: existingPreferences._id.toString(),
+                metadata: {
+                    updatedFields: Object.keys(preferences),
+                    previousSchedule: existingPreferences.schedule,
+                    newSchedule: preferences.schedule,
+                },
+            });
+            return existingPreferences;
+        }
+        else {
+            const newPreferences = new payout_model_1.PayoutPreference(Object.assign(Object.assign({ teacherId }, preferences), { lastUpdated: new Date() }));
+            yield newPreferences.save();
+            yield auditLog_service_1.AuditLogService.createAuditLog({
+                action: auditLog_interface_1.AuditLogAction.PAYOUT_CREATED,
+                category: auditLog_interface_1.AuditLogCategory.PAYOUT,
+                level: auditLog_interface_1.AuditLogLevel.INFO,
+                message: 'Payout preferences created',
+                userId: teacherId,
+                userType: 'teacher',
+                resourceType: 'payout_preferences',
+                resourceId: newPreferences._id.toString(),
+                metadata: {
+                    schedule: preferences.schedule,
+                    minimumAmount: preferences.minimumAmount,
+                    isAutoPayoutEnabled: preferences.isAutoPayoutEnabled,
+                },
+            });
+            return newPreferences;
+        }
+    }
+    catch (error) {
+        console.error('Error creating/updating payout preferences:', error);
+        throw error;
+    }
+});
+/**
+ * Get pending earnings for a teacher
+ */
+const getPendingEarnings = (teacherId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const pipeline = [
+            {
+                $match: {
+                    teacherId: new mongoose_1.Types.ObjectId(teacherId),
+                    stripeTransferStatus: 'pending',
+                },
+            },
+            {
+                $group: {
+                    _id: '$currency',
+                    totalAmount: { $sum: '$teacherEarning' },
+                    transactionCount: { $sum: 1 },
+                    transactions: { $push: '$$ROOT' },
+                },
+            },
+        ];
+        const results = yield transaction_model_1.Transaction.aggregate(pipeline);
+        if (results.length === 0) {
+            return {
+                totalAmount: 0,
+                transactionCount: 0,
+                transactions: [],
+                currency: 'usd',
+            };
+        }
+        const result = results[0];
+        return {
+            totalAmount: result.totalAmount,
+            transactionCount: result.transactionCount,
+            transactions: result.transactions,
+            currency: result._id || 'usd',
+        };
+    }
+    catch (error) {
+        console.error('Error getting pending earnings:', error);
+        throw error;
+    }
+});
+/**
+ * Get payout analytics for a teacher
+ */
+const getPayoutAnalytics = (teacherId, startDate, endDate) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const pipeline = [
+            {
+                $match: {
+                    teacherId: new mongoose_1.Types.ObjectId(teacherId),
+                    createdAt: { $gte: startDate, $lte: endDate },
+                },
+            },
+            {
+                $facet: {
+                    totalStats: [
+                        {
+                            $group: {
+                                _id: null,
+                                totalPayouts: { $sum: 1 },
+                                totalAmount: { $sum: '$amount' },
+                                avgAmount: { $avg: '$amount' },
+                                avgProcessingTime: { $avg: '$processingDuration' },
+                            },
+                        },
+                    ],
+                    statusStats: [
+                        {
+                            $group: {
+                                _id: '$status',
+                                count: { $sum: 1 },
+                            },
+                        },
+                    ],
+                    failureStats: [
+                        {
+                            $match: { status: payout_interface_1.PayoutStatus.FAILED },
+                        },
+                        {
+                            $group: {
+                                _id: '$failureCategory',
+                                count: { $sum: 1 },
+                            },
+                        },
+                    ],
+                    dailyTrends: [
+                        {
+                            $group: {
+                                _id: {
+                                    $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+                                },
+                                count: { $sum: 1 },
+                                amount: { $sum: '$amount' },
+                            },
+                        },
+                        { $sort: { _id: 1 } },
+                    ],
+                },
+            },
+        ];
+        const [result] = yield payout_model_1.Payout.aggregate(pipeline);
+        const totalStats = result.totalStats[0] || {
+            totalPayouts: 0,
+            totalAmount: 0,
+            avgAmount: 0,
+            avgProcessingTime: 0,
+        };
+        const statusStats = {};
+        result.statusStats.forEach((item) => {
+            statusStats[item._id] = item.count;
+        });
+        const failureStats = {};
+        result.failureStats.forEach((item) => {
+            failureStats[item._id] = item.count;
+        });
+        const successfulPayouts = statusStats[payout_interface_1.PayoutStatus.COMPLETED] || 0;
+        const successRate = totalStats.totalPayouts > 0
+            ? (successfulPayouts / totalStats.totalPayouts) * 100
+            : 0;
+        return {
+            totalPayouts: totalStats.totalPayouts,
+            totalAmount: totalStats.totalAmount,
+            currency: 'usd',
+            averageAmount: totalStats.avgAmount,
+            successRate,
+            averageProcessingTime: totalStats.avgProcessingTime,
+            payoutsByStatus: statusStats,
+            payoutsBySchedule: {}, // Would need to be calculated separately
+            failuresByCategory: failureStats,
+            timeRange: { start: startDate, end: endDate },
+            trends: {
+                daily: result.dailyTrends.map((item) => ({
+                    date: item._id,
+                    count: item.count,
+                    amount: item.amount,
+                })),
+                weekly: [], // Would need separate aggregation
+                monthly: [], // Would need separate aggregation
+            },
+        };
+    }
+    catch (error) {
+        console.error('Error getting payout analytics:', error);
+        throw error;
+    }
+});
 exports.PayoutService = {
     createPayoutRequest,
     getPayoutHistory,
     getPayoutById,
+    createOrUpdatePayoutPreferences,
+    getPendingEarnings,
+    getPayoutAnalytics,
 };

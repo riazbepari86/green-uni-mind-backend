@@ -29,6 +29,82 @@ const teacherNameSchema = new mongoose_1.Schema({
         maxlength: [20, 'Name can not be more than 20 characters'],
     },
 });
+const stripeConnectSchema = new mongoose_1.Schema({
+    accountId: {
+        type: String,
+        sparse: true,
+    },
+    email: {
+        type: String,
+        sparse: true,
+    },
+    status: {
+        type: String,
+        enum: ['not_connected', 'pending', 'connected', 'failed', 'disconnected', 'restricted'],
+        default: 'not_connected',
+    },
+    onboardingComplete: {
+        type: Boolean,
+        default: false,
+    },
+    verified: {
+        type: Boolean,
+        default: false,
+    },
+    requirements: {
+        type: [String],
+        default: [],
+    },
+    capabilities: {
+        card_payments: {
+            type: String,
+            enum: ['active', 'inactive', 'pending'],
+        },
+        transfers: {
+            type: String,
+            enum: ['active', 'inactive', 'pending'],
+        },
+    },
+    lastStatusUpdate: {
+        type: Date,
+        default: Date.now,
+    },
+    onboardingUrl: {
+        type: String,
+    },
+    failureReason: {
+        type: String,
+    },
+    connectedAt: {
+        type: Date,
+    },
+    disconnectedAt: {
+        type: Date,
+    },
+    lastWebhookReceived: {
+        type: Date,
+    },
+});
+const stripeAuditLogSchema = new mongoose_1.Schema({
+    action: {
+        type: String,
+        enum: ['account_created', 'onboarding_started', 'onboarding_completed', 'account_verified', 'account_disconnected', 'webhook_received', 'error_occurred'],
+        required: true,
+    },
+    timestamp: {
+        type: Date,
+        default: Date.now,
+    },
+    details: {
+        type: mongoose_1.Schema.Types.Mixed,
+    },
+    ipAddress: {
+        type: String,
+    },
+    userAgent: {
+        type: String,
+    },
+});
 const teacherSchema = new mongoose_1.Schema({
     user: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -61,6 +137,7 @@ const teacherSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false,
     },
+    // Legacy Stripe fields (keeping for backward compatibility)
     stripeAccountId: {
         type: String,
         unique: true,
@@ -81,6 +158,15 @@ const teacherSchema = new mongoose_1.Schema({
     },
     stripeRequirements: {
         type: [String],
+        default: [],
+    },
+    // Enhanced Stripe Connect integration
+    stripeConnect: {
+        type: stripeConnectSchema,
+        default: () => ({}),
+    },
+    stripeAuditLog: {
+        type: [stripeAuditLogSchema],
         default: [],
     },
     earnings: {

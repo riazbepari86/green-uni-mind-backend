@@ -59,7 +59,14 @@ const logger_1 = require("./app/config/logger");
 const console_replacement_1 = require("./app/utils/console-replacement");
 // Import startup profiler
 const StartupProfiler_1 = require("./app/utils/StartupProfiler");
+// Import WebSocket and related services
+const WebSocketService_1 = __importDefault(require("./app/services/websocket/WebSocketService"));
+const ActivityTrackingService_1 = __importDefault(require("./app/services/activity/ActivityTrackingService"));
+const MessagingService_1 = __importDefault(require("./app/services/messaging/MessagingService"));
 let server;
+let webSocketService;
+let activityTrackingService;
+let messagingService;
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -91,6 +98,23 @@ function main() {
                 catch (error) {
                     logger_1.Logger.error('Failed to start keep-alive service', { error });
                     (0, StartupProfiler_1.failPhase)('Keep-alive Service', error);
+                }
+                // Initialize WebSocket service
+                (0, StartupProfiler_1.startPhase)('WebSocket Service');
+                try {
+                    webSocketService = new WebSocketService_1.default(server);
+                    activityTrackingService = new ActivityTrackingService_1.default(webSocketService);
+                    messagingService = new MessagingService_1.default();
+                    // Set up service dependencies
+                    messagingService.setWebSocketService(webSocketService);
+                    messagingService.setActivityTrackingService(activityTrackingService);
+                    logger_1.Logger.info('✅ WebSocket service initialized successfully');
+                    console_replacement_1.specializedLog.system.startup('WebSocket service');
+                    (0, StartupProfiler_1.completePhase)('WebSocket Service');
+                }
+                catch (error) {
+                    logger_1.Logger.error('❌ WebSocket service initialization failed:', { error });
+                    (0, StartupProfiler_1.failPhase)('WebSocket Service', error);
                 }
                 // Complete startup profiling after all immediate tasks
                 setTimeout(() => {

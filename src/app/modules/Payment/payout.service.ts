@@ -1,14 +1,33 @@
 import Stripe from 'stripe';
+import cron from 'node-cron';
 import mongoose, { Types } from 'mongoose';
-import { Payout, PayoutPreference } from './payout.model';
-import { PayoutSchedule, PayoutStatus } from './payout.interface';
+import { Payout, PayoutPreference, PayoutBatch } from './payout.model';
+import {
+  PayoutSchedule,
+  PayoutStatus,
+  PayoutFailureCategory,
+  IPayoutAnalytics,
+  IPayoutQuery,
+  IPayoutRetryConfig
+} from './payout.interface';
 import { Teacher } from '../Teacher/teacher.model';
 import { Transaction } from './transaction.model';
 import { PayoutSummary } from './payoutSummary.model';
+import { AuditLogService } from '../AuditLog/auditLog.service';
+import { NotificationService } from '../Notification/notification.service';
 import AppError from '../../errors/AppError';
 import httpStatus from 'http-status';
 import config from '../../config';
 import { stripe } from '../../utils/stripe';
+import {
+  AuditLogAction,
+  AuditLogCategory,
+  AuditLogLevel
+} from '../AuditLog/auditLog.interface';
+import {
+  NotificationType,
+  NotificationPriority
+} from '../Notification/notification.interface';
 
 /**
  * Create a payout request for a teacher
@@ -270,8 +289,242 @@ const getPayoutById = async (payoutId: string) => {
   }
 };
 
+/**
+ * Create or update payout preferences for a teacher
+ */
+const createOrUpdatePayoutPreferences = async (
+  teacherId: string | Types.ObjectId,
+  preferences: Partial<any>
+) => {
+  try {
+    const teacher = await Teacher.findById(teacherId);
+    if (!teacher) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Teacher not found');
+    }
+
+    const existingPreferences = await PayoutPreference.findOne({ teacherId });
+
+    if (existingPreferences) {
+      Object.assign(existingPreferences, preferences);
+      existingPreferences.lastUpdated = new Date();
+      await existingPreferences.save();
+
+      await AuditLogService.createAuditLog({
+        action: AuditLogAction.USER_PROFILE_UPDATED,
+        category: AuditLogCategory.PAYOUT,
+        level: AuditLogLevel.INFO,
+        message: 'Payout preferences updated',
+        userId: teacherId,
+        userType: 'teacher',
+        resourceType: 'payout_preferences',
+        resourceId: existingPreferences._id.toString(),
+        metadata: {
+          updatedFields: Object.keys(preferences),
+          previousSchedule: existingPreferences.schedule,
+          newSchedule: preferences.schedule,
+        },
+      });
+
+      return existingPreferences;
+    } else {
+      const newPreferences = new PayoutPreference({
+        teacherId,
+        ...preferences,
+        lastUpdated: new Date(),
+      });
+
+      await newPreferences.save();
+
+      await AuditLogService.createAuditLog({
+        action: AuditLogAction.PAYOUT_CREATED,
+        category: AuditLogCategory.PAYOUT,
+        level: AuditLogLevel.INFO,
+        message: 'Payout preferences created',
+        userId: teacherId,
+        userType: 'teacher',
+        resourceType: 'payout_preferences',
+        resourceId: newPreferences._id.toString(),
+        metadata: {
+          schedule: preferences.schedule,
+          minimumAmount: preferences.minimumAmount,
+          isAutoPayoutEnabled: preferences.isAutoPayoutEnabled,
+        },
+      });
+
+      return newPreferences;
+    }
+  } catch (error: any) {
+    console.error('Error creating/updating payout preferences:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get pending earnings for a teacher
+ */
+const getPendingEarnings = async (teacherId: string | Types.ObjectId) => {
+  try {
+    const pipeline = [
+      {
+        $match: {
+          teacherId: new Types.ObjectId(teacherId),
+          stripeTransferStatus: 'pending',
+        },
+      },
+      {
+        $group: {
+          _id: '$currency',
+          totalAmount: { $sum: '$teacherEarning' },
+          transactionCount: { $sum: 1 },
+          transactions: { $push: '$$ROOT' },
+        },
+      },
+    ];
+
+    const results = await Transaction.aggregate(pipeline);
+
+    if (results.length === 0) {
+      return {
+        totalAmount: 0,
+        transactionCount: 0,
+        transactions: [],
+        currency: 'usd',
+      };
+    }
+
+    const result = results[0];
+    return {
+      totalAmount: result.totalAmount,
+      transactionCount: result.transactionCount,
+      transactions: result.transactions,
+      currency: result._id || 'usd',
+    };
+  } catch (error: any) {
+    console.error('Error getting pending earnings:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get payout analytics for a teacher
+ */
+const getPayoutAnalytics = async (
+  teacherId: string | Types.ObjectId,
+  startDate: Date,
+  endDate: Date
+): Promise<IPayoutAnalytics> => {
+  try {
+    const pipeline = [
+      {
+        $match: {
+          teacherId: new Types.ObjectId(teacherId),
+          createdAt: { $gte: startDate, $lte: endDate },
+        },
+      },
+      {
+        $facet: {
+          totalStats: [
+            {
+              $group: {
+                _id: null,
+                totalPayouts: { $sum: 1 },
+                totalAmount: { $sum: '$amount' },
+                avgAmount: { $avg: '$amount' },
+                avgProcessingTime: { $avg: '$processingDuration' },
+              },
+            },
+          ],
+          statusStats: [
+            {
+              $group: {
+                _id: '$status',
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          failureStats: [
+            {
+              $match: { status: PayoutStatus.FAILED },
+            },
+            {
+              $group: {
+                _id: '$failureCategory',
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          dailyTrends: [
+            {
+              $group: {
+                _id: {
+                  $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+                },
+                count: { $sum: 1 },
+                amount: { $sum: '$amount' },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ],
+        },
+      },
+    ];
+
+    const [result] = await Payout.aggregate(pipeline);
+
+    const totalStats = result.totalStats[0] || {
+      totalPayouts: 0,
+      totalAmount: 0,
+      avgAmount: 0,
+      avgProcessingTime: 0,
+    };
+
+    const statusStats: Record<PayoutStatus, number> = {} as any;
+    result.statusStats.forEach((item: any) => {
+      statusStats[item._id] = item.count;
+    });
+
+    const failureStats: Record<PayoutFailureCategory, number> = {} as any;
+    result.failureStats.forEach((item: any) => {
+      failureStats[item._id] = item.count;
+    });
+
+    const successfulPayouts = statusStats[PayoutStatus.COMPLETED] || 0;
+    const successRate = totalStats.totalPayouts > 0
+      ? (successfulPayouts / totalStats.totalPayouts) * 100
+      : 0;
+
+    return {
+      totalPayouts: totalStats.totalPayouts,
+      totalAmount: totalStats.totalAmount,
+      currency: 'usd',
+      averageAmount: totalStats.avgAmount,
+      successRate,
+      averageProcessingTime: totalStats.avgProcessingTime,
+      payoutsByStatus: statusStats,
+      payoutsBySchedule: {} as any, // Would need to be calculated separately
+      failuresByCategory: failureStats,
+      timeRange: { start: startDate, end: endDate },
+      trends: {
+        daily: result.dailyTrends.map((item: any) => ({
+          date: item._id,
+          count: item.count,
+          amount: item.amount,
+        })),
+        weekly: [], // Would need separate aggregation
+        monthly: [], // Would need separate aggregation
+      },
+    };
+  } catch (error: any) {
+    console.error('Error getting payout analytics:', error);
+    throw error;
+  }
+};
+
 export const PayoutService = {
   createPayoutRequest,
   getPayoutHistory,
   getPayoutById,
+  createOrUpdatePayoutPreferences,
+  getPendingEarnings,
+  getPayoutAnalytics,
 };

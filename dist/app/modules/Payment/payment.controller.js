@@ -468,6 +468,86 @@ const getTransactionAnalytics = (0, catchAsync_1.default)((req, res) => __awaite
         data: result,
     });
 }));
+// Enhanced financial analytics controllers
+const getFinancialSummary = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { teacherId } = req.params;
+    const { period } = req.query;
+    // Mock implementation - replace with actual service call
+    const result = {
+        totalRevenue: 5000,
+        growthRate: 15.5,
+        totalStudents: 120,
+        averageCoursePrice: 99.99,
+    };
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Financial summary retrieved successfully',
+        data: result,
+    });
+}));
+const getEarningsGrowth = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { teacherId } = req.params;
+    const { period } = req.query;
+    // Mock implementation - replace with actual service call
+    const result = {
+        currentPeriod: 3500,
+        previousPeriod: 3000,
+        growthRate: 16.7,
+        chartData: [],
+    };
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Earnings growth retrieved successfully',
+        data: result,
+    });
+}));
+const getTopPerformingCourses = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { teacherId } = req.params;
+    const { period } = req.query;
+    // Mock implementation - replace with actual service call
+    const result = [
+        { id: '1', title: 'React Masterclass', revenue: 2500, enrollments: 50 },
+        { id: '2', title: 'Node.js Complete Guide', revenue: 2000, enrollments: 40 },
+    ];
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Top performing courses retrieved successfully',
+        data: result,
+    });
+}));
+const getRevenueChart = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { teacherId } = req.params;
+    const { period, groupBy } = req.query;
+    // Mock implementation - replace with actual service call
+    const result = {
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+        data: [1000, 1500, 2000, 2500, 3000],
+    };
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Revenue chart data retrieved successfully',
+        data: result,
+    });
+}));
+const exportFinancialData = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { teacherId } = req.params;
+    const { period } = req.query;
+    // Mock implementation - replace with actual service call
+    const result = {
+        downloadUrl: 'https://example.com/financial-report.csv',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+    };
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Financial data export initiated successfully',
+        data: result,
+    });
+}));
 exports.PaymentControllers = {
     createPaymentIntent,
     createCheckoutSession,
@@ -484,4 +564,9 @@ exports.PaymentControllers = {
     getTransactionBySessionId,
     getTeacherUpcomingPayout,
     getTransactionAnalytics,
+    getFinancialSummary,
+    getEarningsGrowth,
+    getTopPerformingCourses,
+    getRevenueChart,
+    exportFinancialData,
 };

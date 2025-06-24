@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  courseCategories,
   courseIsFree,
   courseLevel,
   courseStatus,
@@ -17,9 +16,17 @@ const createCourseZodSchema = z.object({
     subtitle: z.string().optional(),
     description: z.string().optional(),
 
-    category: z.enum(courseCategories, {
-      required_error: 'Category is required',
-    }),
+    categoryId: z
+      .string({
+        required_error: 'Category ID is required',
+      })
+      .min(1, { message: 'Category ID cannot be empty' }),
+
+    subcategoryId: z
+      .string({
+        required_error: 'Subcategory ID is required',
+      })
+      .min(1, { message: 'Subcategory ID cannot be empty' }),
 
     courseLevel: z.enum(courseLevel, {
       required_error: 'Course level is required',
@@ -46,6 +53,14 @@ const createCourseZodSchema = z.object({
     isFree: z.enum(courseIsFree).optional(),
     courseThumbnail: z.string().optional(),
     courseThumbnailPublicId: z.string().optional(),
+
+    learningObjectives: z.array(z.string()).optional(),
+    prerequisites: z.string().optional(),
+    targetAudience: z.string().optional(),
+    estimatedDuration: z.string().optional(),
+    language: z.string().optional(),
+    hasSubtitles: z.boolean().optional(),
+    hasCertificate: z.boolean().optional(),
   }),
 });
 
@@ -57,7 +72,9 @@ const updateCourseZodSchema = z.object({
 
     description: z.string().optional(),
 
-    category: z.enum(courseCategories).optional(),
+    categoryId: z.string().optional(),
+
+    subcategoryId: z.string().optional(),
 
     courseLevel: z.enum(courseLevel).optional(),
 
@@ -78,6 +95,14 @@ const updateCourseZodSchema = z.object({
     status: z.enum(courseStatus).optional(),
 
     isFree: z.enum(courseIsFree).optional(),
+
+    learningObjectives: z.array(z.string()).optional(),
+    prerequisites: z.string().optional(),
+    targetAudience: z.string().optional(),
+    estimatedDuration: z.string().optional(),
+    language: z.string().optional(),
+    hasSubtitles: z.boolean().optional(),
+    hasCertificate: z.boolean().optional(),
   }),
 });
 
