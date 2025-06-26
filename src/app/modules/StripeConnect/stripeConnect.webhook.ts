@@ -8,7 +8,7 @@ import { Teacher } from '../Teacher/teacher.model';
 import config from '../../config';
 
 const stripe = new Stripe(config.stripe_secret_key as string, {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-04-30.basil',
 });
 
 // Webhook endpoint secret for verification

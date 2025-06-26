@@ -306,7 +306,6 @@ const createOrUpdatePayoutPreferences = async (
 
     if (existingPreferences) {
       Object.assign(existingPreferences, preferences);
-      existingPreferences.lastUpdated = new Date();
       await existingPreferences.save();
 
       await AuditLogService.createAuditLog({
@@ -317,7 +316,7 @@ const createOrUpdatePayoutPreferences = async (
         userId: teacherId,
         userType: 'teacher',
         resourceType: 'payout_preferences',
-        resourceId: existingPreferences._id.toString(),
+        resourceId: (existingPreferences._id as Types.ObjectId).toString(),
         metadata: {
           updatedFields: Object.keys(preferences),
           previousSchedule: existingPreferences.schedule,
@@ -330,7 +329,6 @@ const createOrUpdatePayoutPreferences = async (
       const newPreferences = new PayoutPreference({
         teacherId,
         ...preferences,
-        lastUpdated: new Date(),
       });
 
       await newPreferences.save();
@@ -343,7 +341,7 @@ const createOrUpdatePayoutPreferences = async (
         userId: teacherId,
         userType: 'teacher',
         resourceType: 'payout_preferences',
-        resourceId: newPreferences._id.toString(),
+        resourceId: (newPreferences._id as Types.ObjectId).toString(),
         metadata: {
           schedule: preferences.schedule,
           minimumAmount: preferences.minimumAmount,
@@ -414,7 +412,7 @@ const getPayoutAnalytics = async (
   endDate: Date
 ): Promise<IPayoutAnalytics> => {
   try {
-    const pipeline = [
+    const pipeline: any[] = [
       {
         $match: {
           teacherId: new Types.ObjectId(teacherId),
@@ -480,12 +478,16 @@ const getPayoutAnalytics = async (
 
     const statusStats: Record<PayoutStatus, number> = {} as any;
     result.statusStats.forEach((item: any) => {
-      statusStats[item._id] = item.count;
+      if (item._id && typeof item._id === 'string') {
+        statusStats[item._id as PayoutStatus] = item.count;
+      }
     });
 
     const failureStats: Record<PayoutFailureCategory, number> = {} as any;
     result.failureStats.forEach((item: any) => {
-      failureStats[item._id] = item.count;
+      if (item._id && typeof item._id === 'string') {
+        failureStats[item._id as PayoutFailureCategory] = item.count;
+      }
     });
 
     const successfulPayouts = statusStats[PayoutStatus.COMPLETED] || 0;

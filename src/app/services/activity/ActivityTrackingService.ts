@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import { Activity } from '../../modules/Analytics/analytics.model';
 import { IActivity, ActivityType, ActivityPriority } from '../../modules/Analytics/analytics.interface';
 import { Logger } from '../../config/logger';
-import WebSocketService from '../websocket/WebSocketService';
+// WebSocket removed - will be replaced with SSE/Polling system
 import { redisOperations } from '../../config/redis';
 
 interface ActivityData {
@@ -23,15 +23,13 @@ interface ActivityData {
 }
 
 class ActivityTrackingService {
-  private webSocketService: WebSocketService | null = null;
+  // WebSocket service removed - real-time updates will be handled by SSE/Polling
 
-  constructor(webSocketService?: WebSocketService) {
-    this.webSocketService = webSocketService || null;
+  constructor() {
+    // Constructor simplified - no WebSocket dependency
   }
 
-  public setWebSocketService(webSocketService: WebSocketService): void {
-    this.webSocketService = webSocketService;
-  }
+  // WebSocket service setter removed - real-time updates handled by SSE/Polling
 
   /**
    * Track a new activity and broadcast it in real-time
@@ -62,20 +60,8 @@ class ActivityTrackingService {
       // Cache recent activities for quick access
       await this.cacheRecentActivity(activityData.teacherId, savedActivity);
 
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastActivityUpdate(activityData.teacherId, {
-          id: savedActivity._id,
-          type: savedActivity.type,
-          priority: savedActivity.priority,
-          title: savedActivity.title,
-          description: savedActivity.description,
-          metadata: savedActivity.metadata,
-          actionRequired: savedActivity.actionRequired,
-          actionUrl: savedActivity.actionUrl,
-          createdAt: savedActivity.createdAt,
-        });
-      }
+      // Real-time update broadcasting removed - will be handled by SSE/Polling system
+      // TODO: Implement SSE broadcasting for activity updates
 
       Logger.info(`📊 Activity tracked: ${activityData.type} for teacher ${activityData.teacherId}`);
       return savedActivity;
@@ -326,10 +312,8 @@ class ActivityTrackingService {
       // Update cache
       await this.updateActivityCache(teacherId, activityId, { isRead: true });
 
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastActivityRead(teacherId, { activityId, isRead: true });
-      }
+      // Real-time update broadcasting removed - will be handled by SSE/Polling system
+      // TODO: Implement SSE broadcasting for activity read status
 
       Logger.info(`📖 Activity marked as read: ${activityId}`);
     } catch (error) {
@@ -536,10 +520,8 @@ class ActivityTrackingService {
       // Invalidate cache
       await this.invalidateActivityCache(teacherId);
 
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastBulkActivityRead(teacherId, activityIds);
-      }
+      // Real-time update broadcasting removed - will be handled by SSE/Polling system
+      // TODO: Implement SSE broadcasting for bulk activity read status
 
       Logger.info(`📖 Bulk marked ${activityIds.length} activities as read for teacher: ${teacherId}`);
     } catch (error) {

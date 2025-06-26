@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { Request } from 'express';
+import { Types } from 'mongoose';
 import httpStatus from 'http-status';
 import AppError from '../../errors/AppError';
 import config from '../../config';
@@ -19,7 +20,7 @@ import {
 } from '../AuditLog/auditLog.interface';
 
 const stripe = new Stripe(config.stripe_secret_key as string, {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-04-30.basil',
 });
 
 // Default retry configuration
@@ -80,7 +81,7 @@ const processIncomingWebhook = async (
       metadata: {
         stripeEventId: event.id,
         stripeAccountId: event.account,
-        duplicateOfEventId: existingEvent._id.toString(),
+        duplicateOfEventId: (existingEvent._id as Types.ObjectId).toString(),
         ipAddress,
         userAgent,
       },
@@ -92,7 +93,7 @@ const processIncomingWebhook = async (
         existingEvent._id,
         { 
           status: WebhookEventStatus.DUPLICATE,
-          'metadata.duplicateOfEventId': existingEvent._id.toString(),
+          'metadata.duplicateOfEventId': (existingEvent._id as Types.ObjectId).toString(),
         },
         { new: true }
       ) as IWebhookEvent
@@ -167,13 +168,21 @@ const markWebhookProcessed = async (
 
   if (processingResult.success) {
     updateData.status = WebhookEventStatus.PROCESSED;
-    updateData['metadata.affectedUserId'] = processingResult.affectedUserId;
-    updateData['metadata.affectedUserType'] = processingResult.affectedUserType;
-    updateData['metadata.relatedResourceIds'] = processingResult.relatedResourceIds;
+    if (processingResult.affectedUserId) {
+      updateData['metadata.affectedUserId'] = processingResult.affectedUserId;
+    }
+    if (processingResult.affectedUserType) {
+      updateData['metadata.affectedUserType'] = processingResult.affectedUserType;
+    }
+    if (processingResult.relatedResourceIds && processingResult.relatedResourceIds.length > 0) {
+      updateData['metadata.relatedResourceIds'] = processingResult.relatedResourceIds;
+    }
   } else {
     updateData.status = WebhookEventStatus.FAILED;
     updateData.failedAt = new Date();
-    updateData['metadata.errorMessage'] = processingResult.error;
+    if (processingResult.error) {
+      updateData['metadata.errorMessage'] = processingResult.error;
+    }
   }
 
   if (processingResult.processingTime) {

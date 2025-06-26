@@ -16,6 +16,7 @@ import { PayoutManagementService } from './app/modules/Payment/payoutManagement.
 
 import { registerMiddleware } from './app/middlewares/MiddlewareRegistry';
 import { startPhase, completePhase } from './app/utils/StartupProfiler';
+import { serviceRegistry } from './app/services/ServiceRegistry';
 
 
 startPhase('Middleware Registration');
@@ -24,6 +25,13 @@ startPhase('Middleware Registration');
 registerMiddleware();
 
 completePhase('Middleware Registration');
+
+// Initialize Service Registry
+startPhase('Service Registry Initialization');
+serviceRegistry.initialize().catch(error => {
+  console.error('Failed to initialize Service Registry:', error);
+});
+completePhase('Service Registry Initialization');
 
 
 const lazyImports = {
@@ -133,6 +141,8 @@ app.use(cors({
     'http://localhost:5173',
     'http://localhost:8080',
     'http://localhost:8081',
+    'http://localhost:8082',
+    'http://localhost:8083', // Added for current frontend port
     'https://green-uni-mind.pages.dev',
     'https://green-uni-mind.vercel.app'
   ],
@@ -283,6 +293,21 @@ setTimeout(async () => {
 }, 1000);
 
 console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
+
+// Debug middleware to log all requests to /users/me or /api/users/me
+app.use((req, _res, next) => {
+  if (req.path.includes('/users/me') && !req.path.includes('/api/v1/users/me')) {
+    console.log('🔍 DEBUG: Incorrect API call detected:');
+    console.log('- Path:', req.path);
+    console.log('- Method:', req.method);
+    console.log('- Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('- User-Agent:', req.headers['user-agent']);
+    console.log('- Referer:', req.headers['referer']);
+    console.log('- Origin:', req.headers['origin']);
+    console.log('- Stack trace:', new Error().stack);
+  }
+  next();
+});
 
 app.use(globalErrorHandler);
 

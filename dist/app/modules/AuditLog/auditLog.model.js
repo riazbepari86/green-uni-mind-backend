@@ -43,19 +43,16 @@ const auditLogSchema = new mongoose_1.Schema({
         type: String,
         enum: Object.values(auditLog_interface_1.AuditLogAction),
         required: true,
-        index: true,
     },
     category: {
         type: String,
         enum: Object.values(auditLog_interface_1.AuditLogCategory),
         required: true,
-        index: true,
     },
     level: {
         type: String,
         enum: Object.values(auditLog_interface_1.AuditLogLevel),
         required: true,
-        index: true,
     },
     message: {
         type: String,
@@ -65,25 +62,20 @@ const auditLogSchema = new mongoose_1.Schema({
     // User Context
     userId: {
         type: mongoose_1.Schema.Types.ObjectId,
-        index: true,
     },
     userType: {
         type: String,
         enum: ['student', 'teacher', 'admin', 'system'],
-        index: true,
     },
     userEmail: {
         type: String,
-        index: true,
     },
     // Resource Context
     resourceType: {
         type: String,
-        index: true,
     },
     resourceId: {
         type: String,
-        index: true,
     },
     // Metadata
     metadata: {
@@ -95,22 +87,18 @@ const auditLogSchema = new mongoose_1.Schema({
         type: Date,
         required: true,
         default: Date.now,
-        index: true,
     },
     // Compliance
     retentionDate: {
         type: Date,
-        index: true,
     },
     isArchived: {
         type: Boolean,
         default: false,
-        index: true,
     },
     // Search and Indexing
     tags: [{
             type: String,
-            index: true,
         }],
     searchableText: {
         type: String,
@@ -120,7 +108,7 @@ const auditLogSchema = new mongoose_1.Schema({
     timestamps: true,
     toJSON: {
         virtuals: true,
-        transform: function (doc, ret) {
+        transform: function (_doc, ret) {
             delete ret.__v;
             return ret;
         },
@@ -139,7 +127,6 @@ auditLogSchema.index({ resourceType: 1, resourceId: 1, timestamp: -1 });
 auditLogSchema.index({ 'metadata.stripeEventId': 1 });
 auditLogSchema.index({ 'metadata.stripeAccountId': 1, timestamp: -1 });
 auditLogSchema.index({ tags: 1, timestamp: -1 });
-auditLogSchema.index({ retentionDate: 1 }, { sparse: true });
 // Compound indexes for common queries
 auditLogSchema.index({
     category: 1,
@@ -202,4 +189,14 @@ auditLogSchema.statics.findByStripeAccount = function (stripeAccountId, options 
         .limit(options.limit || 100)
         .skip(options.offset || 0);
 };
-exports.AuditLog = (0, mongoose_1.model)('AuditLog', auditLogSchema);
+// Prevent model overwrite during development server restarts
+exports.AuditLog = (() => {
+    try {
+        // Try to get existing model first
+        return (0, mongoose_1.model)('AuditLog');
+    }
+    catch (error) {
+        // Model doesn't exist, create it
+        return (0, mongoose_1.model)('AuditLog', auditLogSchema);
+    }
+})();

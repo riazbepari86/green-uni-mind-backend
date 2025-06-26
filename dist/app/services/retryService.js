@@ -55,8 +55,17 @@ const retryFailedWebhooks = () => __awaiter(void 0, void 0, void 0, function* ()
                 }
                 processingResult.processingTime = Date.now() - startTime;
                 if (processingResult.success) {
+                    // Ensure all required fields are present
+                    const completeResult = {
+                        success: processingResult.success,
+                        error: processingResult.error || '',
+                        processingTime: processingResult.processingTime || Date.now() - startTime,
+                        affectedUserId: processingResult.affectedUserId || '',
+                        affectedUserType: processingResult.affectedUserType || '',
+                        relatedResourceIds: processingResult.relatedResourceIds || [],
+                    };
                     // Mark as processed
-                    yield webhookEvent_service_1.WebhookEventService.markWebhookProcessed(webhookEvent._id.toString(), processingResult);
+                    yield webhookEvent_service_1.WebhookEventService.markWebhookProcessed(webhookEvent._id.toString(), completeResult);
                     succeeded++;
                     // Log successful retry
                     yield auditLog_service_1.AuditLogService.createAuditLog({

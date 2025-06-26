@@ -60,7 +60,7 @@ router.get(
   auth(USER_ROLE.student, USER_ROLE.teacher, USER_ROLE.admin),
   async (req, res, next) => {
     // Override userId with current user's ID for security
-    req.params.userId = req.user?._id;
+    req.params.userId = req.user?._id ?? '';
     next();
   },
   AuditLogController.getUserAuditLogs

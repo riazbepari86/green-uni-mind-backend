@@ -22,7 +22,7 @@ const course_model_1 = require("../Course/course.model");
 const transaction_model_1 = require("../Payment/transaction.model");
 const sendEmail_1 = require("../../utils/sendEmail");
 const stripe = new stripe_1.default(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2025-04-30.basil',
 });
 // Invoice configuration
 const INVOICE_CONFIG = {
@@ -221,11 +221,7 @@ const sendInvoiceEmail = (studentEmail, studentName, courseTitle, teacherName, i
       </body>
       </html>
     `;
-        yield (0, sendEmail_1.sendEmail)({
-            to: studentEmail,
-            subject: `Invoice for ${courseTitle} - Course Enrollment`,
-            html: emailTemplate,
-        });
+        yield (0, sendEmail_1.sendEmail)(studentEmail, emailTemplate, `Invoice for ${courseTitle} - Course Enrollment`);
         console.log('Invoice email sent successfully to:', studentEmail);
         return { success: true };
     }
@@ -252,7 +248,7 @@ const processInvoiceGeneration = (studentId, courseId, transactionId, amount, te
         const teacherName = `${teacher.name.firstName} ${teacher.name.lastName}`;
         const studentName = `${student.name.firstName} ${student.name.lastName}`;
         // Send invoice email
-        yield sendInvoiceEmail(student.email, studentName, course.title, teacherName, invoiceResult.invoiceUrl, invoiceResult.pdfUrl, amount);
+        yield sendInvoiceEmail(student.email, studentName, course.title, teacherName, invoiceResult.invoiceUrl || '', invoiceResult.pdfUrl || '', amount);
         console.log('Invoice generation completed successfully');
         return invoiceResult;
     }
@@ -271,10 +267,12 @@ const getInvoiceByTransactionId = (transactionId) => __awaiter(void 0, void 0, v
         if (!transaction) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Transaction not found');
         }
-        if (!transaction.stripeInvoiceId) {
+        if (!transaction.stripeInvoiceUrl) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Invoice not found for this transaction');
         }
-        const invoice = yield stripe.invoices.retrieve(transaction.stripeInvoiceId);
+        // Extract invoice ID from URL or use stored transaction ID
+        const invoiceId = transaction.stripeTransactionId;
+        const invoice = yield stripe.invoices.retrieve(invoiceId);
         return {
             invoiceId: invoice.id,
             invoiceUrl: invoice.hosted_invoice_url,
@@ -305,7 +303,7 @@ const getStudentInvoices = (studentId) => __awaiter(void 0, void 0, void 0, func
         const invoices = yield Promise.all(transactions.map((transaction) => __awaiter(void 0, void 0, void 0, function* () {
             var _a, _b;
             try {
-                const invoice = yield stripe.invoices.retrieve(transaction.stripeInvoiceId);
+                const invoice = yield stripe.invoices.retrieve(transaction.stripeTransactionId);
                 return {
                     transactionId: transaction._id,
                     invoiceId: invoice.id,

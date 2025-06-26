@@ -36,7 +36,7 @@ class EmailService {
   async initialize(): Promise<void> {
     try {
       // Create transporter
-      this.transporter = nodemailer.createTransporter({
+      this.transporter = nodemailer.createTransport({
         host: config.email.host,
         port: config.email.port,
         secure: config.email.secure,

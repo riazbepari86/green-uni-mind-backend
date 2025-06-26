@@ -18,7 +18,7 @@ const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../errors/AppError"));
 const teacher_model_1 = require("../Teacher/teacher.model");
 const stripe = new stripe_1.default(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2025-04-30.basil',
 });
 // Create Stripe Connect account with email pre-population
 const createStripeAccount = (userId, accountData) => __awaiter(void 0, void 0, void 0, function* () {

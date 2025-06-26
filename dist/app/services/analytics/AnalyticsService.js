@@ -51,15 +51,15 @@ const logger_1 = require("../../config/logger");
 const redis_1 = require("../../config/redis");
 const date_fns_1 = require("date-fns");
 class AnalyticsService {
-    constructor(webSocketService) {
+    // WebSocket service removed - real-time analytics will be handled by SSE/Polling
+    constructor() {
         this.CACHE_TTL = {
             realtime: 300, // 5 minutes
             hourly: 3600, // 1 hour
             daily: 86400, // 24 hours
             weekly: 604800, // 7 days
         };
-        this.webSocketService = null;
-        this.webSocketService = webSocketService || null;
+        // Constructor simplified - no WebSocket dependency
     }
     /**
      * Invalidate cache for teacher analytics
@@ -778,10 +778,6 @@ class AnalyticsService {
                 };
                 // Cache for 1 hour
                 yield redis_1.redisOperations.setex(cacheKey, this.CACHE_TTL.hourly, JSON.stringify(result));
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastEnrollmentUpdate(teacherId, result);
-                }
                 return result;
             }
             catch (error) {
@@ -843,10 +839,6 @@ class AnalyticsService {
                 };
                 // Cache for 30 minutes
                 yield redis_1.redisOperations.setex(cacheKey, 1800, JSON.stringify(result));
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastEngagementUpdate(teacherId, result);
-                }
                 return result;
             }
             catch (error) {
@@ -915,10 +907,6 @@ class AnalyticsService {
                 };
                 // Cache for 1 hour
                 yield redis_1.redisOperations.setex(cacheKey, this.CACHE_TTL.hourly, JSON.stringify(result));
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastRevenueUpdate(teacherId, result);
-                }
                 return result;
             }
             catch (error) {
@@ -983,10 +971,6 @@ class AnalyticsService {
                 };
                 // Cache for 2 hours
                 yield redis_1.redisOperations.setex(cacheKey, this.CACHE_TTL.hourly * 2, JSON.stringify(result));
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastPerformanceUpdate(teacherId, result);
-                }
                 return result;
             }
             catch (error) {

@@ -55,20 +55,17 @@ const webhookEventSchema = new Schema<IWebhookEvent>({
     type: String,
     enum: Object.values(WebhookEventType),
     required: true,
-    index: true,
   },
   source: {
     type: String,
     enum: Object.values(WebhookEventSource),
     required: true,
-    index: true,
   },
   status: {
     type: String,
     enum: Object.values(WebhookEventStatus),
     required: true,
     default: WebhookEventStatus.PENDING,
-    index: true,
   },
   
   // Stripe Information
@@ -80,7 +77,6 @@ const webhookEventSchema = new Schema<IWebhookEvent>({
   },
   stripeAccountId: {
     type: String,
-    index: true,
   },
   stripeApiVersion: {
     type: String,
@@ -102,19 +98,15 @@ const webhookEventSchema = new Schema<IWebhookEvent>({
     type: Date,
     required: true,
     default: Date.now,
-    index: true,
   },
   processedAt: {
     type: Date,
-    index: true,
   },
   failedAt: {
     type: Date,
-    index: true,
   },
   nextRetryAt: {
     type: Date,
-    index: true,
   },
   
   // Retry Logic
@@ -157,13 +149,11 @@ const webhookEventSchema = new Schema<IWebhookEvent>({
   isArchived: {
     type: Boolean,
     default: false,
-    index: true,
   },
   
   // Search
   tags: [{
     type: String,
-    index: true,
   }],
   searchableContent: {
     type: String,
@@ -190,7 +180,6 @@ webhookEventSchema.index({ eventType: 1, receivedAt: -1 });
 webhookEventSchema.index({ source: 1, receivedAt: -1 });
 webhookEventSchema.index({ status: 1, receivedAt: -1 });
 webhookEventSchema.index({ stripeAccountId: 1, receivedAt: -1 });
-webhookEventSchema.index({ nextRetryAt: 1 }, { sparse: true });
 webhookEventSchema.index({ tags: 1, receivedAt: -1 });
 
 // Compound indexes for common queries
@@ -248,7 +237,7 @@ webhookEventSchema.statics.findPendingRetries = function() {
   return this.find({
     status: WebhookEventStatus.FAILED,
     nextRetryAt: { $lte: new Date() },
-    retryCount: { $lt: this.maxRetries }
+    $expr: { $lt: ['$retryCount', '$maxRetries'] }
   }).sort({ nextRetryAt: 1 });
 };
 
@@ -263,4 +252,13 @@ webhookEventSchema.statics.findByAccount = function(stripeAccountId: string, opt
     .skip(options.offset || 0);
 };
 
-export const WebhookEvent = model<IWebhookEvent>('WebhookEvent', webhookEventSchema);
+// Prevent model overwrite during development server restarts
+export const WebhookEvent = (() => {
+  try {
+    // Try to get existing model first
+    return model<IWebhookEvent>('WebhookEvent');
+  } catch (error) {
+    // Model doesn't exist, create it
+    return model<IWebhookEvent>('WebhookEvent', webhookEventSchema);
+  }
+})();

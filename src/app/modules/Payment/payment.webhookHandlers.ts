@@ -25,6 +25,23 @@ interface WebhookProcessingResult {
   relatedResourceIds?: string[];
 }
 
+// Helper function to create consistent webhook processing results
+const createWebhookResult = (
+  success: boolean,
+  processingTime?: number,
+  error?: string,
+  affectedUserId?: string,
+  affectedUserType?: string,
+  relatedResourceIds?: string[]
+): WebhookProcessingResult => ({
+  success,
+  ...(error && { error }),
+  ...(processingTime && { processingTime }),
+  ...(affectedUserId && { affectedUserId }),
+  ...(affectedUserType && { affectedUserType }),
+  ...(relatedResourceIds && { relatedResourceIds }),
+});
+
 // Handle checkout.session.completed event
 const handleCheckoutSessionCompleted = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   const startTime = Date.now();
@@ -167,7 +184,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event): Promise<Webh
           teacherEarning: (checkoutSession.amount_total * 0.8) / 100,
           currency: checkoutSession.currency,
           courseTitle: course.title,
-          studentName: `${student.firstName} ${student.lastName}`,
+          studentName: `${student.name.firstName} ${student.name.lastName}`,
         },
       }),
     ]);
@@ -203,7 +220,7 @@ const handlePaymentIntentSucceeded = async (event: Stripe.Event): Promise<Webhoo
       {
         $set: {
           status: 'success',
-          receiptUrl: paymentIntent.charges?.data?.[0]?.receipt_url,
+          receiptUrl: (paymentIntent as any).charges?.data?.[0]?.receipt_url,
         },
       },
       { new: true }
@@ -328,17 +345,17 @@ const handlePaymentIntentFailed = async (event: Stripe.Event): Promise<WebhookPr
 // Placeholder handlers for other payment events
 const handleChargeSucceeded = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   // Implementation for charge.succeeded
-  return { success: true, processingTime: 0 };
+  return createWebhookResult(true, 0);
 };
 
 const handleChargeFailed = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   // Implementation for charge.failed
-  return { success: true, processingTime: 0 };
+  return createWebhookResult(true, 0);
 };
 
 const handleChargeDisputeCreated = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   // Implementation for charge.dispute.created
-  return { success: true, processingTime: 0 };
+  return createWebhookResult(true, 0);
 };
 
 export const PaymentWebhookHandlers = {

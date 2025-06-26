@@ -49,9 +49,6 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const app_1 = __importDefault(require("./app"));
 const config_1 = __importDefault(require("./app/config"));
 const DB_1 = __importDefault(require("./app/DB"));
-// Import payout jobs
-const payout_job_1 = require("./app/jobs/payout.job");
-const payoutSync_job_1 = require("./app/jobs/payoutSync.job");
 // Import keep-alive service
 const keepAlive_1 = __importDefault(require("./utils/keepAlive"));
 // Import production-safe logging
@@ -59,12 +56,10 @@ const logger_1 = require("./app/config/logger");
 const console_replacement_1 = require("./app/utils/console-replacement");
 // Import startup profiler
 const StartupProfiler_1 = require("./app/utils/StartupProfiler");
-// Import WebSocket and related services
-const WebSocketService_1 = __importDefault(require("./app/services/websocket/WebSocketService"));
+// Import related services
 const ActivityTrackingService_1 = __importDefault(require("./app/services/activity/ActivityTrackingService"));
 const MessagingService_1 = __importDefault(require("./app/services/messaging/MessagingService"));
 let server;
-let webSocketService;
 let activityTrackingService;
 let messagingService;
 function main() {
@@ -99,22 +94,20 @@ function main() {
                     logger_1.Logger.error('Failed to start keep-alive service', { error });
                     (0, StartupProfiler_1.failPhase)('Keep-alive Service', error);
                 }
-                // Initialize WebSocket service
-                (0, StartupProfiler_1.startPhase)('WebSocket Service');
+                // Initialize services (WebSocket removed - replaced with SSE/Polling)
+                (0, StartupProfiler_1.startPhase)('Service Initialization');
                 try {
-                    webSocketService = new WebSocketService_1.default(server);
-                    activityTrackingService = new ActivityTrackingService_1.default(webSocketService);
+                    activityTrackingService = new ActivityTrackingService_1.default();
                     messagingService = new MessagingService_1.default();
                     // Set up service dependencies
-                    messagingService.setWebSocketService(webSocketService);
                     messagingService.setActivityTrackingService(activityTrackingService);
-                    logger_1.Logger.info('✅ WebSocket service initialized successfully');
-                    console_replacement_1.specializedLog.system.startup('WebSocket service');
-                    (0, StartupProfiler_1.completePhase)('WebSocket Service');
+                    logger_1.Logger.info('✅ Services initialized successfully');
+                    console_replacement_1.specializedLog.system.startup('Core services');
+                    (0, StartupProfiler_1.completePhase)('Service Initialization');
                 }
                 catch (error) {
-                    logger_1.Logger.error('❌ WebSocket service initialization failed:', { error });
-                    (0, StartupProfiler_1.failPhase)('WebSocket Service', error);
+                    logger_1.Logger.error('❌ Service initialization failed:', { error });
+                    (0, StartupProfiler_1.failPhase)('Service Initialization', error);
                 }
                 // Complete startup profiling after all immediate tasks
                 setTimeout(() => {
@@ -196,25 +189,8 @@ function main() {
                     logger_1.Logger.info('Server will continue without super admin seeding');
                 }
             }), 3000); // Wait 3 seconds after server starts
-            // Start payout jobs in background (non-blocking)
-            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
-                try {
-                    logger_1.Logger.info('🔄 Starting payout jobs...');
-                    // Start both payout jobs
-                    yield (0, payout_job_1.startPayoutJobs)();
-                    yield (0, payoutSync_job_1.startPayoutSyncJob)();
-                    console_replacement_1.specializedLog.system.startup('Payout jobs');
-                    // Log additional information about the payout jobs
-                    logger_1.Logger.info('Payout jobs will run on the following schedule:');
-                    logger_1.Logger.info('   - Daily payout sync: 1:00 AM');
-                    logger_1.Logger.info('   - Daily payout scheduling: Every day');
-                    logger_1.Logger.info('   - Hourly payout status checks: Every hour');
-                }
-                catch (error) {
-                    logger_1.Logger.error('❌ Payout jobs initialization failed:', { error });
-                    logger_1.Logger.info('Server will continue without payout jobs');
-                }
-            }), 4000); // Wait 4 seconds after server starts
+            // Background job systems removed - using standard API patterns instead
+            logger_1.Logger.info('✅ Background job systems disabled - using standard API patterns');
         }
         catch (err) {
             logger_1.Logger.error('Server startup failed', { error: err });

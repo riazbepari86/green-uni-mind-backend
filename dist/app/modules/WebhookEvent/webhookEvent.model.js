@@ -44,20 +44,17 @@ const webhookEventSchema = new mongoose_1.Schema({
         type: String,
         enum: Object.values(webhookEvent_interface_1.WebhookEventType),
         required: true,
-        index: true,
     },
     source: {
         type: String,
         enum: Object.values(webhookEvent_interface_1.WebhookEventSource),
         required: true,
-        index: true,
     },
     status: {
         type: String,
         enum: Object.values(webhookEvent_interface_1.WebhookEventStatus),
         required: true,
         default: webhookEvent_interface_1.WebhookEventStatus.PENDING,
-        index: true,
     },
     // Stripe Information
     stripeEventId: {
@@ -68,7 +65,6 @@ const webhookEventSchema = new mongoose_1.Schema({
     },
     stripeAccountId: {
         type: String,
-        index: true,
     },
     stripeApiVersion: {
         type: String,
@@ -88,19 +84,15 @@ const webhookEventSchema = new mongoose_1.Schema({
         type: Date,
         required: true,
         default: Date.now,
-        index: true,
     },
     processedAt: {
         type: Date,
-        index: true,
     },
     failedAt: {
         type: Date,
-        index: true,
     },
     nextRetryAt: {
         type: Date,
-        index: true,
     },
     // Retry Logic
     retryCount: {
@@ -139,12 +131,10 @@ const webhookEventSchema = new mongoose_1.Schema({
     isArchived: {
         type: Boolean,
         default: false,
-        index: true,
     },
     // Search
     tags: [{
             type: String,
-            index: true,
         }],
     searchableContent: {
         type: String,
@@ -170,7 +160,6 @@ webhookEventSchema.index({ eventType: 1, receivedAt: -1 });
 webhookEventSchema.index({ source: 1, receivedAt: -1 });
 webhookEventSchema.index({ status: 1, receivedAt: -1 });
 webhookEventSchema.index({ stripeAccountId: 1, receivedAt: -1 });
-webhookEventSchema.index({ nextRetryAt: 1 }, { sparse: true });
 webhookEventSchema.index({ tags: 1, receivedAt: -1 });
 // Compound indexes for common queries
 webhookEventSchema.index({
@@ -223,7 +212,7 @@ webhookEventSchema.statics.findPendingRetries = function () {
     return this.find({
         status: webhookEvent_interface_1.WebhookEventStatus.FAILED,
         nextRetryAt: { $lte: new Date() },
-        retryCount: { $lt: this.maxRetries }
+        $expr: { $lt: ['$retryCount', '$maxRetries'] }
     }).sort({ nextRetryAt: 1 });
 };
 webhookEventSchema.statics.findByStripeEvent = function (stripeEventId) {
@@ -235,4 +224,14 @@ webhookEventSchema.statics.findByAccount = function (stripeAccountId, options = 
         .limit(options.limit || 100)
         .skip(options.offset || 0);
 };
-exports.WebhookEvent = (0, mongoose_1.model)('WebhookEvent', webhookEventSchema);
+// Prevent model overwrite during development server restarts
+exports.WebhookEvent = (() => {
+    try {
+        // Try to get existing model first
+        return (0, mongoose_1.model)('WebhookEvent');
+    }
+    catch (error) {
+        // Model doesn't exist, create it
+        return (0, mongoose_1.model)('WebhookEvent', webhookEventSchema);
+    }
+})();

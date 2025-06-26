@@ -14,7 +14,6 @@ const notification_model_1 = require("./notification.model");
 const notification_interface_1 = require("./notification.interface");
 const auditLog_model_1 = require("../AuditLog/auditLog.model");
 const auditLog_interface_1 = require("../AuditLog/auditLog.interface");
-const websocketService_1 = require("../../services/websocketService");
 const emailService_1 = require("../../services/emailService");
 // Create notification with user preferences consideration
 const createNotification = (data) => __awaiter(void 0, void 0, void 0, function* () {
@@ -30,7 +29,7 @@ const createNotification = (data) => __awaiter(void 0, void 0, void 0, function*
             return [];
         }
         // Determine channels to use
-        const channels = data.channels || getDefaultChannels(data.type, preferences);
+        const channels = data.channels || getDefaultChannels(data.type, preferences || undefined);
         const notifications = [];
         // Create notification for each channel
         for (const channel of channels) {
@@ -73,24 +72,13 @@ const createNotification = (data) => __awaiter(void 0, void 0, void 0, function*
             }
             yield notification.save();
             notifications.push(notification);
-            // Immediately deliver in-app notifications via WebSocket
+            // In-app notifications are stored and delivered via standard API calls
             if (channel === notification_interface_1.NotificationChannel.IN_APP) {
-                const delivered = websocketService_1.webSocketService.sendRealTimeNotification({
-                    userId: data.userId.toString(),
-                    type: data.type,
-                    title: data.title || '',
-                    body: data.body,
-                    priority: data.priority || notification_interface_1.NotificationPriority.NORMAL,
-                    actionUrl: data.actionUrl,
-                    actionText: data.actionText,
-                    metadata: Object.assign({ notificationId: notification._id.toString() }, data.metadata),
+                // Mark as delivered since it's stored in database for API retrieval
+                yield notification_model_1.Notification.findByIdAndUpdate(notification._id, {
+                    status: notification_interface_1.NotificationStatus.DELIVERED,
+                    deliveredAt: new Date(),
                 });
-                if (delivered) {
-                    yield notification_model_1.Notification.findByIdAndUpdate(notification._id, {
-                        status: notification_interface_1.NotificationStatus.DELIVERED,
-                        deliveredAt: new Date(),
-                    });
-                }
             }
             // Send email notifications immediately if not scheduled
             if (channel === notification_interface_1.NotificationChannel.EMAIL && (!data.scheduledAt || data.scheduledAt <= new Date())) {
@@ -359,28 +347,12 @@ const processPendingNotifications = () => __awaiter(void 0, void 0, void 0, func
                     delivered++;
                 }
                 else if (notification.channel === notification_interface_1.NotificationChannel.IN_APP) {
-                    // Try to deliver via WebSocket
-                    const success = websocketService_1.webSocketService.sendRealTimeNotification({
-                        userId: notification.userId.toString(),
-                        type: notification.type,
-                        title: notification.title || '',
-                        body: notification.body,
-                        priority: notification.priority,
-                        actionUrl: notification.actionUrl,
-                        actionText: notification.actionText,
-                        metadata: notification.metadata,
+                    // Mark in-app notifications as delivered (available via API)
+                    yield notification_model_1.Notification.findByIdAndUpdate(notification._id, {
+                        status: notification_interface_1.NotificationStatus.DELIVERED,
+                        deliveredAt: new Date(),
                     });
-                    if (success) {
-                        yield notification_model_1.Notification.findByIdAndUpdate(notification._id, {
-                            status: notification_interface_1.NotificationStatus.DELIVERED,
-                            deliveredAt: new Date(),
-                        });
-                        delivered++;
-                    }
-                    else {
-                        // User not connected, keep as pending for later delivery
-                        continue;
-                    }
+                    delivered++;
                 }
             }
             catch (error) {

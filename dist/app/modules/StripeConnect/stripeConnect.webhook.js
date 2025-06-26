@@ -21,7 +21,7 @@ const AppError_1 = __importDefault(require("../../errors/AppError"));
 const teacher_model_1 = require("../Teacher/teacher.model");
 const config_1 = __importDefault(require("../../config"));
 const stripe = new stripe_1.default(config_1.default.stripe_secret_key, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2025-04-30.basil',
 });
 // Webhook endpoint secret for verification
 const endpointSecret = config_1.default.stripe_webhook_secret;

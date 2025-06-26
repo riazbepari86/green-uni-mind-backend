@@ -19,6 +19,8 @@ import { AIRoutes } from '../modules/AI/ai.route';
 import { AnalyticsRoutes } from '../modules/Analytics/analytics.route';
 import { MessagingRoutes } from '../modules/Messaging/messaging.route';
 import { ReviewRoutes } from '../modules/Payment/review.route';
+import monitoringRoutes from './monitoringRoutes';
+import databaseRoutes from './databaseRoutes';
 
 type TModuleRoutes = {
   path: string;
@@ -107,6 +109,14 @@ const moduleRoutes: TModuleRoutes[] = [
   {
     path: '/reviews',
     route: ReviewRoutes,
+  },
+  {
+    path: '/monitoring',
+    route: monitoringRoutes,
+  },
+  {
+    path: '/database',
+    route: databaseRoutes,
   },
 ];
 

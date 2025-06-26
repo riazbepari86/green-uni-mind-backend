@@ -64,7 +64,7 @@ const scheduleAutomaticPayouts = async (): Promise<{
           skipped++;
           
           // Update next scheduled date
-          const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, preference.timezone);
+          const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, preference.customSchedule?.timezone);
           await PayoutPreference.findByIdAndUpdate(preference._id, {
             nextScheduledPayoutDate: nextDate,
           });
@@ -79,7 +79,7 @@ const scheduleAutomaticPayouts = async (): Promise<{
         });
 
         // Update next scheduled date
-        const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, preference.timezone);
+        const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, preference.customSchedule?.timezone);
         await PayoutPreference.findByIdAndUpdate(preference._id, {
           lastPayoutDate: new Date(),
           nextScheduledPayoutDate: nextDate,
@@ -209,7 +209,7 @@ const createScheduledPayout = async (
   if (!amount) {
     const pendingEarnings = await getPendingEarnings(teacherId);
     amount = pendingEarnings.totalAmount;
-    transactions = pendingEarnings.transactions.map(t => t._id);
+    transactions = pendingEarnings.transactions.map((t: any) => t._id);
   }
 
   if (!amount || amount <= 0) {
@@ -276,7 +276,7 @@ const createScheduledPayout = async (
     userId: teacherId,
     userType: 'teacher',
     resourceType: 'payout',
-    resourceId: payout._id.toString(),
+    resourceId: (payout._id as Types.ObjectId).toString(),
     metadata: {
       amount,
       currency: 'usd',
@@ -295,7 +295,7 @@ const createScheduledPayout = async (
     title: 'Payout Scheduled',
     body: `Your payout of $${amount} has been scheduled and will be processed soon.`,
     relatedResourceType: 'payout',
-    relatedResourceId: payout._id.toString(),
+    relatedResourceId: (payout._id as Types.ObjectId).toString(),
     metadata: {
       amount,
       currency: 'usd',

@@ -60,9 +60,16 @@ const retryService_1 = require("./app/services/retryService");
 const payoutManagement_service_1 = require("./app/modules/Payment/payoutManagement.service");
 const MiddlewareRegistry_1 = require("./app/middlewares/MiddlewareRegistry");
 const StartupProfiler_1 = require("./app/utils/StartupProfiler");
+const ServiceRegistry_1 = require("./app/services/ServiceRegistry");
 (0, StartupProfiler_1.startPhase)('Middleware Registration');
 (0, MiddlewareRegistry_1.registerMiddleware)();
 (0, StartupProfiler_1.completePhase)('Middleware Registration');
+// Initialize Service Registry
+(0, StartupProfiler_1.startPhase)('Service Registry Initialization');
+ServiceRegistry_1.serviceRegistry.initialize().catch(error => {
+    console.error('Failed to initialize Service Registry:', error);
+});
+(0, StartupProfiler_1.completePhase)('Service Registry Initialization');
 const lazyImports = {
     optimizedRedisConfig: () => Promise.resolve().then(() => __importStar(require('./app/config/OptimizedRedisConfig'))).then(m => m.optimizedRedisConfig),
 };
@@ -143,6 +150,8 @@ app.use((0, cors_1.default)({
         'http://localhost:5173',
         'http://localhost:8080',
         'http://localhost:8081',
+        'http://localhost:8082',
+        'http://localhost:8083', // Added for current frontend port
         'https://green-uni-mind.pages.dev',
         'https://green-uni-mind.vercel.app'
     ],
@@ -258,6 +267,20 @@ setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
     }
 }), 1000);
 console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
+// Debug middleware to log all requests to /users/me or /api/users/me
+app.use((req, _res, next) => {
+    if (req.path.includes('/users/me') && !req.path.includes('/api/v1/users/me')) {
+        console.log('🔍 DEBUG: Incorrect API call detected:');
+        console.log('- Path:', req.path);
+        console.log('- Method:', req.method);
+        console.log('- Headers:', JSON.stringify(req.headers, null, 2));
+        console.log('- User-Agent:', req.headers['user-agent']);
+        console.log('- Referer:', req.headers['referer']);
+        console.log('- Origin:', req.headers['origin']);
+        console.log('- Stack trace:', new Error().stack);
+    }
+    next();
+});
 app.use(globalErrorhandler_1.default);
 // Not found
 app.use(notFound_1.default);

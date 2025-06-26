@@ -111,8 +111,8 @@ const resendInvoiceEmail = catchAsync(async (req: Request, res: Response) => {
     studentName,
     course.title,
     teacherName,
-    invoice.invoiceUrl,
-    invoice.pdfUrl,
+    invoice.invoiceUrl || '',
+    invoice.pdfUrl || '',
     invoice.amount
   );
 

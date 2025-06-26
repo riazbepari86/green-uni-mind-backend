@@ -343,29 +343,24 @@ const activitySchema = new Schema<IActivity>(
       type: Schema.Types.ObjectId,
       ref: 'Teacher',
       required: true,
-      index: true,
     },
     courseId: {
       type: Schema.Types.ObjectId,
       ref: 'Course',
-      index: true,
     },
     studentId: {
       type: Schema.Types.ObjectId,
       ref: 'Student',
-      index: true,
     },
     type: {
       type: String,
       enum: Object.values(ActivityType),
       required: true,
-      index: true,
     },
     priority: {
       type: String,
       enum: Object.values(ActivityPriority),
       default: ActivityPriority.MEDIUM,
-      index: true,
     },
     title: {
       type: String,
@@ -384,7 +379,6 @@ const activitySchema = new Schema<IActivity>(
     isRead: {
       type: Boolean,
       default: false,
-      index: true,
     },
     actionRequired: {
       type: Boolean,
@@ -436,10 +430,51 @@ activitySchema.index({ teacherId: 1, createdAt: -1 });
 activitySchema.index({ teacherId: 1, isRead: 1, priority: -1 });
 activitySchema.index({ teacherId: 1, type: 1, createdAt: -1 });
 
-// Export models
-export const CourseAnalytics = model<ICourseAnalytics>('CourseAnalytics', courseAnalyticsSchema);
-export const StudentEngagement = model<IStudentEngagement>('StudentEngagement', studentEngagementSchema);
-export const RevenueAnalytics = model<IRevenueAnalytics>('RevenueAnalytics', revenueAnalyticsSchema);
-export const PerformanceMetrics = model<IPerformanceMetrics>('PerformanceMetrics', performanceMetricsSchema);
-export const AnalyticsSummary = model<IAnalyticsSummary>('AnalyticsSummary', analyticsSummarySchema);
-export const Activity = model<IActivity>('Activity', activitySchema);
+// Export models with overwrite protection
+export const CourseAnalytics = (() => {
+  try {
+    return model<ICourseAnalytics>('CourseAnalytics');
+  } catch (error) {
+    return model<ICourseAnalytics>('CourseAnalytics', courseAnalyticsSchema);
+  }
+})();
+
+export const StudentEngagement = (() => {
+  try {
+    return model<IStudentEngagement>('StudentEngagement');
+  } catch (error) {
+    return model<IStudentEngagement>('StudentEngagement', studentEngagementSchema);
+  }
+})();
+
+export const RevenueAnalytics = (() => {
+  try {
+    return model<IRevenueAnalytics>('RevenueAnalytics');
+  } catch (error) {
+    return model<IRevenueAnalytics>('RevenueAnalytics', revenueAnalyticsSchema);
+  }
+})();
+
+export const PerformanceMetrics = (() => {
+  try {
+    return model<IPerformanceMetrics>('PerformanceMetrics');
+  } catch (error) {
+    return model<IPerformanceMetrics>('PerformanceMetrics', performanceMetricsSchema);
+  }
+})();
+
+export const AnalyticsSummary = (() => {
+  try {
+    return model<IAnalyticsSummary>('AnalyticsSummary');
+  } catch (error) {
+    return model<IAnalyticsSummary>('AnalyticsSummary', analyticsSummarySchema);
+  }
+})();
+
+export const Activity = (() => {
+  try {
+    return model<IActivity>('Activity');
+  } catch (error) {
+    return model<IActivity>('Activity', activitySchema);
+  }
+})();

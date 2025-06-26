@@ -23,6 +23,23 @@ interface WebhookProcessingResult {
   relatedResourceIds?: string[];
 }
 
+// Helper function to create consistent webhook processing results
+const createWebhookResult = (
+  success: boolean,
+  processingTime?: number,
+  error?: string,
+  affectedUserId?: string,
+  affectedUserType?: string,
+  relatedResourceIds?: string[]
+): WebhookProcessingResult => ({
+  success,
+  ...(error && { error }),
+  ...(processingTime && { processingTime }),
+  ...(affectedUserId && { affectedUserId }),
+  ...(affectedUserType && { affectedUserType }),
+  ...(relatedResourceIds && { relatedResourceIds }),
+});
+
 // Handle account.updated event with comprehensive status tracking
 const handleAccountUpdated = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   const startTime = Date.now();
@@ -39,11 +56,7 @@ const handleAccountUpdated = async (event: Stripe.Event): Promise<WebhookProcess
 
     if (!teacher) {
       console.log(`Teacher not found for Stripe account: ${account.id}`);
-      return {
-        success: true,
-        error: 'Teacher not found - skipping',
-        processingTime: Date.now() - startTime,
-      };
+      return createWebhookResult(true, Date.now() - startTime, 'Teacher not found - skipping');
     }
 
     // Determine comprehensive status
@@ -168,21 +181,18 @@ const handleAccountUpdated = async (event: Stripe.Event): Promise<WebhookProcess
       });
     }
 
-    return {
-      success: true,
-      processingTime: Date.now() - startTime,
-      affectedUserId: teacher._id.toString(),
-      affectedUserType: 'teacher',
-      relatedResourceIds: [account.id],
-    };
+    return createWebhookResult(
+      true,
+      Date.now() - startTime,
+      '',
+      teacher._id.toString(),
+      'teacher',
+      [account.id]
+    );
 
   } catch (error: any) {
     console.error('Error handling account.updated webhook:', error);
-    return {
-      success: false,
-      error: error.message,
-      processingTime: Date.now() - startTime,
-    };
+    return createWebhookResult(false, Date.now() - startTime, error.message);
   }
 };
 
@@ -205,6 +215,9 @@ const handleAccountDeauthorized = async (event: Stripe.Event): Promise<WebhookPr
         success: true,
         error: 'Teacher not found - skipping',
         processingTime: Date.now() - startTime,
+        affectedUserId: '',
+        affectedUserType: '',
+        relatedResourceIds: [],
       };
     }
 
@@ -981,22 +994,22 @@ const handlePayoutCanceled = async (event: Stripe.Event): Promise<WebhookProcess
 // Placeholder handlers for transfer events
 const handleTransferCreated = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   // Implementation for transfer.created
-  return { success: true, processingTime: 0 };
+  return createWebhookResult(true, 0);
 };
 
 const handleTransferPaid = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   // Implementation for transfer.paid
-  return { success: true, processingTime: 0 };
+  return createWebhookResult(true, 0);
 };
 
 const handleTransferFailed = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   // Implementation for transfer.failed
-  return { success: true, processingTime: 0 };
+  return createWebhookResult(true, 0);
 };
 
 const handleTransferReversed = async (event: Stripe.Event): Promise<WebhookProcessingResult> => {
   // Implementation for transfer.reversed
-  return { success: true, processingTime: 0 };
+  return createWebhookResult(true, 0);
 };
 
 export const StripeConnectWebhookHandlers = {

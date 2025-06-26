@@ -17,6 +17,8 @@ const notification_service_1 = require("../Notification/notification.service");
 const auditLog_interface_1 = require("../AuditLog/auditLog.interface");
 const notification_interface_1 = require("../Notification/notification.interface");
 const payout_interface_1 = require("../Payment/payout.interface");
+// Helper function to create consistent webhook processing results
+const createWebhookResult = (success, processingTime, error, affectedUserId, affectedUserType, relatedResourceIds) => (Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ success }, (error && { error })), (processingTime && { processingTime })), (affectedUserId && { affectedUserId })), (affectedUserType && { affectedUserType })), (relatedResourceIds && { relatedResourceIds })));
 // Handle account.updated event with comprehensive status tracking
 const handleAccountUpdated = (event) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j;
@@ -31,11 +33,7 @@ const handleAccountUpdated = (event) => __awaiter(void 0, void 0, void 0, functi
         });
         if (!teacher) {
             console.log(`Teacher not found for Stripe account: ${account.id}`);
-            return {
-                success: true,
-                error: 'Teacher not found - skipping',
-                processingTime: Date.now() - startTime,
-            };
+            return createWebhookResult(true, Date.now() - startTime, 'Teacher not found - skipping');
         }
         // Determine comprehensive status
         let status = 'pending';
@@ -155,21 +153,11 @@ const handleAccountUpdated = (event) => __awaiter(void 0, void 0, void 0, functi
                 },
             });
         }
-        return {
-            success: true,
-            processingTime: Date.now() - startTime,
-            affectedUserId: teacher._id.toString(),
-            affectedUserType: 'teacher',
-            relatedResourceIds: [account.id],
-        };
+        return createWebhookResult(true, Date.now() - startTime, '', teacher._id.toString(), 'teacher', [account.id]);
     }
     catch (error) {
         console.error('Error handling account.updated webhook:', error);
-        return {
-            success: false,
-            error: error.message,
-            processingTime: Date.now() - startTime,
-        };
+        return createWebhookResult(false, Date.now() - startTime, error.message);
     }
 });
 // Handle account.application.deauthorized event
@@ -188,6 +176,9 @@ const handleAccountDeauthorized = (event) => __awaiter(void 0, void 0, void 0, f
                 success: true,
                 error: 'Teacher not found - skipping',
                 processingTime: Date.now() - startTime,
+                affectedUserId: '',
+                affectedUserType: '',
+                relatedResourceIds: [],
             };
         }
         // Update teacher account status
@@ -895,19 +886,19 @@ const handlePayoutCanceled = (event) => __awaiter(void 0, void 0, void 0, functi
 // Placeholder handlers for transfer events
 const handleTransferCreated = (event) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for transfer.created
-    return { success: true, processingTime: 0 };
+    return createWebhookResult(true, 0);
 });
 const handleTransferPaid = (event) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for transfer.paid
-    return { success: true, processingTime: 0 };
+    return createWebhookResult(true, 0);
 });
 const handleTransferFailed = (event) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for transfer.failed
-    return { success: true, processingTime: 0 };
+    return createWebhookResult(true, 0);
 });
 const handleTransferReversed = (event) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for transfer.reversed
-    return { success: true, processingTime: 0 };
+    return createWebhookResult(true, 0);
 });
 exports.StripeConnectWebhookHandlers = {
     handleAccountUpdated,

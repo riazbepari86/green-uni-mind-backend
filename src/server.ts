@@ -3,9 +3,7 @@ import mongoose from 'mongoose';
 import app from './app';
 import config from './app/config';
 import seedSuperAdmin from './app/DB';
-// Import payout jobs
-import { startPayoutJobs } from './app/jobs/payout.job';
-import { startPayoutSyncJob } from './app/jobs/payoutSync.job';
+
 // Import keep-alive service
 import keepAliveService from './utils/keepAlive';
 // Import production-safe logging
@@ -13,13 +11,11 @@ import { Logger } from './app/config/logger';
 import { specializedLog } from './app/utils/console-replacement';
 // Import startup profiler
 import { startPhase, completePhase, failPhase, completeStartup } from './app/utils/StartupProfiler';
-// Import WebSocket and related services
-import WebSocketService from './app/services/websocket/WebSocketService';
+// Import related services
 import ActivityTrackingService from './app/services/activity/ActivityTrackingService';
 import MessagingService from './app/services/messaging/MessagingService';
 
 let server: Server;
-let webSocketService: WebSocketService;
 let activityTrackingService: ActivityTrackingService;
 let messagingService: MessagingService;
 
@@ -58,23 +54,21 @@ async function main() {
         failPhase('Keep-alive Service', error);
       }
 
-      // Initialize WebSocket service
-      startPhase('WebSocket Service');
+      // Initialize services (WebSocket removed - replaced with SSE/Polling)
+      startPhase('Service Initialization');
       try {
-        webSocketService = new WebSocketService(server);
-        activityTrackingService = new ActivityTrackingService(webSocketService);
+        activityTrackingService = new ActivityTrackingService();
         messagingService = new MessagingService();
 
         // Set up service dependencies
-        messagingService.setWebSocketService(webSocketService);
         messagingService.setActivityTrackingService(activityTrackingService);
 
-        Logger.info('✅ WebSocket service initialized successfully');
-        specializedLog.system.startup('WebSocket service');
-        completePhase('WebSocket Service');
+        Logger.info('✅ Services initialized successfully');
+        specializedLog.system.startup('Core services');
+        completePhase('Service Initialization');
       } catch (error) {
-        Logger.error('❌ WebSocket service initialization failed:', { error });
-        failPhase('WebSocket Service', error);
+        Logger.error('❌ Service initialization failed:', { error });
+        failPhase('Service Initialization', error);
       }
 
       // Complete startup profiling after all immediate tasks
@@ -164,25 +158,8 @@ async function main() {
       }
     }, 3000); // Wait 3 seconds after server starts
 
-    // Start payout jobs in background (non-blocking)
-    setTimeout(async () => {
-      try {
-        Logger.info('🔄 Starting payout jobs...');
-        // Start both payout jobs
-        await startPayoutJobs();
-        await startPayoutSyncJob();
-        specializedLog.system.startup('Payout jobs');
-
-        // Log additional information about the payout jobs
-        Logger.info('Payout jobs will run on the following schedule:');
-        Logger.info('   - Daily payout sync: 1:00 AM');
-        Logger.info('   - Daily payout scheduling: Every day');
-        Logger.info('   - Hourly payout status checks: Every hour');
-      } catch (error) {
-        Logger.error('❌ Payout jobs initialization failed:', { error });
-        Logger.info('Server will continue without payout jobs');
-      }
-    }, 4000); // Wait 4 seconds after server starts
+    // Background job systems removed - using standard API patterns instead
+    Logger.info('✅ Background job systems disabled - using standard API patterns');
   } catch (err) {
     Logger.error('Server startup failed', { error: err });
   }

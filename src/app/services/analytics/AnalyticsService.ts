@@ -18,7 +18,6 @@ import { Payment } from '../../modules/Payment/payment.model';
 import { Logger } from '../../config/logger';
 import { redisOperations } from '../../config/redis';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subDays } from 'date-fns';
-import WebSocketService from '../websocket/WebSocketService';
 
 interface DateRange {
   startDate: Date;
@@ -42,10 +41,10 @@ class AnalyticsService {
     weekly: 604800, // 7 days
   };
 
-  private webSocketService: WebSocketService | null = null;
+  // WebSocket service removed - real-time analytics will be handled by SSE/Polling
 
-  constructor(webSocketService?: WebSocketService) {
-    this.webSocketService = webSocketService || null;
+  constructor() {
+    // Constructor simplified - no WebSocket dependency
   }
 
   /**
@@ -859,11 +858,6 @@ class AnalyticsService {
       // Cache for 1 hour
       await redisOperations.setex(cacheKey, this.CACHE_TTL.hourly, JSON.stringify(result));
 
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastEnrollmentUpdate(teacherId, result);
-      }
-
       return result;
     } catch (error) {
       Logger.error('❌ Failed to get enrollment statistics:', error);
@@ -948,11 +942,6 @@ class AnalyticsService {
 
       // Cache for 30 minutes
       await redisOperations.setex(cacheKey, 1800, JSON.stringify(result));
-
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastEngagementUpdate(teacherId, result);
-      }
 
       return result;
     } catch (error) {
@@ -1046,11 +1035,6 @@ class AnalyticsService {
 
       // Cache for 1 hour
       await redisOperations.setex(cacheKey, this.CACHE_TTL.hourly, JSON.stringify(result));
-
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastRevenueUpdate(teacherId, result);
-      }
 
       return result;
     } catch (error) {
@@ -1150,11 +1134,6 @@ class AnalyticsService {
 
       // Cache for 2 hours
       await redisOperations.setex(cacheKey, this.CACHE_TTL.hourly * 2, JSON.stringify(result));
-
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastPerformanceUpdate(teacherId, result);
-      }
 
       return result;
     } catch (error) {

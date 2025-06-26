@@ -111,7 +111,7 @@ const notificationSchema = new mongoose_1.Schema({
     // Retry Logic
     retryCount: { type: Number, default: 0 },
     maxRetries: { type: Number, default: 3 },
-    nextRetryAt: { type: Date, index: true },
+    nextRetryAt: { type: Date },
     // Metadata
     metadata: {
         templateId: { type: String },
@@ -204,7 +204,7 @@ notificationSchema.statics.findFailedForRetry = function () {
     return this.find({
         status: notification_interface_1.NotificationStatus.FAILED,
         nextRetryAt: { $lte: new Date() },
-        retryCount: { $lt: this.maxRetries }
+        $expr: { $lt: ['$retryCount', '$maxRetries'] }
     }).sort({ nextRetryAt: 1 });
 };
 notificationSchema.statics.findByUser = function (userId, options = {}) {

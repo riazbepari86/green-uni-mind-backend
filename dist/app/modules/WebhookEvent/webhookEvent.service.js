@@ -22,7 +22,7 @@ const auditLog_model_1 = require("../AuditLog/auditLog.model");
 const webhookEvent_interface_1 = require("./webhookEvent.interface");
 const auditLog_interface_1 = require("../AuditLog/auditLog.interface");
 const stripe = new stripe_1.default(config_1.default.stripe_secret_key, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2025-04-30.basil',
 });
 // Default retry configuration
 const DEFAULT_RETRY_CONFIG = {
@@ -132,14 +132,22 @@ const markWebhookProcessed = (webhookEventId, processingResult) => __awaiter(voi
     };
     if (processingResult.success) {
         updateData.status = webhookEvent_interface_1.WebhookEventStatus.PROCESSED;
-        updateData['metadata.affectedUserId'] = processingResult.affectedUserId;
-        updateData['metadata.affectedUserType'] = processingResult.affectedUserType;
-        updateData['metadata.relatedResourceIds'] = processingResult.relatedResourceIds;
+        if (processingResult.affectedUserId) {
+            updateData['metadata.affectedUserId'] = processingResult.affectedUserId;
+        }
+        if (processingResult.affectedUserType) {
+            updateData['metadata.affectedUserType'] = processingResult.affectedUserType;
+        }
+        if (processingResult.relatedResourceIds && processingResult.relatedResourceIds.length > 0) {
+            updateData['metadata.relatedResourceIds'] = processingResult.relatedResourceIds;
+        }
     }
     else {
         updateData.status = webhookEvent_interface_1.WebhookEventStatus.FAILED;
         updateData.failedAt = new Date();
-        updateData['metadata.errorMessage'] = processingResult.error;
+        if (processingResult.error) {
+            updateData['metadata.errorMessage'] = processingResult.error;
+        }
     }
     if (processingResult.processingTime) {
         updateData['metadata.processingDuration'] = processingResult.processingTime;

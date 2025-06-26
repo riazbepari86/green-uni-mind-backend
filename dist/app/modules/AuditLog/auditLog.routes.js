@@ -29,9 +29,9 @@ router.delete('/archived', (0, auth_1.default)(user_constant_1.USER_ROLE.admin),
 router.get('/compliance-report', (0, auth_1.default)(user_constant_1.USER_ROLE.admin), auditLog_controller_1.AuditLogController.getComplianceReport);
 // User-specific audit log access (limited)
 router.get('/my-activity', (0, auth_1.default)(user_constant_1.USER_ROLE.student, user_constant_1.USER_ROLE.teacher, user_constant_1.USER_ROLE.admin), (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     // Override userId with current user's ID for security
-    req.params.userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+    req.params.userId = (_b = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id) !== null && _b !== void 0 ? _b : '';
     next();
 }), auditLog_controller_1.AuditLogController.getUserAuditLogs);
 exports.AuditLogRoutes = router;

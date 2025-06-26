@@ -9,7 +9,7 @@ import { Transaction } from '../Payment/transaction.model';
 import { sendEmail } from '../../utils/sendEmail';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-04-30.basil',
 });
 
 // Invoice configuration
@@ -145,7 +145,7 @@ const createStripeInvoice = async (
     });
 
     // Finalize the invoice
-    const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+    const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id!);
     console.log('Finalized invoice:', finalizedInvoice.id);
 
     // Update transaction with invoice details
@@ -246,11 +246,11 @@ const sendInvoiceEmail = async (
       </html>
     `;
 
-    await sendEmail({
-      to: studentEmail,
-      subject: `Invoice for ${courseTitle} - Course Enrollment`,
-      html: emailTemplate,
-    });
+    await sendEmail(
+      studentEmail,
+      emailTemplate,
+      `Invoice for ${courseTitle} - Course Enrollment`
+    );
 
     console.log('Invoice email sent successfully to:', studentEmail);
     return { success: true };
@@ -303,8 +303,8 @@ const processInvoiceGeneration = async (
       studentName,
       course.title,
       teacherName,
-      invoiceResult.invoiceUrl,
-      invoiceResult.pdfUrl,
+      invoiceResult.invoiceUrl || '',
+      invoiceResult.pdfUrl || '',
       amount
     );
 
@@ -330,11 +330,13 @@ const getInvoiceByTransactionId = async (transactionId: string) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Transaction not found');
     }
 
-    if (!transaction.stripeInvoiceId) {
+    if (!transaction.stripeInvoiceUrl) {
       throw new AppError(httpStatus.NOT_FOUND, 'Invoice not found for this transaction');
     }
 
-    const invoice = await stripe.invoices.retrieve(transaction.stripeInvoiceId);
+    // Extract invoice ID from URL or use stored transaction ID
+    const invoiceId = transaction.stripeTransactionId;
+    const invoice = await stripe.invoices.retrieve(invoiceId);
     return {
       invoiceId: invoice.id,
       invoiceUrl: invoice.hosted_invoice_url,
@@ -369,7 +371,7 @@ const getStudentInvoices = async (studentId: string) => {
     const invoices = await Promise.all(
       transactions.map(async (transaction) => {
         try {
-          const invoice = await stripe.invoices.retrieve(transaction.stripeInvoiceId!);
+          const invoice = await stripe.invoices.retrieve(transaction.stripeTransactionId);
           return {
             transactionId: transaction._id,
             invoiceId: invoice.id,

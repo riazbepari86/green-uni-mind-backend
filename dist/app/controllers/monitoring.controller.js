@@ -18,10 +18,11 @@ const catchAsync_1 = __importDefault(require("../utils/catchAsync"));
 const sendResponse_1 = __importDefault(require("../utils/sendResponse"));
 const PerformanceDashboard_1 = require("../services/monitoring/PerformanceDashboard");
 const RedisServiceManager_1 = require("../services/redis/RedisServiceManager");
-const JobQueueManager_1 = require("../services/jobs/JobQueueManager");
+// JobQueueManager removed - using standard API patterns
 const cachingMiddleware_1 = require("../middlewares/cachingMiddleware");
 const RedisUsageAuditor_1 = require("../services/redis/RedisUsageAuditor");
 const RedisUsageMonitor_1 = require("../services/monitoring/RedisUsageMonitor");
+const JobQueueManager_1 = require("../services/jobs/JobQueueManager");
 // Get current performance metrics
 const getCurrentMetrics = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const metrics = yield PerformanceDashboard_1.performanceDashboard.getCurrentMetrics();

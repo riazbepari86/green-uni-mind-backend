@@ -430,8 +430,33 @@ const getUserMessageFolders = catchAsync(async (req: Request, res: Response) => 
   const { userId } = req.params;
   const user = (req as any).user;
 
-  // Validate user access
-  if (user._id !== userId && user.role !== 'admin') {
+  console.log('🔍 getUserMessageFolders Debug Info:');
+  console.log('- Requested userId:', userId);
+  console.log('- Authenticated user._id:', user._id);
+  console.log('- Authenticated user.role:', user.role);
+
+  // Enhanced user access validation
+  // Allow access if:
+  // 1. User is admin
+  // 2. User._id matches requested userId (direct match)
+  // 3. For teachers: check if the requested userId is their User._id
+  let hasAccess = false;
+
+  if (user.role === 'admin') {
+    hasAccess = true;
+    console.log('✅ Access granted: Admin user');
+  } else if (user._id === userId) {
+    hasAccess = true;
+    console.log('✅ Access granted: Direct user ID match');
+  } else {
+    // For teachers, the frontend might be using their User._id
+    // but the authenticated user._id is also the User._id, so this should match
+    console.log('❌ Access denied: User ID mismatch');
+    console.log('- This might indicate the frontend is using wrong user ID');
+    console.log('- Expected: user._id should match requested userId');
+  }
+
+  if (!hasAccess) {
     throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own message folders');
   }
 
@@ -442,6 +467,8 @@ const getUserMessageFolders = catchAsync(async (req: Request, res: Response) => 
     { id: 'archived', name: 'Archived', type: 'archived', unreadCount: 0 },
     { id: 'trash', name: 'Trash', type: 'trash', unreadCount: 0 }
   ];
+
+  console.log('✅ Returning default folders for user:', userId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -459,8 +486,26 @@ const getUserMessageStats = catchAsync(async (req: Request, res: Response) => {
   const { period = 'week' } = req.query;
   const user = (req as any).user;
 
-  // Validate user access
-  if (user._id !== userId && user.role !== 'admin') {
+  console.log('🔍 getUserMessageStats Debug Info:');
+  console.log('- Requested userId:', userId);
+  console.log('- Authenticated user._id:', user._id);
+  console.log('- Authenticated user.role:', user.role);
+  console.log('- Period:', period);
+
+  // Enhanced user access validation (same logic as folders)
+  let hasAccess = false;
+
+  if (user.role === 'admin') {
+    hasAccess = true;
+    console.log('✅ Access granted: Admin user');
+  } else if (user._id === userId) {
+    hasAccess = true;
+    console.log('✅ Access granted: Direct user ID match');
+  } else {
+    console.log('❌ Access denied: User ID mismatch');
+  }
+
+  if (!hasAccess) {
     throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own message stats');
   }
 
@@ -473,6 +518,8 @@ const getUserMessageStats = catchAsync(async (req: Request, res: Response) => {
     averageResponseTime: 0,
     period: period as string
   };
+
+  console.log('✅ Returning empty stats for user:', userId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -490,8 +537,27 @@ const getUserMessageThreads = catchAsync(async (req: Request, res: Response) => 
   const { page = 1, limit = 20, folderType = 'inbox' } = req.query;
   const user = (req as any).user;
 
-  // Validate user access
-  if (user._id !== userId && user.role !== 'admin') {
+  console.log('🔍 getUserMessageThreads Debug Info:');
+  console.log('- Requested userId:', userId);
+  console.log('- Authenticated user._id:', user._id);
+  console.log('- Authenticated user.role:', user.role);
+  console.log('- Folder type:', folderType);
+  console.log('- Page:', page, 'Limit:', limit);
+
+  // Enhanced user access validation (same logic as folders and stats)
+  let hasAccess = false;
+
+  if (user.role === 'admin') {
+    hasAccess = true;
+    console.log('✅ Access granted: Admin user');
+  } else if (user._id === userId) {
+    hasAccess = true;
+    console.log('✅ Access granted: Direct user ID match');
+  } else {
+    console.log('❌ Access denied: User ID mismatch');
+  }
+
+  if (!hasAccess) {
     throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own message threads');
   }
 
@@ -506,6 +572,8 @@ const getUserMessageThreads = catchAsync(async (req: Request, res: Response) => 
     },
     folderType: folderType as string
   };
+
+  console.log('✅ Returning empty threads for user:', userId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

@@ -15,7 +15,22 @@ import { jwtService } from '../../services/auth/JWTService';
 // Helper function to generate tokens
 const generateTokens = async (user: any) => {
   // Ensure we're using the correct role from the user object
-  console.log('Generating tokens with user role:', user.role);
+  console.log('🔐 Generating tokens for OAuth user:');
+  console.log('- User ID:', user._id);
+  console.log('- User email:', user.email);
+  console.log('- User role:', user.role);
+  console.log('- User status:', user.status);
+  console.log('- Is OAuth user:', user.isOAuthUser);
+
+  // Validate required fields
+  if (!user._id || !user.email || !user.role) {
+    console.error('❌ Missing required user fields for token generation:', {
+      hasId: !!user._id,
+      hasEmail: !!user.email,
+      hasRole: !!user.role
+    });
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid user data for token generation');
+  }
 
   // Make sure we include the user's ID and role in the token
   const jwtPayload = {
@@ -25,16 +40,23 @@ const generateTokens = async (user: any) => {
   };
 
   // Log the payload for debugging
-  console.log('JWT payload for token generation:', jwtPayload);
+  console.log('🎫 JWT payload for token generation:', JSON.stringify(jwtPayload, null, 2));
 
   try {
     const tokenPair = await jwtService.createTokenPair(jwtPayload);
+    console.log('✅ Token pair created successfully');
+
+    // Decode the access token to verify its contents
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.decode(tokenPair.accessToken);
+    console.log('🔍 Decoded access token payload:', JSON.stringify(decoded, null, 2));
+
     return {
       accessToken: tokenPair.accessToken,
       refreshToken: tokenPair.refreshToken
     };
   } catch (error) {
-    console.error('Error creating token pair with JWT service:', error);
+    console.error('❌ Error creating token pair with JWT service:', error);
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Token creation failed');
   }
 };

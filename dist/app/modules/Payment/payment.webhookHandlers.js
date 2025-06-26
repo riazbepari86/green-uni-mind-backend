@@ -19,6 +19,8 @@ const auditLog_model_1 = require("../AuditLog/auditLog.model");
 const notification_service_1 = require("../Notification/notification.service");
 const auditLog_interface_1 = require("../AuditLog/auditLog.interface");
 const notification_interface_1 = require("../Notification/notification.interface");
+// Helper function to create consistent webhook processing results
+const createWebhookResult = (success, processingTime, error, affectedUserId, affectedUserType, relatedResourceIds) => (Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ success }, (error && { error })), (processingTime && { processingTime })), (affectedUserId && { affectedUserId })), (affectedUserType && { affectedUserType })), (relatedResourceIds && { relatedResourceIds })));
 // Handle checkout.session.completed event
 const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e, _f;
@@ -149,7 +151,7 @@ const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void
                     teacherEarning: (checkoutSession.amount_total * 0.8) / 100,
                     currency: checkoutSession.currency,
                     courseTitle: course.title,
-                    studentName: `${student.firstName} ${student.lastName}`,
+                    studentName: `${student.name.firstName} ${student.name.lastName}`,
                 },
             }),
         ]);
@@ -291,15 +293,15 @@ const handlePaymentIntentFailed = (event) => __awaiter(void 0, void 0, void 0, f
 // Placeholder handlers for other payment events
 const handleChargeSucceeded = (event) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for charge.succeeded
-    return { success: true, processingTime: 0 };
+    return createWebhookResult(true, 0);
 });
 const handleChargeFailed = (event) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for charge.failed
-    return { success: true, processingTime: 0 };
+    return createWebhookResult(true, 0);
 });
 const handleChargeDisputeCreated = (event) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for charge.dispute.created
-    return { success: true, processingTime: 0 };
+    return createWebhookResult(true, 0);
 });
 exports.PaymentWebhookHandlers = {
     handleCheckoutSessionCompleted,

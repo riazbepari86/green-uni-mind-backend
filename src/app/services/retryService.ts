@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Types } from 'mongoose';
 import { WebhookEvent } from '../modules/WebhookEvent/webhookEvent.model';
 import { Payout } from '../modules/Payment/payout.model';
 import { WebhookEventService } from '../modules/WebhookEvent/webhookEvent.service';
@@ -52,7 +53,14 @@ const retryFailedWebhooks = async (): Promise<{
         const event = JSON.parse(webhookEvent.rawPayload);
         const startTime = Date.now();
 
-        let processingResult = {
+        let processingResult: {
+          success: boolean;
+          error?: string;
+          processingTime?: number;
+          affectedUserId?: string;
+          affectedUserType?: string;
+          relatedResourceIds?: string[];
+        } = {
           success: false,
           error: '',
           processingTime: 0,
@@ -71,10 +79,20 @@ const retryFailedWebhooks = async (): Promise<{
         processingResult.processingTime = Date.now() - startTime;
 
         if (processingResult.success) {
+          // Ensure all required fields are present
+          const completeResult = {
+            success: processingResult.success,
+            error: processingResult.error || '',
+            processingTime: processingResult.processingTime || Date.now() - startTime,
+            affectedUserId: processingResult.affectedUserId || '',
+            affectedUserType: processingResult.affectedUserType || '',
+            relatedResourceIds: processingResult.relatedResourceIds || [],
+          };
+
           // Mark as processed
           await WebhookEventService.markWebhookProcessed(
-            webhookEvent._id.toString(),
-            processingResult
+            (webhookEvent._id as Types.ObjectId).toString(),
+            completeResult
           );
           succeeded++;
 
@@ -85,7 +103,7 @@ const retryFailedWebhooks = async (): Promise<{
             level: AuditLogLevel.INFO,
             message: `Webhook retry succeeded: ${webhookEvent.stripeEventId}`,
             metadata: {
-              webhookEventId: webhookEvent._id.toString(),
+              webhookEventId: (webhookEvent._id as Types.ObjectId).toString(),
               stripeEventId: webhookEvent.stripeEventId,
               retryAttempt: webhookEvent.retryCount + 1,
               processingTime: processingResult.processingTime,
@@ -102,7 +120,7 @@ const retryFailedWebhooks = async (): Promise<{
             failed++;
           } else {
             await WebhookEventService.scheduleWebhookRetry(
-              webhookEvent._id.toString(),
+              (webhookEvent._id as Types.ObjectId).toString(),
               processingResult.error || 'Retry failed'
             );
             rescheduled++;
@@ -114,7 +132,7 @@ const retryFailedWebhooks = async (): Promise<{
         
         // Schedule next retry
         await WebhookEventService.scheduleWebhookRetry(
-          webhookEvent._id.toString(),
+          (webhookEvent._id as Types.ObjectId).toString(),
           error.message
         );
         rescheduled++;

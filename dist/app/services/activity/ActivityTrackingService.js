@@ -13,15 +13,14 @@ const mongoose_1 = require("mongoose");
 const analytics_model_1 = require("../../modules/Analytics/analytics.model");
 const analytics_interface_1 = require("../../modules/Analytics/analytics.interface");
 const logger_1 = require("../../config/logger");
+// WebSocket removed - will be replaced with SSE/Polling system
 const redis_1 = require("../../config/redis");
 class ActivityTrackingService {
-    constructor(webSocketService) {
-        this.webSocketService = null;
-        this.webSocketService = webSocketService || null;
+    // WebSocket service removed - real-time updates will be handled by SSE/Polling
+    constructor() {
+        // Constructor simplified - no WebSocket dependency
     }
-    setWebSocketService(webSocketService) {
-        this.webSocketService = webSocketService;
-    }
+    // WebSocket service setter removed - real-time updates handled by SSE/Polling
     /**
      * Track a new activity and broadcast it in real-time
      */
@@ -49,20 +48,8 @@ class ActivityTrackingService {
                 const savedActivity = yield activity.save();
                 // Cache recent activities for quick access
                 yield this.cacheRecentActivity(activityData.teacherId, savedActivity);
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastActivityUpdate(activityData.teacherId, {
-                        id: savedActivity._id,
-                        type: savedActivity.type,
-                        priority: savedActivity.priority,
-                        title: savedActivity.title,
-                        description: savedActivity.description,
-                        metadata: savedActivity.metadata,
-                        actionRequired: savedActivity.actionRequired,
-                        actionUrl: savedActivity.actionUrl,
-                        createdAt: savedActivity.createdAt,
-                    });
-                }
+                // Real-time update broadcasting removed - will be handled by SSE/Polling system
+                // TODO: Implement SSE broadcasting for activity updates
                 logger_1.Logger.info(`📊 Activity tracked: ${activityData.type} for teacher ${activityData.teacherId}`);
                 return savedActivity;
             }
@@ -282,10 +269,8 @@ class ActivityTrackingService {
                 yield analytics_model_1.Activity.findOneAndUpdate({ _id: activityId, teacherId: new mongoose_1.Types.ObjectId(teacherId) }, { isRead: true }, { new: true });
                 // Update cache
                 yield this.updateActivityCache(teacherId, activityId, { isRead: true });
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastActivityRead(teacherId, { activityId, isRead: true });
-                }
+                // Real-time update broadcasting removed - will be handled by SSE/Polling system
+                // TODO: Implement SSE broadcasting for activity read status
                 logger_1.Logger.info(`📖 Activity marked as read: ${activityId}`);
             }
             catch (error) {
@@ -439,10 +424,8 @@ class ActivityTrackingService {
                 }, { isRead: true });
                 // Invalidate cache
                 yield this.invalidateActivityCache(teacherId);
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastBulkActivityRead(teacherId, activityIds);
-                }
+                // Real-time update broadcasting removed - will be handled by SSE/Polling system
+                // TODO: Implement SSE broadcasting for bulk activity read status
                 logger_1.Logger.info(`📖 Bulk marked ${activityIds.length} activities as read for teacher: ${teacherId}`);
             }
             catch (error) {

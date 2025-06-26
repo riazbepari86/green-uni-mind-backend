@@ -17,12 +17,15 @@ const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../utils/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../utils/sendResponse"));
 const notification_service_1 = require("./notification.service");
-const websocketService_1 = require("../../services/websocketService");
+// WebSocketService removed - using standard API patterns
 const notification_interface_1 = require("./notification.interface");
 // Get user notifications
 const getUserNotifications = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+    if (!userId) {
+        throw new Error('User ID is required');
+    }
     const { limit = 50, offset = 0, status, type, channel, unreadOnly = false } = req.query;
     const options = {
         limit: parseInt(limit),
@@ -45,7 +48,15 @@ const getUserPreferences = (0, catchAsync_1.default)((req, res) => __awaiter(voi
     var _a, _b;
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
     const userType = (_b = req.user) === null || _b === void 0 ? void 0 : _b.role;
-    const preferences = yield notification_service_1.NotificationService.getUserPreferences(userId, userType);
+    if (!userId) {
+        throw new Error('User ID is required');
+    }
+    if (!userType) {
+        throw new Error('User type is required');
+    }
+    // Map user role to notification service expected type
+    const mappedUserType = userType === 'user' ? 'admin' : userType;
+    const preferences = yield notification_service_1.NotificationService.getUserPreferences(userId, mappedUserType);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -59,7 +70,15 @@ const updateUserPreferences = (0, catchAsync_1.default)((req, res) => __awaiter(
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
     const userType = (_b = req.user) === null || _b === void 0 ? void 0 : _b.role;
     const updates = req.body;
-    const preferences = yield notification_service_1.NotificationService.updateUserPreferences(userId, userType, updates);
+    if (!userId) {
+        throw new Error('User ID is required');
+    }
+    if (!userType) {
+        throw new Error('User type is required');
+    }
+    // Map user role to notification service expected type
+    const mappedUserType = userType === 'user' ? 'admin' : userType;
+    const preferences = yield notification_service_1.NotificationService.updateUserPreferences(userId, mappedUserType, updates);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -118,11 +137,19 @@ const testNotification = (0, catchAsync_1.default)((req, res) => __awaiter(void 
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
     const userType = (_b = req.user) === null || _b === void 0 ? void 0 : _b.role;
     const { type, title, body, priority, actionUrl, actionText } = req.body;
+    if (!userId) {
+        throw new Error('User ID is required');
+    }
+    if (!userType) {
+        throw new Error('User type is required');
+    }
+    // Map user role to notification service expected type
+    const mappedUserType = userType === 'user' ? 'admin' : userType;
     const notifications = yield notification_service_1.NotificationService.createNotification({
         type: type || notification_interface_1.NotificationType.SYSTEM_MAINTENANCE,
         priority: priority || notification_interface_1.NotificationPriority.NORMAL,
         userId,
-        userType,
+        userType: mappedUserType,
         title: title || 'Test Notification',
         body: body || 'This is a test notification',
         actionUrl,
@@ -143,8 +170,9 @@ const testNotification = (0, catchAsync_1.default)((req, res) => __awaiter(void 
 const getConnectionStatus = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
-    const isConnected = websocketService_1.webSocketService.isUserConnected(userId);
-    const connectionInfo = websocketService_1.webSocketService.getUserConnectionInfo(userId);
+    // TODO: Implement WebSocket service
+    const isConnected = false; // webSocketService.isUserConnected(userId);
+    const connectionInfo = []; // webSocketService.getUserConnectionInfo(userId);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -167,7 +195,7 @@ const getSystemStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0,
         clickRate: 0,
         byType: {},
         byChannel: {},
-        connectedUsers: websocketService_1.webSocketService.getConnectedUsersStats(),
+        connectedUsers: 0, // webSocketService.getConnectedUsersStats(),
     };
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
@@ -179,30 +207,19 @@ const getSystemStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0,
 // Admin: Send broadcast notification
 const sendBroadcast = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { userType, type, title, body, priority, actionUrl, actionText, channels } = req.body;
+    // TODO: Implement WebSocket service for broadcast notifications
     // This would need to be implemented to send to multiple users
-    // For now, just send via WebSocket
-    if (userType) {
-        websocketService_1.webSocketService.sendToUserType(userType, 'broadcast-notification', {
-            type: type || notification_interface_1.NotificationType.SYSTEM_MAINTENANCE,
-            title: title || 'System Announcement',
-            body: body || 'This is a system announcement',
-            priority: priority || notification_interface_1.NotificationPriority.NORMAL,
-            actionUrl,
-            actionText,
-            broadcast: true,
-        });
-    }
-    else {
-        websocketService_1.webSocketService.broadcast('broadcast-notification', {
-            type: type || notification_interface_1.NotificationType.SYSTEM_MAINTENANCE,
-            title: title || 'System Announcement',
-            body: body || 'This is a system announcement',
-            priority: priority || notification_interface_1.NotificationPriority.NORMAL,
-            actionUrl,
-            actionText,
-            broadcast: true,
-        });
-    }
+    // For now, just log the broadcast attempt
+    console.log('Broadcast notification requested:', {
+        userType,
+        type: type || notification_interface_1.NotificationType.SYSTEM_MAINTENANCE,
+        title: title || 'System Announcement',
+        body: body || 'This is a system announcement',
+        priority: priority || notification_interface_1.NotificationPriority.NORMAL,
+        actionUrl,
+        actionText,
+        broadcast: true,
+    });
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,

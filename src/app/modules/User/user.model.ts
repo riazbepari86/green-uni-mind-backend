@@ -169,7 +169,42 @@ userSchema.pre('save', async function (next) {
 });
 
 userSchema.statics.isUserExists = async function (email: string) {
-  return await User.findOne({ email }).select('+password');
+  console.log('🔍 User.isUserExists called with email:', email);
+
+  try {
+    const user = await User.findOne({ email }).select('+password');
+    console.log('📊 Database query result:', user ? 'User found' : 'User not found');
+
+    if (user) {
+      console.log('👤 Found user details:', {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        isOAuthUser: user.isOAuthUser,
+        isVerified: user.isVerified
+      });
+    } else {
+      console.log('❌ No user found with email:', email);
+
+      // Let's also check if there are any users with similar emails (case sensitivity issue)
+      const similarUsers = await User.find({
+        email: { $regex: new RegExp(`^${email}$`, 'i') }
+      }).select('email').limit(5);
+
+      if (similarUsers.length > 0) {
+        console.log('🔍 Found similar emails (case-insensitive):',
+          similarUsers.map(u => u.email));
+      } else {
+        console.log('🔍 No similar emails found in database');
+      }
+    }
+
+    return user;
+  } catch (error) {
+    console.error('❌ Error in User.isUserExists:', error);
+    throw error;
+  }
 };
 
 userSchema.statics.isPasswordMatched = async function (

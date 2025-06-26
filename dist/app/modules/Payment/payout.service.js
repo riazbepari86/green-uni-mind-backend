@@ -264,7 +264,6 @@ const createOrUpdatePayoutPreferences = (teacherId, preferences) => __awaiter(vo
         const existingPreferences = yield payout_model_1.PayoutPreference.findOne({ teacherId });
         if (existingPreferences) {
             Object.assign(existingPreferences, preferences);
-            existingPreferences.lastUpdated = new Date();
             yield existingPreferences.save();
             yield auditLog_service_1.AuditLogService.createAuditLog({
                 action: auditLog_interface_1.AuditLogAction.USER_PROFILE_UPDATED,
@@ -284,7 +283,7 @@ const createOrUpdatePayoutPreferences = (teacherId, preferences) => __awaiter(vo
             return existingPreferences;
         }
         else {
-            const newPreferences = new payout_model_1.PayoutPreference(Object.assign(Object.assign({ teacherId }, preferences), { lastUpdated: new Date() }));
+            const newPreferences = new payout_model_1.PayoutPreference(Object.assign({ teacherId }, preferences));
             yield newPreferences.save();
             yield auditLog_service_1.AuditLogService.createAuditLog({
                 action: auditLog_interface_1.AuditLogAction.PAYOUT_CREATED,
@@ -420,11 +419,15 @@ const getPayoutAnalytics = (teacherId, startDate, endDate) => __awaiter(void 0, 
         };
         const statusStats = {};
         result.statusStats.forEach((item) => {
-            statusStats[item._id] = item.count;
+            if (item._id && typeof item._id === 'string') {
+                statusStats[item._id] = item.count;
+            }
         });
         const failureStats = {};
         result.failureStats.forEach((item) => {
-            failureStats[item._id] = item.count;
+            if (item._id && typeof item._id === 'string') {
+                failureStats[item._id] = item.count;
+            }
         });
         const successfulPayouts = statusStats[payout_interface_1.PayoutStatus.COMPLETED] || 0;
         const successRate = totalStats.totalPayouts > 0

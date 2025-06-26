@@ -157,15 +157,21 @@ const getAuditLogSummary = (startDate, endDate, filters) => __awaiter(void 0, vo
         // Convert arrays to objects
         const eventsByCategory = {};
         result.eventsByCategory.forEach((item) => {
-            eventsByCategory[item._id] = item.count;
+            if (item._id && typeof item._id === 'string') {
+                eventsByCategory[item._id] = item.count;
+            }
         });
         const eventsByLevel = {};
         result.eventsByLevel.forEach((item) => {
-            eventsByLevel[item._id] = item.count;
+            if (item._id && typeof item._id === 'string') {
+                eventsByLevel[item._id] = item.count;
+            }
         });
         const eventsByAction = {};
         result.eventsByAction.forEach((item) => {
-            eventsByAction[item._id] = item.count;
+            if (item._id && typeof item._id === 'string') {
+                eventsByAction[item._id] = item.count;
+            }
         });
         const topUsers = result.topUsers.map((item) => ({
             userId: item._id.userId,

@@ -123,19 +123,16 @@ const conversationSchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Course',
         required: true,
-        index: true,
     },
     teacherId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Teacher',
         required: true,
-        index: true,
     },
     studentId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Student',
         required: true,
-        index: true,
     },
     type: {
         type: String,
@@ -154,7 +151,6 @@ const conversationSchema = new mongoose_1.Schema({
     },
     lastMessageAt: {
         type: Date,
-        index: true,
     },
     unreadCount: {
         teacher: { type: Number, default: 0, min: 0 },
@@ -334,25 +330,21 @@ const messageSearchIndexSchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Conversation',
         required: true,
-        index: true,
     },
     courseId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Course',
         required: true,
-        index: true,
     },
     teacherId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Teacher',
         required: true,
-        index: true,
     },
     studentId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Student',
         required: true,
-        index: true,
     },
     content: {
         type: String,
@@ -371,7 +363,6 @@ const messageSearchIndexSchema = new mongoose_1.Schema({
     createdAt: {
         type: Date,
         required: true,
-        index: true,
     },
 }, {
     timestamps: false,
@@ -392,9 +383,44 @@ messageNotificationSchema.index({ conversationId: 1, createdAt: -1 });
 messageSearchIndexSchema.index({ searchableContent: 'text', attachmentNames: 'text' });
 messageSearchIndexSchema.index({ teacherId: 1, createdAt: -1 });
 messageSearchIndexSchema.index({ courseId: 1, createdAt: -1 });
-// Export models
-exports.Message = (0, mongoose_1.model)('Message', messageSchema);
-exports.Conversation = (0, mongoose_1.model)('Conversation', conversationSchema);
-exports.MessageThread = (0, mongoose_1.model)('MessageThread', messageThreadSchema);
-exports.MessageNotification = (0, mongoose_1.model)('MessageNotification', messageNotificationSchema);
-exports.MessageSearchIndex = (0, mongoose_1.model)('MessageSearchIndex', messageSearchIndexSchema);
+// Export models with overwrite protection
+exports.Message = (() => {
+    try {
+        return (0, mongoose_1.model)('Message');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('Message', messageSchema);
+    }
+})();
+exports.Conversation = (() => {
+    try {
+        return (0, mongoose_1.model)('Conversation');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('Conversation', conversationSchema);
+    }
+})();
+exports.MessageThread = (() => {
+    try {
+        return (0, mongoose_1.model)('MessageThread');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('MessageThread', messageThreadSchema);
+    }
+})();
+exports.MessageNotification = (() => {
+    try {
+        return (0, mongoose_1.model)('MessageNotification');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('MessageNotification', messageNotificationSchema);
+    }
+})();
+exports.MessageSearchIndex = (() => {
+    try {
+        return (0, mongoose_1.model)('MessageSearchIndex');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('MessageSearchIndex', messageSearchIndexSchema);
+    }
+})();

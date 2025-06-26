@@ -315,29 +315,24 @@ const activitySchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Teacher',
         required: true,
-        index: true,
     },
     courseId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Course',
-        index: true,
     },
     studentId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Student',
-        index: true,
     },
     type: {
         type: String,
         enum: Object.values(analytics_interface_1.ActivityType),
         required: true,
-        index: true,
     },
     priority: {
         type: String,
         enum: Object.values(analytics_interface_1.ActivityPriority),
         default: analytics_interface_1.ActivityPriority.MEDIUM,
-        index: true,
     },
     title: {
         type: String,
@@ -356,7 +351,6 @@ const activitySchema = new mongoose_1.Schema({
     isRead: {
         type: Boolean,
         default: false,
-        index: true,
     },
     actionRequired: {
         type: Boolean,
@@ -399,10 +393,52 @@ analyticsSummarySchema.index({ generatedAt: -1 });
 activitySchema.index({ teacherId: 1, createdAt: -1 });
 activitySchema.index({ teacherId: 1, isRead: 1, priority: -1 });
 activitySchema.index({ teacherId: 1, type: 1, createdAt: -1 });
-// Export models
-exports.CourseAnalytics = (0, mongoose_1.model)('CourseAnalytics', courseAnalyticsSchema);
-exports.StudentEngagement = (0, mongoose_1.model)('StudentEngagement', studentEngagementSchema);
-exports.RevenueAnalytics = (0, mongoose_1.model)('RevenueAnalytics', revenueAnalyticsSchema);
-exports.PerformanceMetrics = (0, mongoose_1.model)('PerformanceMetrics', performanceMetricsSchema);
-exports.AnalyticsSummary = (0, mongoose_1.model)('AnalyticsSummary', analyticsSummarySchema);
-exports.Activity = (0, mongoose_1.model)('Activity', activitySchema);
+// Export models with overwrite protection
+exports.CourseAnalytics = (() => {
+    try {
+        return (0, mongoose_1.model)('CourseAnalytics');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('CourseAnalytics', courseAnalyticsSchema);
+    }
+})();
+exports.StudentEngagement = (() => {
+    try {
+        return (0, mongoose_1.model)('StudentEngagement');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('StudentEngagement', studentEngagementSchema);
+    }
+})();
+exports.RevenueAnalytics = (() => {
+    try {
+        return (0, mongoose_1.model)('RevenueAnalytics');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('RevenueAnalytics', revenueAnalyticsSchema);
+    }
+})();
+exports.PerformanceMetrics = (() => {
+    try {
+        return (0, mongoose_1.model)('PerformanceMetrics');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('PerformanceMetrics', performanceMetricsSchema);
+    }
+})();
+exports.AnalyticsSummary = (() => {
+    try {
+        return (0, mongoose_1.model)('AnalyticsSummary');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('AnalyticsSummary', analyticsSummarySchema);
+    }
+})();
+exports.Activity = (() => {
+    try {
+        return (0, mongoose_1.model)('Activity');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('Activity', activitySchema);
+    }
+})();

@@ -25,7 +25,7 @@ const auditLog_interface_1 = require("../AuditLog/auditLog.interface");
 const notification_interface_1 = require("../Notification/notification.interface");
 // Automated payout scheduling service
 const scheduleAutomaticPayouts = () => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b, _c;
     console.log('Starting automatic payout scheduling...');
     try {
         // Find teachers with auto-payout enabled and due for payout
@@ -54,7 +54,7 @@ const scheduleAutomaticPayouts = () => __awaiter(void 0, void 0, void 0, functio
                     console.log(`Skipping payout for teacher ${teacher._id}: Amount ${pendingEarnings.totalAmount} below minimum ${preference.minimumAmount}`);
                     skipped++;
                     // Update next scheduled date
-                    const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, preference.timezone);
+                    const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, (_b = preference.customSchedule) === null || _b === void 0 ? void 0 : _b.timezone);
                     yield payout_model_1.PayoutPreference.findByIdAndUpdate(preference._id, {
                         nextScheduledPayoutDate: nextDate,
                     });
@@ -67,7 +67,7 @@ const scheduleAutomaticPayouts = () => __awaiter(void 0, void 0, void 0, functio
                     scheduledAt: new Date(),
                 });
                 // Update next scheduled date
-                const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, preference.timezone);
+                const nextDate = calculateNextPayoutDate(preference.schedule, preference.customSchedule, (_c = preference.customSchedule) === null || _c === void 0 ? void 0 : _c.timezone);
                 yield payout_model_1.PayoutPreference.findByIdAndUpdate(preference._id, {
                     lastPayoutDate: new Date(),
                     nextScheduledPayoutDate: nextDate,
@@ -169,7 +169,7 @@ const createScheduledPayout = (teacherId_1, ...args_1) => __awaiter(void 0, [tea
     if (!amount) {
         const pendingEarnings = yield getPendingEarnings(teacherId);
         amount = pendingEarnings.totalAmount;
-        transactions = pendingEarnings.transactions.map(t => t._id);
+        transactions = pendingEarnings.transactions.map((t) => t._id);
     }
     if (!amount || amount <= 0) {
         throw new Error('No pending earnings available for payout');

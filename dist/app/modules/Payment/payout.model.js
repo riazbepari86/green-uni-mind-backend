@@ -32,7 +32,6 @@ const payoutSchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Teacher',
         required: true,
-        index: true,
     },
     amount: {
         type: Number,
@@ -48,20 +47,16 @@ const payoutSchema = new mongoose_1.Schema({
         type: String,
         enum: Object.values(payout_interface_1.PayoutStatus),
         default: payout_interface_1.PayoutStatus.PENDING,
-        index: true,
     },
     // Stripe Information
     stripePayoutId: {
         type: String,
-        index: true,
     },
     stripeTransferId: {
         type: String,
-        index: true,
     },
     stripeAccountId: {
         type: String,
-        index: true,
     },
     // Relationships
     transactions: [{
@@ -70,13 +65,12 @@ const payoutSchema = new mongoose_1.Schema({
         }],
     batchId: {
         type: String,
-        index: true,
     },
     // Content
     description: { type: String },
     internalNotes: { type: String },
     // Scheduling
-    scheduledAt: { type: Date, index: true },
+    scheduledAt: { type: Date },
     requestedAt: { type: Date },
     processedAt: { type: Date },
     completedAt: { type: Date },
@@ -90,7 +84,7 @@ const payoutSchema = new mongoose_1.Schema({
     },
     retryCount: { type: Number, default: 0, min: 0 },
     maxRetries: { type: Number, default: 3, min: 0 },
-    nextRetryAt: { type: Date, index: true },
+    nextRetryAt: { type: Date },
     retryConfig: { type: payoutRetryConfigSchema },
     attempts: [payoutAttemptSchema],
     // Notifications
@@ -108,7 +102,7 @@ const payoutSchema = new mongoose_1.Schema({
         }],
     // Metadata
     metadata: { type: mongoose_1.Schema.Types.Mixed, default: {} },
-    tags: [{ type: String, index: true }],
+    tags: [{ type: String }],
     // Performance Tracking
     estimatedArrival: { type: Date },
     actualArrival: { type: Date },
@@ -120,7 +114,7 @@ const payoutSchema = new mongoose_1.Schema({
     timestamps: true,
     toJSON: {
         virtuals: true,
-        transform: function (doc, ret) {
+        transform: function (_doc, ret) {
             delete ret.__v;
             return ret;
         },
@@ -135,7 +129,6 @@ const payoutPreferenceSchema = new mongoose_1.Schema({
         ref: 'Teacher',
         required: true,
         unique: true,
-        index: true,
     },
     // Schedule Configuration
     schedule: {
@@ -158,7 +151,7 @@ const payoutPreferenceSchema = new mongoose_1.Schema({
     approvalThreshold: { type: Number, min: 0 },
     // Timing
     lastPayoutDate: { type: Date },
-    nextScheduledPayoutDate: { type: Date, index: true },
+    nextScheduledPayoutDate: { type: Date },
     // Retry Configuration
     retryConfig: { type: payoutRetryConfigSchema, required: true },
     // Notification Preferences
@@ -294,6 +287,28 @@ payoutSchema.statics.findByTeacher = function (teacherId, options = {}) {
         .limit(options.limit || 50)
         .skip(options.offset || 0);
 };
-exports.Payout = (0, mongoose_1.model)('Payout', payoutSchema);
-exports.PayoutPreference = (0, mongoose_1.model)('PayoutPreference', payoutPreferenceSchema);
-exports.PayoutBatch = (0, mongoose_1.model)('PayoutBatch', payoutBatchSchema);
+// Prevent model overwrite during development server restarts
+exports.Payout = (() => {
+    try {
+        return (0, mongoose_1.model)('Payout');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('Payout', payoutSchema);
+    }
+})();
+exports.PayoutPreference = (() => {
+    try {
+        return (0, mongoose_1.model)('PayoutPreference');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('PayoutPreference', payoutPreferenceSchema);
+    }
+})();
+exports.PayoutBatch = (() => {
+    try {
+        return (0, mongoose_1.model)('PayoutBatch');
+    }
+    catch (error) {
+        return (0, mongoose_1.model)('PayoutBatch', payoutBatchSchema);
+    }
+})();

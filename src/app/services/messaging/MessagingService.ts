@@ -23,7 +23,6 @@ import { Course } from '../../modules/Course/course.model';
 import { Logger } from '../../config/logger';
 import MessagingValidationService from './MessagingValidationService';
 import FileUploadService from './FileUploadService';
-import WebSocketService from '../websocket/WebSocketService';
 import ActivityTrackingService from '../activity/ActivityTrackingService';
 import { redisOperations } from '../../config/redis';
 import AppError from '../../errors/AppError';
@@ -32,7 +31,7 @@ import httpStatus from 'http-status';
 class MessagingService {
   private validationService: MessagingValidationService;
   private fileUploadService: FileUploadService;
-  private webSocketService: WebSocketService | null = null;
+  // WebSocket service removed - real-time messaging will be handled by SSE/Polling
   private activityTrackingService: ActivityTrackingService | null = null;
 
   constructor() {
@@ -40,9 +39,7 @@ class MessagingService {
     this.fileUploadService = new FileUploadService();
   }
 
-  public setWebSocketService(webSocketService: WebSocketService): void {
-    this.webSocketService = webSocketService;
-  }
+  // WebSocket service setter removed - real-time messaging handled by SSE/Polling
 
   public setActivityTrackingService(activityTrackingService: ActivityTrackingService): void {
     this.activityTrackingService = activityTrackingService;
@@ -246,19 +243,6 @@ class MessagingService {
       // Create notification
       await this.createMessageNotification(savedMessage, conversation);
 
-      // Broadcast real-time update
-      if (this.webSocketService) {
-        this.webSocketService.broadcastNewMessage(data.conversationId, {
-          id: savedMessage._id,
-          content: savedMessage.content,
-          senderId: savedMessage.senderId,
-          senderType: savedMessage.senderType,
-          messageType: savedMessage.messageType,
-          attachments: savedMessage.attachments,
-          createdAt: savedMessage.createdAt,
-        });
-      }
-
       Logger.info(`📨 Message sent: ${savedMessage._id} in conversation ${data.conversationId}`);
       return this.formatMessageResponse(savedMessage);
     } catch (error) {
@@ -388,6 +372,14 @@ class MessagingService {
     userType: 'student' | 'teacher'
   ): Promise<void> {
     try {
+      // Get unread messages before updating
+      const unreadMessages = await Message.find({
+        conversationId: new Types.ObjectId(conversationId),
+        receiverId: new Types.ObjectId(userId),
+        receiverType: userType,
+        status: { $ne: MessageStatus.READ },
+      }).select('_id');
+
       // Update unread messages to read
       await Message.updateMany(
         {
@@ -406,16 +398,6 @@ class MessagingService {
       await Conversation.findByIdAndUpdate(conversationId, {
         [`unreadCount.${userType}`]: 0,
       });
-
-      // Broadcast read status
-      if (this.webSocketService) {
-        this.webSocketService.broadcastNewMessage(conversationId, {
-          type: 'messages_read',
-          userId,
-          userType,
-          readAt: new Date(),
-        });
-      }
 
       Logger.info(`📖 Messages marked as read in conversation ${conversationId} by ${userType} ${userId}`);
     } catch (error) {

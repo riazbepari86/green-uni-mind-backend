@@ -89,7 +89,7 @@ const resendInvoiceEmail = (0, catchAsync_1.default)((req, res) => __awaiter(voi
     const studentName = `${student.name.firstName} ${student.name.lastName}`;
     const teacherName = `${teacher.name.firstName} ${teacher.name.lastName}`;
     // Resend email
-    yield invoice_service_1.InvoiceService.sendInvoiceEmail(student.email, studentName, course.title, teacherName, invoice.invoiceUrl, invoice.pdfUrl, invoice.amount);
+    yield invoice_service_1.InvoiceService.sendInvoiceEmail(student.email, studentName, course.title, teacherName, invoice.invoiceUrl || '', invoice.pdfUrl || '', invoice.amount);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,

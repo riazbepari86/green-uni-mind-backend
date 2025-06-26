@@ -133,7 +133,6 @@ class PerformanceDashboard {
             const invalidationMetrics = yield this.invalidationService.getInvalidationMetrics();
             // Collect job metrics
             const jobStats = yield JobQueueManager_1.jobQueueManager.getQueueStats();
-            const jobHealth = yield JobQueueManager_1.jobQueueManager.getHealthStatus();
             // Collect auth metrics
             const authMetrics = yield this.collectAuthMetrics();
             // Collect system metrics
@@ -163,8 +162,16 @@ class PerformanceDashboard {
                             .map(([name, metrics]) => (Object.assign({ name }, metrics))) }),
                 },
                 jobs: {
-                    queues: jobStats,
-                    workers: jobHealth.workers,
+                    queues: {
+                        default: {
+                            waiting: jobStats.waitingJobs,
+                            active: jobStats.activeJobs,
+                            completed: jobStats.completedJobs,
+                            failed: jobStats.failedJobs,
+                            delayed: jobStats.delayedJobs,
+                        }
+                    },
+                    workers: {},
                     performance: {
                         averageProcessingTime: yield this.calculateJobProcessingTime(),
                         throughputPerMinute: yield this.calculateJobThroughput(),

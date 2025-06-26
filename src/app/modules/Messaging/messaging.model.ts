@@ -137,19 +137,16 @@ const conversationSchema = new Schema<IConversation>(
       type: Schema.Types.ObjectId,
       ref: 'Course',
       required: true,
-      index: true,
     },
     teacherId: {
       type: Schema.Types.ObjectId,
       ref: 'Teacher',
       required: true,
-      index: true,
     },
     studentId: {
       type: Schema.Types.ObjectId,
       ref: 'Student',
       required: true,
-      index: true,
     },
     type: {
       type: String,
@@ -168,7 +165,6 @@ const conversationSchema = new Schema<IConversation>(
     },
     lastMessageAt: {
       type: Date,
-      index: true,
     },
     unreadCount: {
       teacher: { type: Number, default: 0, min: 0 },
@@ -360,25 +356,21 @@ const messageSearchIndexSchema = new Schema<IMessageSearchIndex>(
       type: Schema.Types.ObjectId,
       ref: 'Conversation',
       required: true,
-      index: true,
     },
     courseId: {
       type: Schema.Types.ObjectId,
       ref: 'Course',
       required: true,
-      index: true,
     },
     teacherId: {
       type: Schema.Types.ObjectId,
       ref: 'Teacher',
       required: true,
-      index: true,
     },
     studentId: {
       type: Schema.Types.ObjectId,
       ref: 'Student',
       required: true,
-      index: true,
     },
     content: {
       type: String,
@@ -397,7 +389,6 @@ const messageSearchIndexSchema = new Schema<IMessageSearchIndex>(
     createdAt: {
       type: Date,
       required: true,
-      index: true,
     },
   },
   {
@@ -426,9 +417,43 @@ messageSearchIndexSchema.index({ searchableContent: 'text', attachmentNames: 'te
 messageSearchIndexSchema.index({ teacherId: 1, createdAt: -1 });
 messageSearchIndexSchema.index({ courseId: 1, createdAt: -1 });
 
-// Export models
-export const Message = model<IMessage>('Message', messageSchema);
-export const Conversation = model<IConversation>('Conversation', conversationSchema);
-export const MessageThread = model<IMessageThread>('MessageThread', messageThreadSchema);
-export const MessageNotification = model<IMessageNotification>('MessageNotification', messageNotificationSchema);
-export const MessageSearchIndex = model<IMessageSearchIndex>('MessageSearchIndex', messageSearchIndexSchema);
+// Export models with overwrite protection
+export const Message = (() => {
+  try {
+    return model<IMessage>('Message');
+  } catch (error) {
+    return model<IMessage>('Message', messageSchema);
+  }
+})();
+
+export const Conversation = (() => {
+  try {
+    return model<IConversation>('Conversation');
+  } catch (error) {
+    return model<IConversation>('Conversation', conversationSchema);
+  }
+})();
+
+export const MessageThread = (() => {
+  try {
+    return model<IMessageThread>('MessageThread');
+  } catch (error) {
+    return model<IMessageThread>('MessageThread', messageThreadSchema);
+  }
+})();
+
+export const MessageNotification = (() => {
+  try {
+    return model<IMessageNotification>('MessageNotification');
+  } catch (error) {
+    return model<IMessageNotification>('MessageNotification', messageNotificationSchema);
+  }
+})();
+
+export const MessageSearchIndex = (() => {
+  try {
+    return model<IMessageSearchIndex>('MessageSearchIndex');
+  } catch (error) {
+    return model<IMessageSearchIndex>('MessageSearchIndex', messageSearchIndexSchema);
+  }
+})();

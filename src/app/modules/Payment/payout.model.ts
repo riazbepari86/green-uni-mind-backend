@@ -41,7 +41,6 @@ const payoutSchema = new Schema<IPayout>({
     type: Schema.Types.ObjectId,
     ref: 'Teacher',
     required: true,
-    index: true,
   },
   amount: {
     type: Number,
@@ -57,21 +56,17 @@ const payoutSchema = new Schema<IPayout>({
     type: String,
     enum: Object.values(PayoutStatus),
     default: PayoutStatus.PENDING,
-    index: true,
   },
 
   // Stripe Information
   stripePayoutId: {
     type: String,
-    index: true,
   },
   stripeTransferId: {
     type: String,
-    index: true,
   },
   stripeAccountId: {
     type: String,
-    index: true,
   },
 
   // Relationships
@@ -81,7 +76,6 @@ const payoutSchema = new Schema<IPayout>({
   }],
   batchId: {
     type: String,
-    index: true,
   },
 
   // Content
@@ -89,7 +83,7 @@ const payoutSchema = new Schema<IPayout>({
   internalNotes: { type: String },
 
   // Scheduling
-  scheduledAt: { type: Date, index: true },
+  scheduledAt: { type: Date },
   requestedAt: { type: Date },
   processedAt: { type: Date },
   completedAt: { type: Date },
@@ -104,7 +98,7 @@ const payoutSchema = new Schema<IPayout>({
   },
   retryCount: { type: Number, default: 0, min: 0 },
   maxRetries: { type: Number, default: 3, min: 0 },
-  nextRetryAt: { type: Date, index: true },
+  nextRetryAt: { type: Date },
   retryConfig: { type: payoutRetryConfigSchema },
   attempts: [payoutAttemptSchema],
 
@@ -125,7 +119,7 @@ const payoutSchema = new Schema<IPayout>({
 
   // Metadata
   metadata: { type: Schema.Types.Mixed, default: {} },
-  tags: [{ type: String, index: true }],
+  tags: [{ type: String }],
 
   // Performance Tracking
   estimatedArrival: { type: Date },
@@ -139,7 +133,7 @@ const payoutSchema = new Schema<IPayout>({
   timestamps: true,
   toJSON: {
     virtuals: true,
-    transform: function(doc, ret) {
+    transform: function(_doc, ret) {
       delete ret.__v;
       return ret;
     },
@@ -155,7 +149,6 @@ const payoutPreferenceSchema = new Schema<IPayoutPreference>({
     ref: 'Teacher',
     required: true,
     unique: true,
-    index: true,
   },
 
   // Schedule Configuration
@@ -182,7 +175,7 @@ const payoutPreferenceSchema = new Schema<IPayoutPreference>({
 
   // Timing
   lastPayoutDate: { type: Date },
-  nextScheduledPayoutDate: { type: Date, index: true },
+  nextScheduledPayoutDate: { type: Date },
 
   // Retry Configuration
   retryConfig: { type: payoutRetryConfigSchema, required: true },
@@ -336,6 +329,27 @@ payoutSchema.statics.findByTeacher = function(teacherId: string, options: any = 
     .skip(options.offset || 0);
 };
 
-export const Payout = model<IPayout>('Payout', payoutSchema);
-export const PayoutPreference = model<IPayoutPreference>('PayoutPreference', payoutPreferenceSchema);
-export const PayoutBatch = model<IPayoutBatch>('PayoutBatch', payoutBatchSchema);
+// Prevent model overwrite during development server restarts
+export const Payout = (() => {
+  try {
+    return model<IPayout>('Payout');
+  } catch (error) {
+    return model<IPayout>('Payout', payoutSchema);
+  }
+})();
+
+export const PayoutPreference = (() => {
+  try {
+    return model<IPayoutPreference>('PayoutPreference');
+  } catch (error) {
+    return model<IPayoutPreference>('PayoutPreference', payoutPreferenceSchema);
+  }
+})();
+
+export const PayoutBatch = (() => {
+  try {
+    return model<IPayoutBatch>('PayoutBatch');
+  } catch (error) {
+    return model<IPayoutBatch>('PayoutBatch', payoutBatchSchema);
+  }
+})();

@@ -20,6 +20,8 @@ import { Bookmark } from '../Bookmark/bookmark.model';
 import { Note } from '../Note/note.model';
 import { Question } from '../Question/question.model';
 import Express from 'express';
+// WebSocket removed - replaced with SSE/Polling system
+// RealTimeAnalyticsService removed - using standard API patterns
 
 const createCourse = async (
   payload: ICourse,
@@ -209,6 +211,13 @@ const updateCourse = async (
       throw new AppError(httpStatus.NOT_FOUND, 'Course Not Found!');
     }
 
+    // TODO: Broadcast real-time course update via SSE/Polling
+    // realTimeAnalyticsService.broadcastCourseUpdate(courseId, {
+    //   action: 'updated',
+    //   course: updatedCourse,
+    //   courseId: courseId
+    // }, updatedCourse.teacher.toString());
+
     return updatedCourse;
   } catch (error) {
     console.error('Error updating course:', error);
@@ -334,6 +343,13 @@ const editCourse = async (
 
     await session.commitTransaction();
     session.endSession();
+
+    // TODO: Broadcast real-time course update via SSE/Polling
+    // realTimeAnalyticsService.broadcastCourseUpdate(id, {
+    //   action: 'updated',
+    //   course: updatedCourse,
+    //   courseId: id
+    // }, updatedCourse?.teacher.toString());
 
     return updatedCourse;
   } catch (error) {

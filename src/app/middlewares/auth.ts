@@ -11,7 +11,7 @@ import { JwtUserPayload } from '../interface/auth';
 // Express Request type extension is now handled in types/express.d.ts
 
 const auth = (...requiredRoles: IUserRole[]): RequestHandler => {
-  return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  return catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
     // Extract token from Authorization header (Bearer token)
     const token = req.headers.authorization?.split(' ')[1];
 
@@ -55,10 +55,34 @@ const auth = (...requiredRoles: IUserRole[]): RequestHandler => {
 
     const { role, email, iat } = decoded;
 
+    // Enhanced logging for debugging
+    console.log('🔍 Auth Middleware Debug Info:');
+    console.log('- Decoded JWT payload:', JSON.stringify(decoded, null, 2));
+    console.log('- Looking up user by email:', email);
+    console.log('- User role from token:', role);
+    console.log('- Token issued at:', iat ? new Date(iat * 1000).toISOString() : 'N/A');
+
     // checking if the user is exist
     const user = await User.isUserExists(email);
 
+    console.log('- User lookup result:', user ? 'Found' : 'Not found');
+    if (user) {
+      console.log('- Found user details:', {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        isOAuthUser: user.isOAuthUser,
+        isVerified: user.isVerified,
+        status: user.status
+      });
+    }
+
     if (!user) {
+      console.error('❌ User not found in database for email:', email);
+      console.error('❌ This might indicate:');
+      console.error('   1. Email mismatch between token and database');
+      console.error('   2. User was deleted after token generation');
+      console.error('   3. Database connection issue');
       throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !');
     }
 

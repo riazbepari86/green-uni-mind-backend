@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
@@ -36,7 +37,14 @@ const handleMainWebhook = catchAsync(async (req: Request, res: Response) => {
     // Process the webhook asynchronously to avoid timeout
     setImmediate(async () => {
       try {
-        let processingResult = {
+        let processingResult: {
+          success: boolean;
+          error?: string;
+          processingTime?: number;
+          affectedUserId?: string;
+          affectedUserType?: string;
+          relatedResourceIds?: string[];
+        } = {
           success: false,
           error: '',
           processingTime: 0,
@@ -84,11 +92,21 @@ const handleMainWebhook = catchAsync(async (req: Request, res: Response) => {
         }
 
         processingResult.processingTime = Date.now() - startTime;
-        
+
+        // Ensure all required fields are present
+        const completeResult = {
+          success: processingResult.success,
+          error: processingResult.error || '',
+          processingTime: processingResult.processingTime || Date.now() - startTime,
+          affectedUserId: processingResult.affectedUserId || '',
+          affectedUserType: processingResult.affectedUserType || '',
+          relatedResourceIds: processingResult.relatedResourceIds || [],
+        };
+
         // Mark webhook as processed
         await WebhookEventService.markWebhookProcessed(
-          webhookEvent._id.toString(),
-          processingResult
+          (webhookEvent._id as Types.ObjectId).toString(),
+          completeResult
         );
 
       } catch (processingError: any) {
@@ -96,7 +114,7 @@ const handleMainWebhook = catchAsync(async (req: Request, res: Response) => {
         
         // Schedule retry if appropriate
         await WebhookEventService.scheduleWebhookRetry(
-          webhookEvent._id.toString(),
+          (webhookEvent._id as Types.ObjectId).toString(),
           processingError.message
         );
       }
@@ -140,7 +158,14 @@ const handleConnectWebhook = catchAsync(async (req: Request, res: Response) => {
     // Process the webhook asynchronously to avoid timeout
     setImmediate(async () => {
       try {
-        let processingResult = {
+        let processingResult: {
+          success: boolean;
+          error?: string;
+          processingTime?: number;
+          affectedUserId?: string;
+          affectedUserType?: string;
+          relatedResourceIds?: string[];
+        } = {
           success: false,
           error: '',
           processingTime: 0,
@@ -194,36 +219,47 @@ const handleConnectWebhook = catchAsync(async (req: Request, res: Response) => {
             processingResult = await StripeConnectWebhookHandlers.handleTransferCreated(event);
             break;
           
-          case 'transfer.paid':
-            processingResult = await StripeConnectWebhookHandlers.handleTransferPaid(event);
-            break;
-          
-          case 'transfer.failed':
-            processingResult = await StripeConnectWebhookHandlers.handleTransferFailed(event);
+          // Note: transfer.paid and transfer.failed are not in Stripe's official event types
+          // but keeping handlers for potential future use
+          default:
+            if ((event.type as string) === 'transfer.paid') {
+              processingResult = await StripeConnectWebhookHandlers.handleTransferPaid(event);
+            } else if ((event.type as string) === 'transfer.failed') {
+              processingResult = await StripeConnectWebhookHandlers.handleTransferFailed(event);
+            } else {
+              console.log(`Unhandled connect webhook event type: ${event.type}`);
+              processingResult = {
+                success: true,
+                error: '',
+                processingTime: Date.now() - startTime,
+                affectedUserId: '',
+                affectedUserType: '',
+                relatedResourceIds: [],
+              };
+            }
             break;
           
           case 'transfer.reversed':
             processingResult = await StripeConnectWebhookHandlers.handleTransferReversed(event);
             break;
-          
-          default:
-            console.log(`Unhandled connect webhook event type: ${event.type}`);
-            processingResult = {
-              success: true,
-              error: '',
-              processingTime: Date.now() - startTime,
-              affectedUserId: '',
-              affectedUserType: '',
-              relatedResourceIds: [],
-            };
         }
 
         processingResult.processingTime = Date.now() - startTime;
-        
+
+        // Ensure all required fields are present
+        const completeResult = {
+          success: processingResult.success,
+          error: processingResult.error || '',
+          processingTime: processingResult.processingTime || Date.now() - startTime,
+          affectedUserId: processingResult.affectedUserId || '',
+          affectedUserType: processingResult.affectedUserType || '',
+          relatedResourceIds: processingResult.relatedResourceIds || [],
+        };
+
         // Mark webhook as processed
         await WebhookEventService.markWebhookProcessed(
-          webhookEvent._id.toString(),
-          processingResult
+          (webhookEvent._id as Types.ObjectId).toString(),
+          completeResult
         );
 
       } catch (processingError: any) {
@@ -231,7 +267,7 @@ const handleConnectWebhook = catchAsync(async (req: Request, res: Response) => {
         
         // Schedule retry if appropriate
         await WebhookEventService.scheduleWebhookRetry(
-          webhookEvent._id.toString(),
+          (webhookEvent._id as Types.ObjectId).toString(),
           processingError.message
         );
       }

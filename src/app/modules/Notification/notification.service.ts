@@ -14,7 +14,7 @@ import {
   AuditLogCategory,
   AuditLogLevel
 } from '../AuditLog/auditLog.interface';
-import { webSocketService } from '../../services/websocketService';
+
 import { emailService } from '../../services/emailService';
 
 interface CreateNotificationData {
@@ -49,7 +49,7 @@ const createNotification = async (data: CreateNotificationData): Promise<INotifi
     }
 
     // Determine channels to use
-    const channels = data.channels || getDefaultChannels(data.type, preferences);
+    const channels = data.channels || getDefaultChannels(data.type, preferences || undefined);
     const notifications: INotification[] = [];
 
     // Create notification for each channel
@@ -101,28 +101,13 @@ const createNotification = async (data: CreateNotificationData): Promise<INotifi
       await notification.save();
       notifications.push(notification);
 
-      // Immediately deliver in-app notifications via WebSocket
+      // In-app notifications are stored and delivered via standard API calls
       if (channel === NotificationChannel.IN_APP) {
-        const delivered = webSocketService.sendRealTimeNotification({
-          userId: data.userId.toString(),
-          type: data.type,
-          title: data.title || '',
-          body: data.body,
-          priority: data.priority || NotificationPriority.NORMAL,
-          actionUrl: data.actionUrl,
-          actionText: data.actionText,
-          metadata: {
-            notificationId: notification._id.toString(),
-            ...data.metadata,
-          },
+        // Mark as delivered since it's stored in database for API retrieval
+        await Notification.findByIdAndUpdate(notification._id, {
+          status: NotificationStatus.DELIVERED,
+          deliveredAt: new Date(),
         });
-
-        if (delivered) {
-          await Notification.findByIdAndUpdate(notification._id, {
-            status: NotificationStatus.DELIVERED,
-            deliveredAt: new Date(),
-          });
-        }
       }
 
       // Send email notifications immediately if not scheduled
@@ -466,28 +451,12 @@ const processPendingNotifications = async (): Promise<{
           await deliverEmailNotification(notification);
           delivered++;
         } else if (notification.channel === NotificationChannel.IN_APP) {
-          // Try to deliver via WebSocket
-          const success = webSocketService.sendRealTimeNotification({
-            userId: notification.userId.toString(),
-            type: notification.type,
-            title: notification.title || '',
-            body: notification.body,
-            priority: notification.priority,
-            actionUrl: notification.actionUrl,
-            actionText: notification.actionText,
-            metadata: notification.metadata,
+          // Mark in-app notifications as delivered (available via API)
+          await Notification.findByIdAndUpdate(notification._id, {
+            status: NotificationStatus.DELIVERED,
+            deliveredAt: new Date(),
           });
-
-          if (success) {
-            await Notification.findByIdAndUpdate(notification._id, {
-              status: NotificationStatus.DELIVERED,
-              deliveredAt: new Date(),
-            });
-            delivered++;
-          } else {
-            // User not connected, keep as pending for later delivery
-            continue;
-          }
+          delivered++;
         }
       } catch (error: any) {
         console.error(`Error processing notification ${notification._id}:`, error);

@@ -245,7 +245,6 @@ export class PerformanceDashboard {
 
     // Collect job metrics
     const jobStats = await jobQueueManager.getQueueStats();
-    const jobHealth = await jobQueueManager.getHealthStatus();
 
     // Collect auth metrics
     const authMetrics = await this.collectAuthMetrics();
@@ -287,8 +286,16 @@ export class PerformanceDashboard {
         },
       },
       jobs: {
-        queues: jobStats,
-        workers: jobHealth.workers,
+        queues: {
+          default: {
+            waiting: jobStats.waitingJobs,
+            active: jobStats.activeJobs,
+            completed: jobStats.completedJobs,
+            failed: jobStats.failedJobs,
+            delayed: jobStats.delayedJobs,
+          }
+        },
+        workers: {},
         performance: {
           averageProcessingTime: await this.calculateJobProcessingTime(),
           throughputPerMinute: await this.calculateJobThroughput(),

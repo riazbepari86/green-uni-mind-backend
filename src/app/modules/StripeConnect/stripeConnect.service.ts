@@ -4,7 +4,7 @@ import AppError from '../../errors/AppError';
 import { Teacher } from '../Teacher/teacher.model';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-04-30.basil',
 });
 
 // Create Stripe Connect account with email pre-population

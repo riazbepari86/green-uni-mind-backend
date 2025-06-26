@@ -4,10 +4,11 @@ import catchAsync from '../utils/catchAsync';
 import sendResponse from '../utils/sendResponse';
 import { performanceDashboard } from '../services/monitoring/PerformanceDashboard';
 import { redisServiceManager } from '../services/redis/RedisServiceManager';
-import { jobQueueManager } from '../services/jobs/JobQueueManager';
+// JobQueueManager removed - using standard API patterns
 import { apiCache, queryCache, invalidationService } from '../middlewares/cachingMiddleware';
 import { redisUsageAuditor } from '../services/redis/RedisUsageAuditor';
 import { redisUsageMonitor } from '../services/monitoring/RedisUsageMonitor';
+import { jobQueueManager } from '../services/jobs/JobQueueManager';
 
 // Get current performance metrics
 const getCurrentMetrics = catchAsync(async (req: Request, res: Response) => {

@@ -53,19 +53,16 @@ const auditLogSchema = new Schema<IAuditLog>({
     type: String,
     enum: Object.values(AuditLogAction),
     required: true,
-    index: true,
   },
   category: {
     type: String,
     enum: Object.values(AuditLogCategory),
     required: true,
-    index: true,
   },
   level: {
     type: String,
     enum: Object.values(AuditLogLevel),
     required: true,
-    index: true,
   },
   message: {
     type: String,
@@ -76,26 +73,21 @@ const auditLogSchema = new Schema<IAuditLog>({
   // User Context
   userId: {
     type: Schema.Types.ObjectId,
-    index: true,
   },
   userType: {
     type: String,
     enum: ['student', 'teacher', 'admin', 'system'],
-    index: true,
   },
   userEmail: {
     type: String,
-    index: true,
   },
-  
+
   // Resource Context
   resourceType: {
     type: String,
-    index: true,
   },
   resourceId: {
     type: String,
-    index: true,
   },
   
   // Metadata
@@ -109,24 +101,20 @@ const auditLogSchema = new Schema<IAuditLog>({
     type: Date,
     required: true,
     default: Date.now,
-    index: true,
   },
-  
+
   // Compliance
   retentionDate: {
     type: Date,
-    index: true,
   },
   isArchived: {
     type: Boolean,
     default: false,
-    index: true,
   },
-  
+
   // Search and Indexing
   tags: [{
     type: String,
-    index: true,
   }],
   searchableText: {
     type: String,
@@ -136,7 +124,7 @@ const auditLogSchema = new Schema<IAuditLog>({
   timestamps: true,
   toJSON: {
     virtuals: true,
-    transform: function(doc, ret) {
+    transform: function(_doc, ret) {
       delete ret.__v;
       return ret;
     },
@@ -156,7 +144,6 @@ auditLogSchema.index({ resourceType: 1, resourceId: 1, timestamp: -1 });
 auditLogSchema.index({ 'metadata.stripeEventId': 1 });
 auditLogSchema.index({ 'metadata.stripeAccountId': 1, timestamp: -1 });
 auditLogSchema.index({ tags: 1, timestamp: -1 });
-auditLogSchema.index({ retentionDate: 1 }, { sparse: true });
 
 // Compound indexes for common queries
 auditLogSchema.index({ 
@@ -228,4 +215,13 @@ auditLogSchema.statics.findByStripeAccount = function(stripeAccountId: string, o
     .skip(options.offset || 0);
 };
 
-export const AuditLog = model<IAuditLog>('AuditLog', auditLogSchema);
+// Prevent model overwrite during development server restarts
+export const AuditLog = (() => {
+  try {
+    // Try to get existing model first
+    return model<IAuditLog>('AuditLog');
+  } catch (error) {
+    // Model doesn't exist, create it
+    return model<IAuditLog>('AuditLog', auditLogSchema);
+  }
+})();

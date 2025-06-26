@@ -20,7 +20,7 @@ const catchAsync_1 = __importDefault(require("../utils/catchAsync"));
 const user_model_1 = require("../modules/User/user.model");
 // Express Request type extension is now handled in types/express.d.ts
 const auth = (...requiredRoles) => {
-    return (0, catchAsync_1.default)((req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    return (0, catchAsync_1.default)((req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
         var _a, _b;
         // Extract token from Authorization header (Bearer token)
         const token = (_a = req.headers.authorization) === null || _a === void 0 ? void 0 : _a.split(' ')[1];
@@ -51,9 +51,31 @@ const auth = (...requiredRoles) => {
             throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'Unauthorized');
         }
         const { role, email, iat } = decoded;
+        // Enhanced logging for debugging
+        console.log('🔍 Auth Middleware Debug Info:');
+        console.log('- Decoded JWT payload:', JSON.stringify(decoded, null, 2));
+        console.log('- Looking up user by email:', email);
+        console.log('- User role from token:', role);
+        console.log('- Token issued at:', iat ? new Date(iat * 1000).toISOString() : 'N/A');
         // checking if the user is exist
         const user = yield user_model_1.User.isUserExists(email);
+        console.log('- User lookup result:', user ? 'Found' : 'Not found');
+        if (user) {
+            console.log('- Found user details:', {
+                id: user._id,
+                email: user.email,
+                role: user.role,
+                isOAuthUser: user.isOAuthUser,
+                isVerified: user.isVerified,
+                status: user.status
+            });
+        }
         if (!user) {
+            console.error('❌ User not found in database for email:', email);
+            console.error('❌ This might indicate:');
+            console.error('   1. Email mismatch between token and database');
+            console.error('   2. User was deleted after token generation');
+            console.error('   3. Database connection issue');
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'This user is not found !');
         }
         if (user.passwordChangedAt &&

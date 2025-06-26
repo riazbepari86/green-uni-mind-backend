@@ -29,6 +29,8 @@ const lecture_model_1 = require("../Lecture/lecture.model");
 const bookmark_model_1 = require("../Bookmark/bookmark.model");
 const note_model_1 = require("../Note/note.model");
 const question_model_1 = require("../Question/question.model");
+// WebSocket removed - replaced with SSE/Polling system
+// RealTimeAnalyticsService removed - using standard API patterns
 const createCourse = (payload, id, file) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const teacher = yield teacher_model_1.Teacher.findById(id);
@@ -165,6 +167,12 @@ const updateCourse = (courseId, payload, file) => __awaiter(void 0, void 0, void
         if (!updatedCourse) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Course Not Found!');
         }
+        // TODO: Broadcast real-time course update via SSE/Polling
+        // realTimeAnalyticsService.broadcastCourseUpdate(courseId, {
+        //   action: 'updated',
+        //   course: updatedCourse,
+        //   courseId: courseId
+        // }, updatedCourse.teacher.toString());
         return updatedCourse;
     }
     catch (error) {
@@ -260,6 +268,12 @@ const editCourse = (id, payload, file) => __awaiter(void 0, void 0, void 0, func
         const updatedCourse = yield course_model_1.Course.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true, session });
         yield session.commitTransaction();
         session.endSession();
+        // TODO: Broadcast real-time course update via SSE/Polling
+        // realTimeAnalyticsService.broadcastCourseUpdate(id, {
+        //   action: 'updated',
+        //   course: updatedCourse,
+        //   courseId: id
+        // }, updatedCourse?.teacher.toString());
         return updatedCourse;
     }
     catch (error) {

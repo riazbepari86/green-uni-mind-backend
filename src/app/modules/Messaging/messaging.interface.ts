@@ -197,7 +197,7 @@ export interface ISendMessageDTO {
   content: string;
   messageType?: MessageType;
   replyTo?: string;
-  attachments?: Express.Multer.File[];
+  attachments?: any[];
 }
 
 export interface IConversationResponseDTO {

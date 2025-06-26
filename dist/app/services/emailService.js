@@ -30,7 +30,7 @@ class EmailService {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 // Create transporter
-                this.transporter = nodemailer_1.default.createTransporter({
+                this.transporter = nodemailer_1.default.createTransport({
                     host: config_1.default.email.host,
                     port: config_1.default.email.port,
                     secure: config_1.default.email.secure,

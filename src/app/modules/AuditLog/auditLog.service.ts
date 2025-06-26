@@ -139,7 +139,7 @@ const getAuditLogSummary = async (
       matchStage.userId = filters.userId;
     }
 
-    const pipeline = [
+    const pipeline: any[] = [
       { $match: matchStage },
       {
         $facet: {
@@ -182,17 +182,23 @@ const getAuditLogSummary = async (
     // Convert arrays to objects
     const eventsByCategory: Record<AuditLogCategory, number> = {} as any;
     result.eventsByCategory.forEach((item: any) => {
-      eventsByCategory[item._id] = item.count;
+      if (item._id && typeof item._id === 'string') {
+        eventsByCategory[item._id as AuditLogCategory] = item.count;
+      }
     });
 
     const eventsByLevel: Record<AuditLogLevel, number> = {} as any;
     result.eventsByLevel.forEach((item: any) => {
-      eventsByLevel[item._id] = item.count;
+      if (item._id && typeof item._id === 'string') {
+        eventsByLevel[item._id as AuditLogLevel] = item.count;
+      }
     });
 
     const eventsByAction: Record<AuditLogAction, number> = {} as any;
     result.eventsByAction.forEach((item: any) => {
-      eventsByAction[item._id] = item.count;
+      if (item._id && typeof item._id === 'string') {
+        eventsByAction[item._id as AuditLogAction] = item.count;
+      }
     });
 
     const topUsers = result.topUsers.map((item: any) => ({

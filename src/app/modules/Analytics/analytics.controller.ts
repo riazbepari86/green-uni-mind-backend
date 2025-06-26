@@ -12,6 +12,47 @@ const analyticsService = new AnalyticsService();
 const activityTrackingService = new ActivityTrackingService();
 
 /**
+ * Helper function to validate and resolve teacher ID
+ * Handles cases where frontend passes user._id instead of teacher._id
+ */
+const validateAndResolveTeacherId = async (teacherId: string, authenticatedUser: any): Promise<string> => {
+  console.log('🔍 validateAndResolveTeacherId called with:', { teacherId, userRole: authenticatedUser.role, userId: authenticatedUser._id });
+
+  if (authenticatedUser.role !== 'teacher') {
+    console.log('✅ Non-teacher user, returning original teacherId');
+    return teacherId; // For non-teacher users, return as-is
+  }
+
+  // Try to find teacher by the provided ID first
+  console.log('🔍 Looking for teacher by ID:', teacherId);
+  let teacher = await Teacher.findById(teacherId);
+  console.log('📊 Teacher.findById result:', teacher ? 'Found' : 'Not found');
+
+  // If not found, try to find by user ID (common case when frontend passes user._id)
+  if (!teacher) {
+    console.log('🔍 Looking for teacher by user ID:', teacherId);
+    teacher = await Teacher.findOne({ user: teacherId });
+    console.log('📊 Teacher.findOne({user}) result:', teacher ? 'Found' : 'Not found');
+  }
+
+  // Validate that the teacher belongs to the authenticated user
+  if (!teacher) {
+    console.log('❌ No teacher found for ID:', teacherId);
+    throw new AppError(httpStatus.FORBIDDEN, 'Teacher not found');
+  }
+
+  console.log('🔍 Teacher found:', { teacherId: teacher._id, userId: teacher.user });
+
+  if (teacher.user.toString() !== authenticatedUser._id) {
+    console.log('❌ Teacher user mismatch:', { teacherUserId: teacher.user.toString(), authenticatedUserId: authenticatedUser._id });
+    throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own data');
+  }
+
+  console.log('✅ Teacher validation successful, returning teacher ID:', teacher._id.toString());
+  return teacher._id.toString();
+};
+
+/**
  * Get comprehensive teacher analytics
  */
 const getTeacherAnalytics = catchAsync(async (req: Request, res: Response) => {
@@ -26,16 +67,10 @@ const getTeacherAnalytics = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    // Find the teacher by teacherId and check if the user field matches the authenticated user
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own analytics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const filters = {
-    teacherId,
+    teacherId: actualTeacherId,
     courseId: courseId as string,
     period: period as 'daily' | 'weekly' | 'monthly' | 'yearly',
     startDate: startDate ? new Date(startDate as string) : undefined,
@@ -62,12 +97,7 @@ const getCourseAnalytics = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own course analytics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const dateRange = startDate && endDate ? {
     startDate: new Date(startDate as string),
@@ -94,12 +124,7 @@ const getRevenueAnalytics = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own revenue analytics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const dateRange = startDate && endDate ? {
     startDate: new Date(startDate as string),
@@ -130,12 +155,7 @@ const getPerformanceMetrics = catchAsync(async (req: Request, res: Response) => 
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own performance metrics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const dateRange = startDate && endDate ? {
     startDate: new Date(startDate as string),
@@ -166,12 +186,7 @@ const getStudentEngagement = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own student engagement data');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const dateRange = startDate && endDate ? {
     startDate: new Date(startDate as string),
@@ -211,12 +226,7 @@ const getActivityFeed = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own activity feed');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   // Build filters object
   const filters = {
@@ -230,7 +240,7 @@ const getActivityFeed = catchAsync(async (req: Request, res: Response) => {
     sortOrder: sortOrder as any
   };
 
-  const activitiesResult = await activityTrackingService.getActivitiesWithFilters(teacherId, filters);
+  const activitiesResult = await activityTrackingService.getActivitiesWithFilters(actualTeacherId, filters);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -259,14 +269,9 @@ const markActivityAsRead = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only mark your own activities as read');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  await activityTrackingService.markActivityAsRead(activityId, teacherId);
+  await activityTrackingService.markActivityAsRead(activityId, actualTeacherId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -284,22 +289,17 @@ const getDashboardSummary = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own dashboard');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   // Get summary data for the current month
   const filters = {
-    teacherId,
+    teacherId: actualTeacherId,
     period: 'monthly' as const,
   };
 
   const [analytics, recentActivities] = await Promise.all([
     analyticsService.getTeacherAnalytics(filters),
-    activityTrackingService.getRecentActivities(teacherId, 10),
+    activityTrackingService.getRecentActivities(actualTeacherId, 10),
   ]);
 
   const summary = {
@@ -333,15 +333,10 @@ const exportAnalytics = catchAsync(async (req: Request, res: Response) => {
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only export your own analytics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const filters = {
-    teacherId,
+    teacherId: actualTeacherId,
     courseId: courseId as string,
     period: period as 'daily' | 'weekly' | 'monthly' | 'yearly',
   };
@@ -370,12 +365,7 @@ const getEnrollmentStatistics = catchAsync(async (req: Request, res: Response) =
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own enrollment statistics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const statistics = await analyticsService.getEnrollmentStatistics(
     teacherId,
@@ -400,12 +390,7 @@ const getStudentEngagementMetrics = catchAsync(async (req: Request, res: Respons
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own engagement metrics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const metrics = await analyticsService.getStudentEngagementMetrics(
     teacherId,
@@ -430,12 +415,7 @@ const getRevenueAnalyticsDetailed = catchAsync(async (req: Request, res: Respons
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own revenue analytics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const analytics = await analyticsService.getRevenueAnalyticsDetailed(
     teacherId,
@@ -460,15 +440,10 @@ const getPerformanceMetricsDetailed = catchAsync(async (req: Request, res: Respo
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own performance metrics');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   const metrics = await analyticsService.getPerformanceMetricsDetailed(
-    teacherId,
+    actualTeacherId,
     period as 'daily' | 'weekly' | 'monthly' | 'yearly',
     courseId as string
   );
@@ -490,12 +465,7 @@ const bulkMarkActivitiesAsRead = catchAsync(async (req: Request, res: Response) 
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only mark your own activities as read');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   if (!Array.isArray(activityIds) || activityIds.length === 0) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Activity IDs array is required');
@@ -503,7 +473,7 @@ const bulkMarkActivitiesAsRead = catchAsync(async (req: Request, res: Response) 
 
   await Promise.all(
     activityIds.map(activityId =>
-      activityTrackingService.markActivityAsRead(activityId, teacherId)
+      activityTrackingService.markActivityAsRead(activityId, actualTeacherId)
     )
   );
 
@@ -523,12 +493,7 @@ const getRealTimeData = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
 
   // Validate teacher ID matches authenticated user
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own real-time data');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   // Return empty real-time data for new teachers
   const emptyRealTimeData = {
@@ -561,12 +526,7 @@ const getInsights = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
 
   // Validate teacher ID matches authenticated user
-  if (user.role === 'teacher') {
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher || teacher.user.toString() !== user._id) {
-      throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own insights');
-    }
-  }
+  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
   // Return welcome insights for new teachers
   const newTeacherInsights = [

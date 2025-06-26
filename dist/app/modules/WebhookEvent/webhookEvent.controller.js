@@ -83,8 +83,17 @@ const handleMainWebhook = (0, catchAsync_1.default)((req, res) => __awaiter(void
                         };
                 }
                 processingResult.processingTime = Date.now() - startTime;
+                // Ensure all required fields are present
+                const completeResult = {
+                    success: processingResult.success,
+                    error: processingResult.error || '',
+                    processingTime: processingResult.processingTime || Date.now() - startTime,
+                    affectedUserId: processingResult.affectedUserId || '',
+                    affectedUserType: processingResult.affectedUserType || '',
+                    relatedResourceIds: processingResult.relatedResourceIds || [],
+                };
                 // Mark webhook as processed
-                yield webhookEvent_service_1.WebhookEventService.markWebhookProcessed(webhookEvent._id.toString(), processingResult);
+                yield webhookEvent_service_1.WebhookEventService.markWebhookProcessed(webhookEvent._id.toString(), completeResult);
             }
             catch (processingError) {
                 console.error('Error processing main webhook:', processingError);
@@ -164,29 +173,43 @@ const handleConnectWebhook = (0, catchAsync_1.default)((req, res) => __awaiter(v
                     case 'transfer.created':
                         processingResult = yield stripeConnect_webhookHandlers_1.StripeConnectWebhookHandlers.handleTransferCreated(event);
                         break;
-                    case 'transfer.paid':
-                        processingResult = yield stripeConnect_webhookHandlers_1.StripeConnectWebhookHandlers.handleTransferPaid(event);
-                        break;
-                    case 'transfer.failed':
-                        processingResult = yield stripeConnect_webhookHandlers_1.StripeConnectWebhookHandlers.handleTransferFailed(event);
+                    // Note: transfer.paid and transfer.failed are not in Stripe's official event types
+                    // but keeping handlers for potential future use
+                    default:
+                        if (event.type === 'transfer.paid') {
+                            processingResult = yield stripeConnect_webhookHandlers_1.StripeConnectWebhookHandlers.handleTransferPaid(event);
+                        }
+                        else if (event.type === 'transfer.failed') {
+                            processingResult = yield stripeConnect_webhookHandlers_1.StripeConnectWebhookHandlers.handleTransferFailed(event);
+                        }
+                        else {
+                            console.log(`Unhandled connect webhook event type: ${event.type}`);
+                            processingResult = {
+                                success: true,
+                                error: '',
+                                processingTime: Date.now() - startTime,
+                                affectedUserId: '',
+                                affectedUserType: '',
+                                relatedResourceIds: [],
+                            };
+                        }
                         break;
                     case 'transfer.reversed':
                         processingResult = yield stripeConnect_webhookHandlers_1.StripeConnectWebhookHandlers.handleTransferReversed(event);
                         break;
-                    default:
-                        console.log(`Unhandled connect webhook event type: ${event.type}`);
-                        processingResult = {
-                            success: true,
-                            error: '',
-                            processingTime: Date.now() - startTime,
-                            affectedUserId: '',
-                            affectedUserType: '',
-                            relatedResourceIds: [],
-                        };
                 }
                 processingResult.processingTime = Date.now() - startTime;
+                // Ensure all required fields are present
+                const completeResult = {
+                    success: processingResult.success,
+                    error: processingResult.error || '',
+                    processingTime: processingResult.processingTime || Date.now() - startTime,
+                    affectedUserId: processingResult.affectedUserId || '',
+                    affectedUserType: processingResult.affectedUserType || '',
+                    relatedResourceIds: processingResult.relatedResourceIds || [],
+                };
                 // Mark webhook as processed
-                yield webhookEvent_service_1.WebhookEventService.markWebhookProcessed(webhookEvent._id.toString(), processingResult);
+                yield webhookEvent_service_1.WebhookEventService.markWebhookProcessed(webhookEvent._id.toString(), completeResult);
             }
             catch (processingError) {
                 console.error('Error processing connect webhook:', processingError);

@@ -59,14 +59,12 @@ const AppError_1 = __importDefault(require("../../errors/AppError"));
 const http_status_1 = __importDefault(require("http-status"));
 class MessagingService {
     constructor() {
-        this.webSocketService = null;
+        // WebSocket service removed - real-time messaging will be handled by SSE/Polling
         this.activityTrackingService = null;
         this.validationService = new MessagingValidationService_1.default();
         this.fileUploadService = new FileUploadService_1.default();
     }
-    setWebSocketService(webSocketService) {
-        this.webSocketService = webSocketService;
-    }
+    // WebSocket service setter removed - real-time messaging handled by SSE/Polling
     setActivityTrackingService(activityTrackingService) {
         this.activityTrackingService = activityTrackingService;
     }
@@ -219,18 +217,6 @@ class MessagingService {
                 yield this.createMessageSearchIndex(savedMessage);
                 // Create notification
                 yield this.createMessageNotification(savedMessage, conversation);
-                // Broadcast real-time update
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastNewMessage(data.conversationId, {
-                        id: savedMessage._id,
-                        content: savedMessage.content,
-                        senderId: savedMessage.senderId,
-                        senderType: savedMessage.senderType,
-                        messageType: savedMessage.messageType,
-                        attachments: savedMessage.attachments,
-                        createdAt: savedMessage.createdAt,
-                    });
-                }
                 logger_1.Logger.info(`📨 Message sent: ${savedMessage._id} in conversation ${data.conversationId}`);
                 return this.formatMessageResponse(savedMessage);
             }
@@ -334,6 +320,13 @@ class MessagingService {
     markMessagesAsRead(conversationId, userId, userType) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                // Get unread messages before updating
+                const unreadMessages = yield messaging_model_1.Message.find({
+                    conversationId: new mongoose_1.Types.ObjectId(conversationId),
+                    receiverId: new mongoose_1.Types.ObjectId(userId),
+                    receiverType: userType,
+                    status: { $ne: messaging_interface_1.MessageStatus.READ },
+                }).select('_id');
                 // Update unread messages to read
                 yield messaging_model_1.Message.updateMany({
                     conversationId: new mongoose_1.Types.ObjectId(conversationId),
@@ -348,15 +341,6 @@ class MessagingService {
                 yield messaging_model_1.Conversation.findByIdAndUpdate(conversationId, {
                     [`unreadCount.${userType}`]: 0,
                 });
-                // Broadcast read status
-                if (this.webSocketService) {
-                    this.webSocketService.broadcastNewMessage(conversationId, {
-                        type: 'messages_read',
-                        userId,
-                        userType,
-                        readAt: new Date(),
-                    });
-                }
                 logger_1.Logger.info(`📖 Messages marked as read in conversation ${conversationId} by ${userType} ${userId}`);
             }
             catch (error) {

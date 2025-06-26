@@ -12,9 +12,9 @@ import { TErrorSources } from '../interface/error';
 
 const globalErrorHandler: ErrorRequestHandler = (
   err: any,
-  req: Request,
+  _req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): void => {
   //setting default values
   let statusCode = 500;
