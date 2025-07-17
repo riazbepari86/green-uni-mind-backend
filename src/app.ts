@@ -1,26 +1,23 @@
-import express, { Application } from 'express';
-import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import express, { Application } from 'express';
 import passport from 'passport';
+import { configurePassport } from './app/config/passport';
 import globalErrorHandler from './app/middlewares/globalErrorhandler';
 import notFound from './app/middlewares/notFound';
-import router from './app/routes';
-import { configurePassport } from './app/config/passport';
-import PerformanceMonitoringService from './app/services/monitoring/PerformanceMonitoringService';
-import { emailService } from './app/services/emailService';
-import { complianceService } from './app/services/complianceService';
-import { RetryService } from './app/services/retryService';
 import { PayoutManagementService } from './app/modules/Payment/payoutManagement.service';
-
-
+import router from './app/routes';
+import { complianceService } from './app/services/complianceService';
+import { emailService } from './app/services/emailService';
+import PerformanceMonitoringService from './app/services/monitoring/PerformanceMonitoringService';
+import { RetryService } from './app/services/retryService';
+import { EnvironmentConfig } from './app/utils/environment';
 
 import { registerMiddleware } from './app/middlewares/MiddlewareRegistry';
-import { startPhase, completePhase } from './app/utils/StartupProfiler';
 import { serviceRegistry } from './app/services/ServiceRegistry';
-
+import { completePhase, startPhase } from './app/utils/StartupProfiler';
 
 startPhase('Middleware Registration');
-
 
 registerMiddleware();
 
@@ -28,50 +25,62 @@ completePhase('Middleware Registration');
 
 // Initialize Service Registry
 startPhase('Service Registry Initialization');
-serviceRegistry.initialize().catch(error => {
+serviceRegistry.initialize().catch((error) => {
   console.error('Failed to initialize Service Registry:', error);
 });
 completePhase('Service Registry Initialization');
 
-
 const lazyImports = {
-  optimizedRedisConfig: () => import('./app/config/OptimizedRedisConfig').then(m => m.optimizedRedisConfig),
+  optimizedRedisConfig: () =>
+    import('./app/config/OptimizedRedisConfig').then(
+      (m) => m.optimizedRedisConfig,
+    ),
 };
 
 const app: Application = express();
 
-app.get('/health', (_req, res) => {
+app.get('/health', (req, res) => {
   // Set headers immediately for fastest response
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+  // Ensure CORS headers are set for health endpoint
+  const origin = req.get('Origin');
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'x-total-count,x-page-count,x-current-page,x-rate-limit-remaining,x-rate-limit-reset',
+    );
+  }
 
   // Send minimal response as fast as possible
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
   });
 });
-
 
 app.get('/ping', (_req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.status(200).json({
     message: 'pong',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
-
 app.get('/test', (_req, res) => {
   console.log('🧪 Test endpoint hit! Express is working!');
-  res.json({ message: 'Express is working!', timestamp: new Date().toISOString() });
+  res.json({
+    message: 'Express is working!',
+    timestamp: new Date().toISOString(),
+  });
 });
-
 
 // Middleware loading will be done after basic Express setup to avoid circular dependencies
 console.log('⏳ Middleware loading deferred to avoid circular dependencies');
-
 
 setTimeout(async () => {
   startPhase('Redis Initialization');
@@ -91,21 +100,17 @@ setTimeout(async () => {
 
     console.log('✅ Optimized Redis configuration initialized successfully');
     completePhase('Redis Initialization');
-
   } catch (error) {
     console.error('❌ Redis initialization failed:', error);
-    console.log('⚠️ Server will continue without Redis - some features may be limited');
+    console.log(
+      '⚠️ Server will continue without Redis - some features may be limited',
+    );
     completePhase('Redis Initialization'); // Mark as complete even if failed to prevent hanging
   }
-}, 500); 
-
+}, 500);
 
 const stripeWebhookPath = '/api/v1/payments/webhook';
-app.post(
-  stripeWebhookPath,
-  express.raw({ type: 'application/json' })
-);
-
+app.post(stripeWebhookPath, express.raw({ type: 'application/json' }));
 
 app.use((req, _res, next) => {
   if (req.originalUrl === stripeWebhookPath) {
@@ -118,35 +123,25 @@ app.use((req, _res, next) => {
   }
 });
 
-
-app.use(express.json({
-  limit: '10mb',
-  strict: false, // Allow any JSON-like content
-  verify: (req: any, _res, buf) => {
-    // Store the raw body for debugging (except for webhook)
-    if (req.originalUrl !== stripeWebhookPath) {
-      req.rawBody = buf.toString();
-    }
-  }
-}));
+app.use(
+  express.json({
+    limit: '10mb',
+    strict: false, // Allow any JSON-like content
+    verify: (req: any, _res, buf) => {
+      // Store the raw body for debugging (except for webhook)
+      if (req.originalUrl !== stripeWebhookPath) {
+        req.rawBody = buf.toString();
+      }
+    },
+  }),
+);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-
-
-app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:8080',
-    'http://localhost:8081',
-    'http://localhost:8082',
-    'http://localhost:8083', // Added for current frontend port
-    'https://green-uni-mind.pages.dev',
-    'https://green-uni-mind.vercel.app'
-  ],
-  credentials: true,
+// Enhanced CORS configuration with environment-based origins
+const corsConfig = {
+  ...EnvironmentConfig.getCorsConfig(),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
@@ -161,7 +156,19 @@ app.use(cors({
     'x-timestamp',
     'x-request-signature',
     'x-api-version',
-    'x-client-version'
+    'x-client-version',
+    // Cache control headers for preventing browser caching
+    'Cache-Control',
+    'Pragma',
+    'Expires',
+    // Additional cache-related headers that might be sent by frontend
+    'x-cache-timestamp',
+    'x-cache-key',
+    'x-cache-control',
+    // Common AJAX and browser headers
+    'x-requested-with',
+    'x-csrf-token',
+    'x-xsrf-token',
   ],
   // Expose headers that the frontend might need to read
   exposedHeaders: [
@@ -169,13 +176,17 @@ app.use(cors({
     'x-page-count',
     'x-current-page',
     'x-rate-limit-remaining',
-    'x-rate-limit-reset'
-  ]
-}));
+    'x-rate-limit-reset',
+  ],
+  // Enable preflight for all routes
+  preflightContinue: false,
+  optionsSuccessStatus: 200,
+};
 
+console.log('🌐 CORS Configuration:', JSON.stringify(corsConfig, null, 2));
+app.use(cors(corsConfig));
 
 app.use(passport.initialize());
-
 
 try {
   configurePassport();
@@ -189,7 +200,6 @@ app.get('/', (req, res) => {
   console.log('🏠 Root endpoint hit!', req.method, req.url);
   res.send('🚀 Welcome to the Green Uni Mind API!');
 });
-
 
 // ========================================
 // OPTIMIZED MIDDLEWARE LOADING (Simplified Approach)
@@ -207,7 +217,7 @@ if (currentEnv === 'production') {
     enhancedSecurityHeaders,
     generalRateLimit,
     securityLogging,
-    requestSizeLimit
+    requestSizeLimit,
   } = require('./app/middlewares/security.middleware');
 
   app.use(enhancedSecurityHeaders);
@@ -220,7 +230,7 @@ if (currentEnv === 'production') {
   // Development middleware stack (minimal)
   const {
     enhancedSecurityHeaders,
-    generalRateLimit
+    generalRateLimit,
   } = require('./app/middlewares/security.middleware');
 
   app.use(enhancedSecurityHeaders);
@@ -234,13 +244,21 @@ completePhase('Security Middleware Loading');
 startPhase('Performance Middleware Loading');
 
 // Load performance middleware conditionally
-const { responseCompression, cacheHeaders } = require('./app/middlewares/performance.middleware');
+const {
+  responseCompression,
+  cacheHeaders,
+} = require('./app/middlewares/performance.middleware');
 app.use(responseCompression);
-app.use(cacheHeaders);
 
 // Only load monitoring in production or when explicitly enabled
-if (currentEnv === 'production' || process.env.ENABLE_PERFORMANCE_MONITORING === 'true') {
-  const { performanceTracker, memoryMonitor } = require('./app/middlewares/performance.middleware');
+if (
+  currentEnv === 'production' ||
+  process.env.ENABLE_PERFORMANCE_MONITORING === 'true'
+) {
+  const {
+    performanceTracker,
+    memoryMonitor,
+  } = require('./app/middlewares/performance.middleware');
   app.use(performanceTracker);
   app.use(memoryMonitor);
 
@@ -261,6 +279,10 @@ app.use('/api/v1/auth', authRateLimit);
 // Health routes are now handled by dedicated health router for better organization
 import healthRoutes from './app/routes/health.routes';
 app.use('/', healthRoutes); // Mount health routes at root level for /health endpoint
+
+// Emergency Redis routes for critical performance issues
+import redisEmergencyRoutes from './app/routes/redis-emergency.routes';
+app.use('/api/v1/redis-emergency', redisEmergencyRoutes);
 
 // application routes
 app.use('/api/v1', router);
@@ -292,11 +314,16 @@ setTimeout(async () => {
   }
 }, 1000);
 
-console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
+console.log(
+  '📵 Monitoring routes disabled to prevent excessive Redis operations',
+);
 
 // Debug middleware to log all requests to /users/me or /api/users/me
 app.use((req, _res, next) => {
-  if (req.path.includes('/users/me') && !req.path.includes('/api/v1/users/me')) {
+  if (
+    req.path.includes('/users/me') &&
+    !req.path.includes('/api/v1/users/me')
+  ) {
     console.log('🔍 DEBUG: Incorrect API call detected:');
     console.log('- Path:', req.path);
     console.log('- Method:', req.method);

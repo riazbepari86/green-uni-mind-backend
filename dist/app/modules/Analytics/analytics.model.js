@@ -15,7 +15,6 @@ const courseAnalyticsSchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Teacher',
         required: true,
-        index: true,
     },
     totalEnrollments: {
         type: Number,
@@ -78,7 +77,6 @@ const studentEngagementSchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Teacher',
         required: true,
-        index: true,
     },
     totalTimeSpent: {
         type: Number,
@@ -163,17 +161,25 @@ const revenueAnalyticsSchema = new mongoose_1.Schema({
         min: 0,
         max: 100,
     },
-    paymentTrends: [{
+    paymentTrends: [
+        {
             period: { type: String, required: true },
             amount: { type: Number, required: true, min: 0 },
             count: { type: Number, required: true, min: 0 },
             date: { type: Date, required: true },
-        }],
-    topPerformingCourses: [{
-            courseId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Course', required: true },
+        },
+    ],
+    topPerformingCourses: [
+        {
+            courseId: {
+                type: mongoose_1.Schema.Types.ObjectId,
+                ref: 'Course',
+                required: true,
+            },
             revenue: { type: Number, required: true, min: 0 },
             enrollments: { type: Number, required: true, min: 0 },
-        }],
+        },
+    ],
     lastUpdated: {
         type: Date,
         default: Date.now,
@@ -269,14 +275,20 @@ const analyticsSummarySchema = new mongoose_1.Schema({
         startDate: { type: Date, required: true },
         endDate: { type: Date, required: true },
     },
-    courseAnalytics: [{
-            courseId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Course', required: true },
+    courseAnalytics: [
+        {
+            courseId: {
+                type: mongoose_1.Schema.Types.ObjectId,
+                ref: 'Course',
+                required: true,
+            },
             courseName: { type: String, required: true },
             enrollments: { type: Number, default: 0, min: 0 },
             revenue: { type: Number, default: 0, min: 0 },
             completionRate: { type: Number, default: 0, min: 0, max: 100 },
             rating: { type: Number, default: 0, min: 0, max: 5 },
-        }],
+        },
+    ],
     revenueAnalytics: {
         totalRevenue: { type: Number, default: 0, min: 0 },
         growth: { type: Number, default: 0 },
@@ -388,7 +400,11 @@ revenueAnalyticsSchema.index({ lastUpdated: -1 });
 performanceMetricsSchema.index({ teacherId: 1, courseId: 1 });
 performanceMetricsSchema.index({ averageRating: -1 });
 performanceMetricsSchema.index({ lastUpdated: -1 });
-analyticsSummarySchema.index({ teacherId: 1, period: 1, 'dateRange.startDate': 1 });
+analyticsSummarySchema.index({
+    teacherId: 1,
+    period: 1,
+    'dateRange.startDate': 1,
+});
 analyticsSummarySchema.index({ generatedAt: -1 });
 activitySchema.index({ teacherId: 1, createdAt: -1 });
 activitySchema.index({ teacherId: 1, isRead: 1, priority: -1 });

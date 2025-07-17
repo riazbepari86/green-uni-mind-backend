@@ -17,9 +17,11 @@ const createLecture = async (payload: ILecture, courseId: string) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Course not found!');
     }
 
-    // Get the current highest order number for this course
+    // Get the current highest order number for this course (optimized query)
     const lastLecture = await Lecture.findOne({ courseId })
+      .select('order')
       .sort({ order: -1 })
+      .lean()
       .session(session);
 
     // Set the new order (last order + 1 or 1 if no lectures exist)
@@ -38,6 +40,18 @@ const createLecture = async (payload: ILecture, courseId: string) => {
     await session.commitTransaction();
     session.endSession();
 
+    // Invalidate cache AFTER successful database transaction
+    try {
+      const { apiCache, queryCache } = await import('../../middlewares/cachingMiddleware');
+      await Promise.all([
+        apiCache.invalidateByTags(['course_content', 'course_list', 'user_data', 'course_creator']),
+        queryCache.invalidateByTags(['course_content', 'course_list', 'user_data', 'course_creator']),
+      ]);
+      console.log('✅ Cache invalidated successfully after lecture creation');
+    } catch (cacheError) {
+      console.error('⚠️ Cache invalidation failed after lecture creation:', cacheError);
+    }
+
     return lecture[0];
   } catch (error) {
     await session.abortTransaction();
@@ -47,7 +61,11 @@ const createLecture = async (payload: ILecture, courseId: string) => {
 };
 
 const getLecturesByCourseId = async (courseId: string) => {
-  const lectures = await Lecture.find({ courseId }).sort({ order: 1 });
+  // Use lean() for better performance and select only necessary fields
+  const lectures = await Lecture.find({ courseId })
+    .select('lectureTitle instruction videoUrl videoResolutions hlsUrl pdfUrl duration isPreviewFree order courseId createdAt updatedAt')
+    .sort({ order: 1 })
+    .lean(); // Returns plain JavaScript objects instead of Mongoose documents
   return lectures;
 };
 
@@ -166,27 +184,148 @@ const updateLecture = async (
   lectureId: string,
   payload: Partial<ILecture>,
 ) => {
-  // ensure course exists
-  const course = await Course.findById(courseId);
-  if (!course) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Course not found!');
+  // Validate ObjectId format
+  if (!mongoose.Types.ObjectId.isValid(courseId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid course ID format');
   }
 
-  // find & update lecture
-  const lecture = await Lecture.findOneAndUpdate(
-    { _id: lectureId, courseId },
-    { $set: payload },
-    { new: true },
-  );
+  if (!mongoose.Types.ObjectId.isValid(lectureId)) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid lecture ID format');
+  }
 
-  if (!lecture) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'Lecture not found for this course',
+  // Start a session for transaction to ensure data consistency
+  const session = await startSession();
+  session.startTransaction();
+
+  try {
+    // ensure course exists
+    const course = await Course.findById(courseId).session(session);
+    if (!course) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Course not found!');
+    }
+
+    // find & update lecture
+    const lecture = await Lecture.findOneAndUpdate(
+      { _id: lectureId, courseId },
+      { $set: payload },
+      { new: true, session },
     );
-  }
 
-  return lecture;
+    if (!lecture) {
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Lecture not found for this course',
+      );
+    }
+
+    // CRITICAL FIX: Update the course's updatedAt timestamp to reflect lecture changes
+    // This ensures course creator endpoints return fresh data with correct timestamps
+    await Course.findByIdAndUpdate(
+      courseId,
+      { $set: { updatedAt: new Date() } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // CRITICAL FIX: Invalidate cache AFTER successful database transaction
+    // This prevents race conditions where cache is invalidated before DB update completes
+    try {
+      const { apiCache, queryCache } = await import('../../middlewares/cachingMiddleware');
+
+      // Comprehensive cache invalidation for all related data
+      const tagsToInvalidate = [
+        'course_content',
+        'course_list',
+        'user_data',
+        'course_creator',
+        'lecture_content',
+        'lecture_list',
+        `course_${courseId}`,
+        `lecture_${lectureId}`,
+        `creator_courses`,
+        `creator_lectures`
+      ];
+
+      await Promise.all([
+        apiCache.invalidateByTags(tagsToInvalidate),
+        queryCache.invalidateByTags(tagsToInvalidate),
+      ]);
+
+      console.log(`✅ Cache invalidated successfully after lecture update (${tagsToInvalidate.length} tag types)`);
+    } catch (cacheError) {
+      console.error('⚠️ Cache invalidation failed after lecture update:', cacheError);
+      // Don't throw error - the database update was successful
+    }
+
+    return lecture;
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+};
+
+const deleteLecture = async (courseId: string, lectureId: string) => {
+  const session = await startSession();
+  session.startTransaction();
+
+  try {
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid course ID format');
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(lectureId)) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid lecture ID format');
+    }
+
+    // Check if course exists
+    const course = await Course.findById(courseId).session(session);
+    if (!course) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Course not found!');
+    }
+
+    // Find the lecture to be deleted
+    const lectureToDelete = await Lecture.findOne({ _id: lectureId, courseId }).session(session);
+    if (!lectureToDelete) {
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Lecture not found for this course',
+      );
+    }
+
+    // Get the order of the lecture being deleted
+    const deletedOrder = lectureToDelete.order;
+
+    // Delete the lecture
+    await Lecture.findOneAndDelete({ _id: lectureId, courseId }).session(session);
+
+    // Remove lecture from course's lectures array
+    course.lectures = course.lectures?.filter(
+      (lecture) => lecture.toString() !== lectureId
+    );
+    await course.save({ session });
+
+    // Update the order of remaining lectures (shift down lectures with higher order)
+    await Lecture.updateMany(
+      { courseId, order: { $gt: deletedOrder } },
+      { $inc: { order: -1 } }
+    ).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return {
+      message: 'Lecture deleted successfully',
+      deletedLectureId: lectureId,
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
 };
 
 export const LectureService = {
@@ -195,4 +334,5 @@ export const LectureService = {
   getLectureById,
   updateLectureOrder,
   updateLecture,
+  deleteLecture,
 };

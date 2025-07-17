@@ -7,11 +7,11 @@ require('dotenv').config();
 async function testJWTGeneration() {
   console.log('🧪 Testing JWT Generation and Verification...\n');
   
-  // Test payload matching the user in database
+  // Test payload matching the teacher user in database
   const testPayload = {
-    email: 'hasanhridoymahabub9@gmail.com',
-    role: 'student',
-    _id: '685bcf296aeec36c71a77d89',
+    email: 'ahmedriazbepari@gmail.com',
+    role: 'teacher',
+    _id: '685c1b673a862730dd0a3b1e',
     tokenId: 'test-token-id-123',
     family: 'test-family-456',
     type: 'access'
@@ -33,6 +33,7 @@ async function testJWTGeneration() {
   const token = jwt.sign(testPayload, JWT_ACCESS_SECRET, { expiresIn: '1h' });
   
   console.log('✅ Generated JWT token:', token.substring(0, 50) + '...');
+  console.log('🎫 FULL TOKEN FOR TESTING:', token);
   
   // Decode the token to verify
   const decoded = jwt.decode(token);

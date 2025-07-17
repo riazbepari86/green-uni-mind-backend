@@ -1,4 +1,4 @@
-import { redisOperations, redis } from '../../config/redis';
+import { redis, redisOperations } from '../../config/redis';
 
 /**
  * Service to clean up excessive Redis keys that are consuming storage
@@ -34,7 +34,7 @@ export class RedisCleanupService {
         'health:*',
         'optimization:*',
         'dashboard:*',
-        'analytics:*'
+        'analytics:*',
       ];
 
       let totalDeleted = 0;
@@ -46,13 +46,21 @@ export class RedisCleanupService {
           let cursor = '0';
 
           do {
-            const result = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+            const result = await redis.scan(
+              cursor,
+              'MATCH',
+              pattern,
+              'COUNT',
+              100,
+            );
             cursor = result[0];
             keys.push(...result[1]);
           } while (cursor !== '0' && keys.length < 1000); // Limit to 1000 keys per pattern
 
           if (keys.length > 0) {
-            console.log(`🗑️ Found ${keys.length} keys matching pattern: ${pattern}`);
+            console.log(
+              `🗑️ Found ${keys.length} keys matching pattern: ${pattern}`,
+            );
 
             // Delete in batches to avoid overwhelming Redis
             const batchSize = 50; // Reduced batch size for safety
@@ -65,7 +73,7 @@ export class RedisCleanupService {
               }
 
               // Small delay between batches
-              await new Promise(resolve => setTimeout(resolve, 200));
+              await new Promise((resolve) => setTimeout(resolve, 200));
             }
           }
         } catch (error) {
@@ -73,12 +81,13 @@ export class RedisCleanupService {
         }
       }
 
-      console.log(`✅ Redis cleanup completed. Total keys deleted: ${totalDeleted}`);
-      
+      console.log(
+        `✅ Redis cleanup completed. Total keys deleted: ${totalDeleted}`,
+      );
+
       // Get current key count
       const info = await redis.info('keyspace');
       console.log('📊 Current Redis keyspace info:', info);
-
     } catch (error) {
       console.error('❌ Error during Redis cleanup:', error);
     }
@@ -96,7 +105,13 @@ export class RedisCleanupService {
       let cursor = '0';
 
       do {
-        const result = await redis.scan(cursor, 'MATCH', 'cache:*', 'COUNT', 100);
+        const result = await redis.scan(
+          cursor,
+          'MATCH',
+          'cache:*',
+          'COUNT',
+          100,
+        );
         cursor = result[0];
         cacheKeys.push(...result[1]);
       } while (cursor !== '0' && cacheKeys.length < 500); // Limit to 500 keys
@@ -111,7 +126,9 @@ export class RedisCleanupService {
           if (size && size > 1024 * 1024) {
             await redisOperations.del(key);
             totalFreed += size;
-            console.log(`🗑️ Removed large cache key: ${key} (${(size / 1024 / 1024).toFixed(2)}MB)`);
+            console.log(
+              `🗑️ Removed large cache key: ${key} (${(size / 1024 / 1024).toFixed(2)}MB)`,
+            );
           }
         } catch (error) {
           // Ignore individual key errors
@@ -119,11 +136,12 @@ export class RedisCleanupService {
       }
 
       if (totalFreed > 0) {
-        console.log(`✅ Freed ${(totalFreed / 1024 / 1024).toFixed(2)}MB from large cache keys`);
+        console.log(
+          `✅ Freed ${(totalFreed / 1024 / 1024).toFixed(2)}MB from large cache keys`,
+        );
       } else {
         console.log('✅ No large cache keys found to clean up');
       }
-
     } catch (error) {
       console.error('❌ Error cleaning large cache keys:', error);
     }
@@ -138,20 +156,54 @@ export class RedisCleanupService {
       console.log('📊 Redis Memory Statistics:');
       console.log(info);
 
-      // Get key count by pattern
-      const patterns = ['cache:*', 'auth:*', 'otp:*', 'sessions:*', 'metrics:*'];
+      // Get key count by pattern using SCAN instead of KEYS
+      const patterns = [
+        'cache:*',
+        'auth:*',
+        'otp:*',
+        'sessions:*',
+        'metrics:*',
+      ];
       for (const pattern of patterns) {
         try {
-          const keys = await redis.keys(pattern);
-          console.log(`   ${pattern}: ${keys.length} keys`);
+          const keyCount = await this.countKeysWithScan(pattern);
+          console.log(`   ${pattern}: ${keyCount} keys`);
         } catch (error) {
           console.log(`   ${pattern}: Error counting keys`);
         }
       }
-
     } catch (error) {
       console.error('❌ Error getting memory stats:', error);
     }
+  }
+
+  /**
+   * Count keys using SCAN instead of KEYS for better performance
+   */
+  private async countKeysWithScan(pattern: string): Promise<number> {
+    let count = 0;
+    let cursor = '0';
+
+    do {
+      try {
+        const result = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = result[0];
+        count += result[1].length;
+
+        // Prevent infinite loops and limit scan operations
+        if (count > 10000) {
+          console.log(
+            `   ${pattern}: Scan limit reached (10k+), stopping count`,
+          );
+          break;
+        }
+      } catch (error) {
+        console.error(`Error scanning pattern ${pattern}:`, error);
+        break;
+      }
+    } while (cursor !== '0');
+
+    return count;
   }
 
   /**
@@ -164,10 +216,10 @@ export class RedisCleanupService {
       // Keep only essential keys
       const essentialPatterns = [
         'auth:*',
-        'otp:*', 
+        'otp:*',
         'sessions:*',
         'user:*',
-        'jwt:*'
+        'jwt:*',
       ];
 
       // Use SCAN to get all keys instead of KEYS
@@ -198,8 +250,12 @@ export class RedisCleanupService {
         }
       }
 
-      console.log(`🗑️ Emergency cleanup will delete ${keysToDelete.length} non-essential keys`);
-      console.log(`✅ Keeping ${allKeys.length - keysToDelete.length} essential keys`);
+      console.log(
+        `🗑️ Emergency cleanup will delete ${keysToDelete.length} non-essential keys`,
+      );
+      console.log(
+        `✅ Keeping ${allKeys.length - keysToDelete.length} essential keys`,
+      );
 
       if (keysToDelete.length > 0) {
         // Delete in batches
@@ -211,14 +267,15 @@ export class RedisCleanupService {
           const deleted = await redis.del(...batch);
           totalDeleted += deleted;
           console.log(`   Deleted batch: ${deleted} keys`);
-          
+
           // Small delay between batches
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
 
-        console.log(`✅ Emergency cleanup completed. Deleted ${totalDeleted} keys`);
+        console.log(
+          `✅ Emergency cleanup completed. Deleted ${totalDeleted} keys`,
+        );
       }
-
     } catch (error) {
       console.error('❌ Error during emergency cleanup:', error);
     }

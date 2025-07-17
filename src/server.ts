@@ -14,10 +14,12 @@ import { startPhase, completePhase, failPhase, completeStartup } from './app/uti
 // Import related services
 import ActivityTrackingService from './app/services/activity/ActivityTrackingService';
 import MessagingService from './app/services/messaging/MessagingService';
+import DatabaseEventListener from './app/services/cache/DatabaseEventListener';
 
 let server: Server;
 let activityTrackingService: ActivityTrackingService;
 let messagingService: MessagingService;
+let databaseEventListener: DatabaseEventListener;
 
 async function main() {
   try {
@@ -69,6 +71,27 @@ async function main() {
       } catch (error) {
         Logger.error('❌ Service initialization failed:', { error });
         failPhase('Service Initialization', error);
+      }
+
+      // Initialize Enterprise Cache Event Listener
+      startPhase('Database Event Listener');
+      try {
+        databaseEventListener = new DatabaseEventListener();
+        // Start listening after database connection is established
+        setTimeout(async () => {
+          try {
+            await databaseEventListener.startListening();
+            Logger.info('✅ Database event listener started successfully');
+            specializedLog.system.startup('Database event listener');
+          } catch (error) {
+            Logger.error('❌ Database event listener failed to start:', { error });
+          }
+        }, 2000); // Wait 2 seconds for DB connection to be stable
+
+        completePhase('Database Event Listener');
+      } catch (error) {
+        Logger.error('❌ Database event listener initialization failed:', { error });
+        failPhase('Database Event Listener', error);
       }
 
       // Complete startup profiling after all immediate tasks
@@ -212,5 +235,5 @@ process.on('SIGINT', () => {
   }
 });
 
-// Export the app for Vercel serverless functions
+
 export default app;

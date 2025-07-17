@@ -9,9 +9,29 @@ const createCourseZodSchema = zod_1.z.object({
             .string({
             required_error: 'Title is required',
         })
-            .min(1, { message: 'Title cannot be empty' }),
-        subtitle: zod_1.z.string().optional(),
-        description: zod_1.z.string().optional(),
+            .min(3, { message: 'Title must be at least 3 characters' })
+            .max(200, { message: 'Title must not exceed 200 characters' }),
+        subtitle: zod_1.z
+            .string()
+            .max(300, { message: 'Subtitle must not exceed 300 characters' })
+            .optional(),
+        description: zod_1.z
+            .string()
+            .max(5000, { message: 'Description must not exceed 5000 characters' })
+            .optional(),
+        coursePrice: zod_1.z
+            .union([
+            zod_1.z.number().min(0, 'Course price cannot be negative'),
+            zod_1.z.string().transform((val) => {
+                const num = parseFloat(val);
+                if (isNaN(num))
+                    throw new Error('Invalid price format');
+                if (num < 0)
+                    throw new Error('Course price cannot be negative');
+                return num;
+            })
+        ])
+            .optional(),
         categoryId: zod_1.z
             .string({
             required_error: 'Category ID is required',
@@ -53,9 +73,32 @@ const createCourseZodSchema = zod_1.z.object({
 });
 const updateCourseZodSchema = zod_1.z.object({
     body: zod_1.z.object({
-        title: zod_1.z.string().min(1, { message: 'Title cannot be empty' }).optional(),
-        subtitle: zod_1.z.string().optional(),
-        description: zod_1.z.string().optional(),
+        title: zod_1.z
+            .string()
+            .min(3, { message: 'Title must be at least 3 characters' })
+            .max(200, { message: 'Title must not exceed 200 characters' })
+            .optional(),
+        subtitle: zod_1.z
+            .string()
+            .max(300, { message: 'Subtitle must not exceed 300 characters' })
+            .optional(),
+        description: zod_1.z
+            .string()
+            .max(5000, { message: 'Description must not exceed 5000 characters' })
+            .optional(),
+        coursePrice: zod_1.z
+            .union([
+            zod_1.z.number().min(0, 'Course price cannot be negative'),
+            zod_1.z.string().transform((val) => {
+                const num = parseFloat(val);
+                if (isNaN(num))
+                    throw new Error('Invalid price format');
+                if (num < 0)
+                    throw new Error('Course price cannot be negative');
+                return num;
+            })
+        ])
+            .optional(),
         categoryId: zod_1.z.string().optional(),
         subcategoryId: zod_1.z.string().optional(),
         courseLevel: zod_1.z.enum(course_constant_1.courseLevel).optional(),

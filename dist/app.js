@@ -45,56 +45,67 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
-const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const cors_1 = __importDefault(require("cors"));
+const express_1 = __importDefault(require("express"));
 const passport_1 = __importDefault(require("passport"));
+const passport_2 = require("./app/config/passport");
 const globalErrorhandler_1 = __importDefault(require("./app/middlewares/globalErrorhandler"));
 const notFound_1 = __importDefault(require("./app/middlewares/notFound"));
-const routes_1 = __importDefault(require("./app/routes"));
-const passport_2 = require("./app/config/passport");
-const PerformanceMonitoringService_1 = __importDefault(require("./app/services/monitoring/PerformanceMonitoringService"));
-const emailService_1 = require("./app/services/emailService");
-const complianceService_1 = require("./app/services/complianceService");
-const retryService_1 = require("./app/services/retryService");
 const payoutManagement_service_1 = require("./app/modules/Payment/payoutManagement.service");
+const routes_1 = __importDefault(require("./app/routes"));
+const complianceService_1 = require("./app/services/complianceService");
+const emailService_1 = require("./app/services/emailService");
+const PerformanceMonitoringService_1 = __importDefault(require("./app/services/monitoring/PerformanceMonitoringService"));
+const retryService_1 = require("./app/services/retryService");
+const environment_1 = require("./app/utils/environment");
 const MiddlewareRegistry_1 = require("./app/middlewares/MiddlewareRegistry");
-const StartupProfiler_1 = require("./app/utils/StartupProfiler");
 const ServiceRegistry_1 = require("./app/services/ServiceRegistry");
+const StartupProfiler_1 = require("./app/utils/StartupProfiler");
 (0, StartupProfiler_1.startPhase)('Middleware Registration');
 (0, MiddlewareRegistry_1.registerMiddleware)();
 (0, StartupProfiler_1.completePhase)('Middleware Registration');
 // Initialize Service Registry
 (0, StartupProfiler_1.startPhase)('Service Registry Initialization');
-ServiceRegistry_1.serviceRegistry.initialize().catch(error => {
+ServiceRegistry_1.serviceRegistry.initialize().catch((error) => {
     console.error('Failed to initialize Service Registry:', error);
 });
 (0, StartupProfiler_1.completePhase)('Service Registry Initialization');
 const lazyImports = {
-    optimizedRedisConfig: () => Promise.resolve().then(() => __importStar(require('./app/config/OptimizedRedisConfig'))).then(m => m.optimizedRedisConfig),
+    optimizedRedisConfig: () => Promise.resolve().then(() => __importStar(require('./app/config/OptimizedRedisConfig'))).then((m) => m.optimizedRedisConfig),
 };
 const app = (0, express_1.default)();
-app.get('/health', (_req, res) => {
+app.get('/health', (req, res) => {
     // Set headers immediately for fastest response
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    // Ensure CORS headers are set for health endpoint
+    const origin = req.get('Origin');
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Expose-Headers', 'x-total-count,x-page-count,x-current-page,x-rate-limit-remaining,x-rate-limit-reset');
+    }
     // Send minimal response as fast as possible
     res.status(200).json({
         status: 'OK',
         timestamp: new Date().toISOString(),
-        uptime: process.uptime()
+        uptime: process.uptime(),
     });
 });
 app.get('/ping', (_req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.status(200).json({
         message: 'pong',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
     });
 });
 app.get('/test', (_req, res) => {
     console.log('🧪 Test endpoint hit! Express is working!');
-    res.json({ message: 'Express is working!', timestamp: new Date().toISOString() });
+    res.json({
+        message: 'Express is working!',
+        timestamp: new Date().toISOString(),
+    });
 });
 // Middleware loading will be done after basic Express setup to avoid circular dependencies
 console.log('⏳ Middleware loading deferred to avoid circular dependencies');
@@ -140,24 +151,12 @@ app.use(express_1.default.json({
         if (req.originalUrl !== stripeWebhookPath) {
             req.rawBody = buf.toString();
         }
-    }
+    },
 }));
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use((0, cookie_parser_1.default)());
-app.use((0, cors_1.default)({
-    origin: [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        'http://localhost:8080',
-        'http://localhost:8081',
-        'http://localhost:8082',
-        'http://localhost:8083', // Added for current frontend port
-        'https://green-uni-mind.pages.dev',
-        'https://green-uni-mind.vercel.app'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: [
+// Enhanced CORS configuration with environment-based origins
+const corsConfig = Object.assign(Object.assign({}, environment_1.EnvironmentConfig.getCorsConfig()), { methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], allowedHeaders: [
         'Content-Type',
         'Authorization',
         'x-refresh-token',
@@ -170,17 +169,32 @@ app.use((0, cors_1.default)({
         'x-timestamp',
         'x-request-signature',
         'x-api-version',
-        'x-client-version'
-    ],
+        'x-client-version',
+        // Cache control headers for preventing browser caching
+        'Cache-Control',
+        'Pragma',
+        'Expires',
+        // Additional cache-related headers that might be sent by frontend
+        'x-cache-timestamp',
+        'x-cache-key',
+        'x-cache-control',
+        // Common AJAX and browser headers
+        'x-requested-with',
+        'x-csrf-token',
+        'x-xsrf-token',
+    ], 
     // Expose headers that the frontend might need to read
     exposedHeaders: [
         'x-total-count',
         'x-page-count',
         'x-current-page',
         'x-rate-limit-remaining',
-        'x-rate-limit-reset'
-    ]
-}));
+        'x-rate-limit-reset',
+    ], 
+    // Enable preflight for all routes
+    preflightContinue: false, optionsSuccessStatus: 200 });
+console.log('🌐 CORS Configuration:', JSON.stringify(corsConfig, null, 2));
+app.use((0, cors_1.default)(corsConfig));
 app.use(passport_1.default.initialize());
 try {
     (0, passport_2.configurePassport)();
@@ -203,7 +217,7 @@ const currentEnv = process.env.NODE_ENV || 'development';
 // Only load necessary middleware based on environment
 if (currentEnv === 'production') {
     // Production middleware stack
-    const { enhancedSecurityHeaders, generalRateLimit, securityLogging, requestSizeLimit } = require('./app/middlewares/security.middleware');
+    const { enhancedSecurityHeaders, generalRateLimit, securityLogging, requestSizeLimit, } = require('./app/middlewares/security.middleware');
     app.use(enhancedSecurityHeaders);
     app.use(generalRateLimit);
     app.use(securityLogging);
@@ -212,7 +226,7 @@ if (currentEnv === 'production') {
 }
 else {
     // Development middleware stack (minimal)
-    const { enhancedSecurityHeaders, generalRateLimit } = require('./app/middlewares/security.middleware');
+    const { enhancedSecurityHeaders, generalRateLimit, } = require('./app/middlewares/security.middleware');
     app.use(enhancedSecurityHeaders);
     app.use(generalRateLimit);
     console.log('✅ Loaded 2 development security middleware');
@@ -220,12 +234,12 @@ else {
 (0, StartupProfiler_1.completePhase)('Security Middleware Loading');
 (0, StartupProfiler_1.startPhase)('Performance Middleware Loading');
 // Load performance middleware conditionally
-const { responseCompression, cacheHeaders } = require('./app/middlewares/performance.middleware');
+const { responseCompression, cacheHeaders, } = require('./app/middlewares/performance.middleware');
 app.use(responseCompression);
-app.use(cacheHeaders);
 // Only load monitoring in production or when explicitly enabled
-if (currentEnv === 'production' || process.env.ENABLE_PERFORMANCE_MONITORING === 'true') {
-    const { performanceTracker, memoryMonitor } = require('./app/middlewares/performance.middleware');
+if (currentEnv === 'production' ||
+    process.env.ENABLE_PERFORMANCE_MONITORING === 'true') {
+    const { performanceTracker, memoryMonitor, } = require('./app/middlewares/performance.middleware');
     app.use(performanceTracker);
     app.use(memoryMonitor);
     // Add enhanced performance monitoring
@@ -242,6 +256,9 @@ app.use('/api/v1/auth', authRateLimit);
 // Health routes are now handled by dedicated health router for better organization
 const health_routes_1 = __importDefault(require("./app/routes/health.routes"));
 app.use('/', health_routes_1.default); // Mount health routes at root level for /health endpoint
+// Emergency Redis routes for critical performance issues
+const redis_emergency_routes_1 = __importDefault(require("./app/routes/redis-emergency.routes"));
+app.use('/api/v1/redis-emergency', redis_emergency_routes_1.default);
 // application routes
 app.use('/api/v1', routes_1.default);
 // Initialize enterprise services
@@ -269,7 +286,8 @@ setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
 console.log('📵 Monitoring routes disabled to prevent excessive Redis operations');
 // Debug middleware to log all requests to /users/me or /api/users/me
 app.use((req, _res, next) => {
-    if (req.path.includes('/users/me') && !req.path.includes('/api/v1/users/me')) {
+    if (req.path.includes('/users/me') &&
+        !req.path.includes('/api/v1/users/me')) {
         console.log('🔍 DEBUG: Incorrect API call detected:');
         console.log('- Path:', req.path);
         console.log('- Method:', req.method);

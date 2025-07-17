@@ -1,13 +1,13 @@
 import { NextFunction, Request, Response, Router } from 'express';
-import validateRequest from '../../middlewares/validateRequest';
-import { UserValidation } from './user.validation';
-import { UserControllers } from './user.controller';
 import auth from '../../middlewares/auth';
-import { USER_ROLE } from './user.constant';
+import { parseDataMiddleware } from '../../middlewares/parseMiddleware';
+import validateRequest from '../../middlewares/validateRequest';
 import { upload } from '../../utils/sendImageToCloudinary';
 import { createStudentValidationSchema } from '../Student/student.validation';
 import { createTeacherValidationSchema } from '../Teacher/teacher.validation';
-import { parseDataMiddleware } from '../../middlewares/parseMiddleware';
+import { USER_ROLE } from './user.constant';
+import { UserControllers } from './user.controller';
+import { UserValidation } from './user.validation';
 
 const router = Router();
 
@@ -66,6 +66,22 @@ router.patch(
 
 router.post('/change-status/:id', auth(USER_ROLE.teacher));
 
-router.get('/:id', auth(USER_ROLE.teacher, USER_ROLE.student, USER_ROLE.user), UserControllers.getSingleUser);
+router.get(
+  '/:id',
+  auth(USER_ROLE.teacher, USER_ROLE.student, USER_ROLE.user),
+  UserControllers.getSingleUser,
+);
+
+// Specific profile routes for API compatibility
+router.get(
+  '/teachers/:teacherId',
+  auth(USER_ROLE.teacher, USER_ROLE.student, USER_ROLE.user),
+  UserControllers.getTeacherProfile,
+);
+router.get(
+  '/students/:studentId',
+  auth(USER_ROLE.teacher, USER_ROLE.student, USER_ROLE.user),
+  UserControllers.getStudentProfile,
+);
 
 export const UserRoutes = router;

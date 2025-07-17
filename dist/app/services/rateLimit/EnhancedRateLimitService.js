@@ -25,10 +25,10 @@ class EnhancedRateLimitService {
                 maxRequests: 30, // 30 requests per minute
                 message: 'Too many analytics requests. Please try again later.',
             },
-            // Enhanced analytics endpoints (more restrictive)
+            // Enhanced analytics endpoints (optimized for dashboard usage)
             enhancedAnalytics: {
                 windowMs: 60 * 1000, // 1 minute
-                maxRequests: 15, // 15 requests per minute
+                maxRequests: 25, // Increased from 15 to 25 requests per minute
                 message: 'Too many enhanced analytics requests. Please try again later.',
             },
             // Messaging endpoints

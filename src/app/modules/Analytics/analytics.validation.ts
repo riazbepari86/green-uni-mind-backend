@@ -1,8 +1,10 @@
 import { z } from 'zod';
-import { ActivityType, ActivityPriority } from './analytics.interface';
+import { ActivityPriority, ActivityType } from './analytics.interface';
 
 // Common validation schemas
-const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId format');
+const objectIdSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId format');
 
 const periodSchema = z.enum(['daily', 'weekly', 'monthly', 'yearly']);
 
@@ -12,8 +14,16 @@ const dateSchema = z.string().refine((date) => {
 }, 'Invalid date format');
 
 const paginationSchema = z.object({
-  limit: z.string().optional().transform((val) => val ? parseInt(val) : 20).refine((val) => val > 0 && val <= 100, 'Limit must be between 1 and 100'),
-  offset: z.string().optional().transform((val) => val ? parseInt(val) : 0).refine((val) => val >= 0, 'Offset must be non-negative'),
+  limit: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val) : 20))
+    .refine((val) => val > 0 && val <= 100, 'Limit must be between 1 and 100'),
+  offset: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val) : 0))
+    .refine((val) => val >= 0, 'Offset must be non-negative'),
 });
 
 // Analytics query validation
@@ -21,26 +31,31 @@ export const getTeacherAnalyticsValidation = z.object({
   params: z.object({
     teacherId: objectIdSchema,
   }),
-  query: z.object({
-    period: periodSchema.optional().default('monthly'),
-    courseId: objectIdSchema.optional(),
-    startDate: dateSchema.optional(),
-    endDate: dateSchema.optional(),
-    compareWithPrevious: z.string().optional().transform((val) => val === 'true'),
-  }).refine((data) => {
-    // If startDate is provided, endDate must also be provided
-    if (data.startDate && !data.endDate) {
-      return false;
-    }
-    if (data.endDate && !data.startDate) {
-      return false;
-    }
-    // If both dates are provided, startDate must be before endDate
-    if (data.startDate && data.endDate) {
-      return new Date(data.startDate) < new Date(data.endDate);
-    }
-    return true;
-  }, 'Invalid date range: startDate must be before endDate, and both must be provided together'),
+  query: z
+    .object({
+      period: periodSchema.optional().default('monthly'),
+      courseId: objectIdSchema.optional(),
+      startDate: dateSchema.optional(),
+      endDate: dateSchema.optional(),
+      compareWithPrevious: z
+        .string()
+        .optional()
+        .transform((val) => val === 'true'),
+    })
+    .refine((data) => {
+      // If startDate is provided, endDate must also be provided
+      if (data.startDate && !data.endDate) {
+        return false;
+      }
+      if (data.endDate && !data.startDate) {
+        return false;
+      }
+      // If both dates are provided, startDate must be before endDate
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) < new Date(data.endDate);
+      }
+      return true;
+    }, 'Invalid date range: startDate must be before endDate, and both must be provided together'),
 });
 
 export const getCourseAnalyticsValidation = z.object({
@@ -48,91 +63,99 @@ export const getCourseAnalyticsValidation = z.object({
     teacherId: objectIdSchema,
     courseId: objectIdSchema,
   }),
-  query: z.object({
-    period: periodSchema.optional().default('monthly'),
-    startDate: dateSchema.optional(),
-    endDate: dateSchema.optional(),
-  }).refine((data) => {
-    if (data.startDate && !data.endDate) {
-      return false;
-    }
-    if (data.endDate && !data.startDate) {
-      return false;
-    }
-    if (data.startDate && data.endDate) {
-      return new Date(data.startDate) < new Date(data.endDate);
-    }
-    return true;
-  }, 'Invalid date range'),
+  query: z
+    .object({
+      period: periodSchema.optional().default('monthly'),
+      startDate: dateSchema.optional(),
+      endDate: dateSchema.optional(),
+    })
+    .refine((data) => {
+      if (data.startDate && !data.endDate) {
+        return false;
+      }
+      if (data.endDate && !data.startDate) {
+        return false;
+      }
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) < new Date(data.endDate);
+      }
+      return true;
+    }, 'Invalid date range'),
 });
 
 export const getRevenueAnalyticsValidation = z.object({
   params: z.object({
     teacherId: objectIdSchema,
   }),
-  query: z.object({
-    courseId: objectIdSchema.optional(),
-    period: periodSchema.optional().default('monthly'),
-    startDate: dateSchema.optional(),
-    endDate: dateSchema.optional(),
-  }).refine((data) => {
-    if (data.startDate && !data.endDate) {
-      return false;
-    }
-    if (data.endDate && !data.startDate) {
-      return false;
-    }
-    if (data.startDate && data.endDate) {
-      return new Date(data.startDate) < new Date(data.endDate);
-    }
-    return true;
-  }, 'Invalid date range'),
+  query: z
+    .object({
+      courseId: objectIdSchema.optional(),
+      period: periodSchema.optional().default('monthly'),
+      startDate: dateSchema.optional(),
+      endDate: dateSchema.optional(),
+    })
+    .refine((data) => {
+      if (data.startDate && !data.endDate) {
+        return false;
+      }
+      if (data.endDate && !data.startDate) {
+        return false;
+      }
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) < new Date(data.endDate);
+      }
+      return true;
+    }, 'Invalid date range'),
 });
 
 export const getPerformanceMetricsValidation = z.object({
   params: z.object({
     teacherId: objectIdSchema,
   }),
-  query: z.object({
-    courseId: objectIdSchema.optional(),
-    period: periodSchema.optional().default('monthly'),
-    startDate: dateSchema.optional(),
-    endDate: dateSchema.optional(),
-  }).refine((data) => {
-    if (data.startDate && !data.endDate) {
-      return false;
-    }
-    if (data.endDate && !data.startDate) {
-      return false;
-    }
-    if (data.startDate && data.endDate) {
-      return new Date(data.startDate) < new Date(data.endDate);
-    }
-    return true;
-  }, 'Invalid date range'),
+  query: z
+    .object({
+      courseId: objectIdSchema.optional(),
+      period: periodSchema.optional().default('monthly'),
+      startDate: dateSchema.optional(),
+      endDate: dateSchema.optional(),
+    })
+    .refine((data) => {
+      if (data.startDate && !data.endDate) {
+        return false;
+      }
+      if (data.endDate && !data.startDate) {
+        return false;
+      }
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) < new Date(data.endDate);
+      }
+      return true;
+    }, 'Invalid date range'),
 });
 
 export const getStudentEngagementValidation = z.object({
   params: z.object({
     teacherId: objectIdSchema,
   }),
-  query: z.object({
-    courseId: objectIdSchema.optional(),
-    period: periodSchema.optional().default('monthly'),
-    startDate: dateSchema.optional(),
-    endDate: dateSchema.optional(),
-  }).refine((data) => {
-    if (data.startDate && !data.endDate) {
-      return false;
-    }
-    if (data.endDate && !data.startDate) {
-      return false;
-    }
-    if (data.startDate && data.endDate) {
-      return new Date(data.startDate) < new Date(data.endDate);
-    }
-    return true;
-  }, 'Invalid date range'),
+  query: z
+    .object({
+      courseId: objectIdSchema.optional(),
+      period: periodSchema.optional().default('monthly'),
+      startDate: dateSchema.optional(),
+      endDate: dateSchema.optional(),
+    })
+    .refine((data) => {
+      if (data.startDate && !data.endDate) {
+        return false;
+      }
+      if (data.endDate && !data.startDate) {
+        return false;
+      }
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) < new Date(data.endDate);
+      }
+      return true;
+    }, 'Invalid date range'),
 });
 
 // Activity feed validation
@@ -144,9 +167,15 @@ export const getActivityFeedValidation = z.object({
     ...paginationSchema.shape,
     type: z.nativeEnum(ActivityType).optional(),
     priority: z.nativeEnum(ActivityPriority).optional(),
-    isRead: z.string().optional().transform((val) => val === 'true'),
+    isRead: z
+      .string()
+      .optional()
+      .transform((val) => val === 'true'),
     courseId: objectIdSchema.optional(),
-    sortBy: z.enum(['createdAt', 'priority', 'type']).optional().default('createdAt'),
+    sortBy: z
+      .enum(['createdAt', 'priority', 'type'])
+      .optional()
+      .default('createdAt'),
     sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
   }),
 });
@@ -168,24 +197,26 @@ export const exportAnalyticsValidation = z.object({
   params: z.object({
     teacherId: objectIdSchema,
   }),
-  query: z.object({
-    format: z.enum(['json', 'csv']).optional().default('json'),
-    period: periodSchema.optional().default('monthly'),
-    courseId: objectIdSchema.optional(),
-    startDate: dateSchema.optional(),
-    endDate: dateSchema.optional(),
-  }).refine((data) => {
-    if (data.startDate && !data.endDate) {
-      return false;
-    }
-    if (data.endDate && !data.startDate) {
-      return false;
-    }
-    if (data.startDate && data.endDate) {
-      return new Date(data.startDate) < new Date(data.endDate);
-    }
-    return true;
-  }, 'Invalid date range'),
+  query: z
+    .object({
+      format: z.enum(['json', 'csv']).optional().default('json'),
+      period: periodSchema.optional().default('monthly'),
+      courseId: objectIdSchema.optional(),
+      startDate: dateSchema.optional(),
+      endDate: dateSchema.optional(),
+    })
+    .refine((data) => {
+      if (data.startDate && !data.endDate) {
+        return false;
+      }
+      if (data.endDate && !data.startDate) {
+        return false;
+      }
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) < new Date(data.endDate);
+      }
+      return true;
+    }, 'Invalid date range'),
 });
 
 // Activity tracking validation (for internal use)
@@ -198,7 +229,10 @@ export const trackActivityValidation = z.object({
     title: z.string().min(1).max(200),
     description: z.string().min(1).max(500),
     metadata: z.record(z.any()).optional(),
-    priority: z.nativeEnum(ActivityPriority).optional().default(ActivityPriority.MEDIUM),
+    priority: z
+      .nativeEnum(ActivityPriority)
+      .optional()
+      .default(ActivityPriority.MEDIUM),
     actionRequired: z.boolean().optional().default(false),
     actionUrl: z.string().url().optional(),
     relatedEntity: z.object({
@@ -219,19 +253,21 @@ export const bulkMarkActivitiesAsReadValidation = z.object({
 });
 
 // Analytics filters validation
-export const analyticsFiltersValidation = z.object({
-  teacherId: objectIdSchema,
-  courseId: objectIdSchema.optional(),
-  period: periodSchema,
-  startDate: z.date().optional(),
-  endDate: z.date().optional(),
-  compareWithPrevious: z.boolean().optional().default(false),
-}).refine((data) => {
-  if (data.startDate && data.endDate) {
-    return data.startDate < data.endDate;
-  }
-  return true;
-}, 'Start date must be before end date');
+export const analyticsFiltersValidation = z
+  .object({
+    teacherId: objectIdSchema,
+    courseId: objectIdSchema.optional(),
+    period: periodSchema,
+    startDate: z.date().optional(),
+    endDate: z.date().optional(),
+    compareWithPrevious: z.boolean().optional().default(false),
+  })
+  .refine((data) => {
+    if (data.startDate && data.endDate) {
+      return data.startDate < data.endDate;
+    }
+    return true;
+  }, 'Start date must be before end date');
 
 // Real-time analytics validation
 export const realtimeAnalyticsValidation = z.object({
@@ -239,7 +275,9 @@ export const realtimeAnalyticsValidation = z.object({
     teacherId: objectIdSchema,
   }),
   query: z.object({
-    metrics: z.array(z.enum(['enrollments', 'revenue', 'activities', 'engagement'])).optional(),
+    metrics: z
+      .array(z.enum(['enrollments', 'revenue', 'activities', 'engagement']))
+      .optional(),
     interval: z.enum(['1m', '5m', '15m', '1h']).optional().default('5m'),
   }),
 });
@@ -249,24 +287,24 @@ export const validateDateRange = (startDate?: string, endDate?: string) => {
   if (!startDate || !endDate) {
     return true; // Optional dates
   }
-  
+
   const start = new Date(startDate);
   const end = new Date(endDate);
-  
+
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return false; // Invalid dates
   }
-  
+
   if (start >= end) {
     return false; // Start date must be before end date
   }
-  
+
   // Check if date range is not too large (max 1 year)
   const oneYear = 365 * 24 * 60 * 60 * 1000;
   if (end.getTime() - start.getTime() > oneYear) {
     return false;
   }
-  
+
   return true;
 };
 
@@ -303,11 +341,42 @@ export const getRevenueAnalyticsDetailedValidation = z.object({
 
 export const getPerformanceMetricsDetailedValidation = z.object({
   params: z.object({
+    teacherId: z
+      .string()
+      .min(1, 'Teacher ID is required')
+      .refine((val) => val !== 'undefined' && val !== 'null', {
+        message: 'Teacher ID cannot be undefined or null',
+      })
+      .refine((val) => /^[0-9a-fA-F]{24}$/.test(val), {
+        message: 'Teacher ID must be a valid MongoDB ObjectId',
+      }),
+  }),
+  query: z.object({
+    period: periodSchema.optional().default('monthly'),
+    courseId: objectIdSchema.optional(),
+  }),
+});
+
+export const getStudentEngagementDetailsValidation = z.object({
+  params: z.object({
     teacherId: objectIdSchema,
   }),
   query: z.object({
     period: periodSchema.optional().default('monthly'),
     courseId: objectIdSchema.optional(),
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 1)),
+    limit: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 20)),
+    sortBy: z.string().optional().default('engagementScore'),
+    sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
+    categories: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
   }),
 });
 
@@ -330,4 +399,5 @@ export const AnalyticsValidation = {
   getEngagementMetrics: getEngagementMetricsValidation,
   getRevenueAnalyticsDetailed: getRevenueAnalyticsDetailedValidation,
   getPerformanceMetricsDetailed: getPerformanceMetricsDetailedValidation,
+  getStudentEngagementDetails: getStudentEngagementDetailsValidation,
 };

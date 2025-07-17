@@ -223,6 +223,17 @@ class DatabaseOptimizer {
                         { name: 'totalEarnings_desc', key: { totalEarnings: -1 } },
                     ],
                 },
+                {
+                    collection: 'lectures',
+                    indexes: [
+                        { name: 'courseId_order', key: { courseId: 1, order: 1 } },
+                        { name: 'courseId_createdAt', key: { courseId: 1, createdAt: -1 } },
+                        { name: 'courseId_isPreviewFree', key: { courseId: 1, isPreviewFree: 1 } },
+                        { name: 'order_asc', key: { order: 1 } },
+                        { name: 'createdAt_desc', key: { createdAt: -1 } },
+                        { name: 'courseId_order_isPreviewFree', key: { courseId: 1, order: 1, isPreviewFree: 1 } },
+                    ],
+                },
             ];
             yield this.createIndexesForCollections(coreIndexes);
             logger_1.Logger.info('✅ Core collection indexes created');

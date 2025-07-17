@@ -35,6 +35,8 @@ router.get('/student-transactions/:studentId', (0, auth_1.default)(user_constant
 // Payout routes
 router.post('/payouts/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.createPayoutRequest);
 router.get('/payouts/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.getPayoutHistory);
+// Alias route for payment history (backward compatibility)
+router.get('/history/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.getPayoutHistory);
 router.get('/payouts/details/:payoutId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.getPayoutById);
 router.put('/payouts/preferences/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.updatePayoutPreferences);
 router.get('/payouts/preferences/:teacherId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), payout_controller_1.PayoutController.getPayoutPreferences);

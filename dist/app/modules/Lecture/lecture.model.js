@@ -53,4 +53,10 @@ const lectureSchema = new mongoose_1.Schema({
         required: true
     }
 }, { timestamps: true });
+// Create indexes for optimal query performance
+lectureSchema.index({ courseId: 1, order: 1 }); // Primary query pattern
+lectureSchema.index({ courseId: 1, createdAt: -1 }); // For recent lectures
+lectureSchema.index({ courseId: 1, isPreviewFree: 1 }); // For preview filtering
+lectureSchema.index({ order: 1 }); // For ordering operations
+lectureSchema.index({ createdAt: -1 }); // For general sorting
 exports.Lecture = (0, mongoose_1.model)('Lecture', lectureSchema);

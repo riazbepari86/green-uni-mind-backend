@@ -5,12 +5,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StripeConnectRoutes = void 0;
 const express_1 = __importDefault(require("express"));
+const zod_1 = require("zod");
+const auth_1 = __importDefault(require("../../middlewares/auth"));
+const validateRequest_1 = __importDefault(require("../../middlewares/validateRequest"));
+const user_constant_1 = require("../User/user.constant");
 const stripeConnect_controller_1 = require("./stripeConnect.controller");
 const stripeConnect_webhook_1 = require("./stripeConnect.webhook");
-const auth_1 = __importDefault(require("../../middlewares/auth"));
-const user_constant_1 = require("../User/user.constant");
-const validateRequest_1 = __importDefault(require("../../middlewares/validateRequest"));
-const zod_1 = require("zod");
 const router = express_1.default.Router();
 // Validation schemas
 const createAccountSchema = zod_1.z.object({
@@ -30,19 +30,29 @@ const createAccountLinkSchema = zod_1.z.object({
 });
 const updateAccountSchema = zod_1.z.object({
     body: zod_1.z.object({
-        business_profile: zod_1.z.object({
+        business_profile: zod_1.z
+            .object({
             name: zod_1.z.string().optional(),
             url: zod_1.z.string().url().optional(),
             support_phone: zod_1.z.string().optional(),
             support_email: zod_1.z.string().email().optional(),
-        }).optional(),
-        settings: zod_1.z.object({
-            payouts: zod_1.z.object({
-                schedule: zod_1.z.object({
-                    interval: zod_1.z.enum(['manual', 'daily', 'weekly', 'monthly']).optional(),
-                }).optional(),
-            }).optional(),
-        }).optional(),
+        })
+            .optional(),
+        settings: zod_1.z
+            .object({
+            payouts: zod_1.z
+                .object({
+                schedule: zod_1.z
+                    .object({
+                    interval: zod_1.z
+                        .enum(['manual', 'daily', 'weekly', 'monthly'])
+                        .optional(),
+                })
+                    .optional(),
+            })
+                .optional(),
+        })
+            .optional(),
     }),
 });
 // Create Stripe Connect account
@@ -51,6 +61,10 @@ router.post('/create-account', (0, auth_1.default)(user_constant_1.USER_ROLE.tea
 router.post('/create-account-link', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(createAccountLinkSchema), stripeConnect_controller_1.StripeConnectController.createAccountLink);
 // Get account status
 router.get('/account-status', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher, user_constant_1.USER_ROLE.admin), stripeConnect_controller_1.StripeConnectController.getAccountStatus);
+// Quick status check for real-time updates
+router.get('/quick-status', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher, user_constant_1.USER_ROLE.admin), stripeConnect_controller_1.StripeConnectController.quickStatusCheck);
+// Proactive verification check
+router.post('/proactive-verification', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), stripeConnect_controller_1.StripeConnectController.proactiveVerificationCheck);
 // Update account information
 router.post('/update-account', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(updateAccountSchema), stripeConnect_controller_1.StripeConnectController.updateAccount);
 // Disconnect account
@@ -64,4 +78,6 @@ router.get('/audit-log', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher, 
 router.delete('/disconnect-enhanced', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), stripeConnect_controller_1.StripeConnectController.disconnectAccountEnhanced);
 // Webhook endpoint (no auth required - Stripe handles verification)
 router.post('/webhook', stripeConnect_webhook_1.StripeConnectWebhook.handleWebhook);
+// Alias route for backward compatibility and API testing
+router.post('/connect', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(createAccountLinkSchema), stripeConnect_controller_1.StripeConnectController.createAccountLink);
 exports.StripeConnectRoutes = router;

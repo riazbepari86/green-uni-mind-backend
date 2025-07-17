@@ -1,7 +1,7 @@
+import crypto from 'crypto';
 import { Redis } from 'ioredis';
 import { BaseRedisService } from './BaseRedisService';
 import { IRedisMonitoringService, RedisKeys } from './interfaces';
-import crypto from 'crypto';
 
 export interface QueryCacheOptions {
   ttl?: number;
@@ -27,10 +27,7 @@ export class QueryCacheService extends BaseRedisService {
   private defaultTTL = 3600; // 1 hour
   private compressionThreshold = 1024; // Compress results larger than 1KB
 
-  constructor(
-    client: Redis,
-    monitoring?: IRedisMonitoringService
-  ) {
+  constructor(client: Redis, monitoring?: IRedisMonitoringService) {
     super(client, monitoring);
   }
 
@@ -38,7 +35,10 @@ export class QueryCacheService extends BaseRedisService {
   private generateCacheKey(query: string, params: any = {}): string {
     const normalizedQuery = query.replace(/\s+/g, ' ').trim();
     const paramsString = JSON.stringify(params, Object.keys(params).sort());
-    const hash = crypto.createHash('sha256').update(normalizedQuery + paramsString).digest('hex');
+    const hash = crypto
+      .createHash('sha256')
+      .update(normalizedQuery + paramsString)
+      .digest('hex');
     return RedisKeys.QUERY_RESULT(hash);
   }
 
@@ -47,7 +47,7 @@ export class QueryCacheService extends BaseRedisService {
     query: string,
     params: any,
     result: any,
-    options: QueryCacheOptions = {}
+    options: QueryCacheOptions = {},
   ): Promise<void> {
     const cacheKey = this.generateCacheKey(query, params);
     const ttl = options.ttl || this.defaultTTL;
@@ -68,10 +68,13 @@ export class QueryCacheService extends BaseRedisService {
       };
 
       const serializedData = JSON.stringify(cachedQuery);
-      
+
       // Compress if data is large
       let dataToStore = serializedData;
-      if (options.compression && serializedData.length > this.compressionThreshold) {
+      if (
+        options.compression &&
+        serializedData.length > this.compressionThreshold
+      ) {
         // In a real implementation, you'd use a compression library like zlib
         // For now, we'll just mark it as compressed
         cachedQuery.result = { __compressed: true, data: cachedQuery.result };
@@ -79,24 +82,29 @@ export class QueryCacheService extends BaseRedisService {
       }
 
       const pipeline = this.client.pipeline();
-      
+
       // Store the cached query
       pipeline.setex(cacheKey, ttl, dataToStore);
-      
+
       // Add to tag sets for invalidation
-      tags.forEach(tag => {
+      tags.forEach((tag) => {
         const tagKey = `cache:tag:${tag}`;
         pipeline.sadd(tagKey, cacheKey);
         pipeline.expire(tagKey, ttl + 300); // Tag expires 5 minutes after content
       });
-      
+
       // Track cache statistics
       pipeline.incr('cache:stats:queries:stored');
-      pipeline.incr(`cache:stats:queries:stored:${new Date().toISOString().slice(0, 10)}`);
-      pipeline.expire(`cache:stats:queries:stored:${new Date().toISOString().slice(0, 10)}`, 86400 * 7);
-      
+      pipeline.incr(
+        `cache:stats:queries:stored:${new Date().toISOString().slice(0, 10)}`,
+      );
+      pipeline.expire(
+        `cache:stats:queries:stored:${new Date().toISOString().slice(0, 10)}`,
+        86400 * 7,
+      );
+
       await pipeline.exec();
-      
+
       console.log(`📦 Query cached: ${cacheKey.slice(-8)}... (TTL: ${ttl}s)`);
     });
   }
@@ -107,7 +115,7 @@ export class QueryCacheService extends BaseRedisService {
 
     return this.executeWithMonitoring('get_cached_query', async () => {
       const data = await this.client.get(cacheKey);
-      
+
       if (!data) {
         // Track cache miss
         await this.client.incr('cache:stats:queries:misses');
@@ -116,28 +124,30 @@ export class QueryCacheService extends BaseRedisService {
 
       try {
         const cachedQuery: CachedQuery = JSON.parse(data);
-        
+
         // Update hit count and last accessed time
         cachedQuery.hitCount++;
         cachedQuery.lastAccessed = new Date().toISOString();
-        
+
         // Update the cached data with new stats
         const ttl = await this.client.ttl(cacheKey);
         if (ttl > 0) {
           await this.client.setex(cacheKey, ttl, JSON.stringify(cachedQuery));
         }
-        
+
         // Track cache hit
         await this.client.incr('cache:stats:queries:hits');
-        
-        console.log(`🎯 Query cache hit: ${cacheKey.slice(-8)}... (hits: ${cachedQuery.hitCount})`);
-        
+
+        console.log(
+          `🎯 Query cache hit: ${cacheKey.slice(-8)}... (hits: ${cachedQuery.hitCount})`,
+        );
+
         // Handle decompression if needed
         if (cachedQuery.result?.__compressed) {
           // In a real implementation, you'd decompress here
           return cachedQuery.result.data;
         }
-        
+
         return cachedQuery.result;
       } catch (error) {
         console.error('Error parsing cached query:', error);
@@ -153,22 +163,22 @@ export class QueryCacheService extends BaseRedisService {
     query: string,
     params: any,
     fallbackFn: () => Promise<T>,
-    options: QueryCacheOptions = {}
+    options: QueryCacheOptions = {},
   ): Promise<T> {
     return this.executeWithMonitoring('cache_with_fallback', async () => {
       // Try to get from cache first
       const cachedResult = await this.getCachedQuery(query, params);
-      
+
       if (cachedResult !== null) {
         return cachedResult;
       }
 
       // Cache miss - execute fallback function
       const freshResult = await fallbackFn();
-      
+
       // Cache the fresh result
       await this.cacheQuery(query, params, freshResult, options);
-      
+
       return freshResult;
     });
   }
@@ -177,50 +187,67 @@ export class QueryCacheService extends BaseRedisService {
   async invalidateByTags(tags: string[]): Promise<number> {
     return this.executeWithMonitoring('invalidate_by_tags', async () => {
       let totalInvalidated = 0;
-      
+
       for (const tag of tags) {
         const tagKey = `cache:tag:${tag}`;
         const cacheKeys = await this.client.smembers(tagKey);
-        
+
         if (cacheKeys.length > 0) {
           const pipeline = this.client.pipeline();
-          
+
           // Delete all cached queries with this tag
-          cacheKeys.forEach(key => pipeline.del(key));
-          
+          cacheKeys.forEach((key) => pipeline.del(key));
+
           // Delete the tag set
           pipeline.del(tagKey);
-          
+
           await pipeline.exec();
           totalInvalidated += cacheKeys.length;
-          
-          console.log(`🗑️ Invalidated ${cacheKeys.length} queries with tag: ${tag}`);
+
+          console.log(
+            `🗑️ Invalidated ${cacheKeys.length} queries with tag: ${tag}`,
+          );
         }
       }
-      
+
       // Track invalidation stats
-      await this.client.incrby('cache:stats:queries:invalidated', totalInvalidated);
-      
+      await this.client.incrby(
+        'cache:stats:queries:invalidated',
+        totalInvalidated,
+      );
+
       return totalInvalidated;
     });
   }
 
-  // Invalidate cache by pattern
+  // Invalidate cache by pattern using SCAN instead of KEYS
   async invalidateByPattern(pattern: string): Promise<number> {
     return this.executeWithMonitoring('invalidate_by_pattern', async () => {
-      const keys = await this.client.keys(pattern);
-      
+      const keys = await this.scanKeysWithPattern(pattern, 1000);
+
       if (keys.length === 0) {
         return 0;
       }
-      
-      await this.client.del(...keys);
-      
+
+      // Delete in batches to avoid overwhelming Redis
+      const batchSize = 50;
+      let totalDeleted = 0;
+
+      for (let i = 0; i < keys.length; i += batchSize) {
+        const batch = keys.slice(i, i + batchSize);
+        if (batch.length > 0) {
+          const deleted = await this.client.del(...batch);
+          totalDeleted += deleted;
+        }
+      }
+
       // Track invalidation stats
-      await this.client.incrby('cache:stats:queries:invalidated', keys.length);
-      
-      console.log(`🗑️ Invalidated ${keys.length} queries matching pattern: ${pattern}`);
-      return keys.length;
+      await this.client.incrby('cache:stats:queries:invalidated', totalDeleted);
+
+      console.log(
+        `🗑️ Invalidated ${totalDeleted} queries matching pattern: ${pattern}`,
+      );
+      return totalDeleted;
     });
   }
 
@@ -240,14 +267,14 @@ export class QueryCacheService extends BaseRedisService {
         this.client.get('cache:stats:queries:stored'),
         this.client.get('cache:stats:queries:invalidated'),
       ]);
-      
+
       const hitsNum = parseInt(hits || '0');
       const missesNum = parseInt(misses || '0');
       const storedNum = parseInt(stored || '0');
       const invalidatedNum = parseInt(invalidated || '0');
       const totalQueries = hitsNum + missesNum;
       const hitRate = totalQueries > 0 ? (hitsNum / totalQueries) * 100 : 0;
-      
+
       return {
         hits: hitsNum,
         misses: missesNum,
@@ -260,26 +287,29 @@ export class QueryCacheService extends BaseRedisService {
   }
 
   // Get popular queries
-  async getPopularQueries(limit: number = 10): Promise<Array<{
-    query: string;
-    hitCount: number;
-    lastAccessed: string;
-    tags: string[];
-  }>> {
+  async getPopularQueries(limit: number = 10): Promise<
+    Array<{
+      query: string;
+      hitCount: number;
+      lastAccessed: string;
+      tags: string[];
+    }>
+  > {
     return this.executeWithMonitoring('get_popular_queries', async () => {
       // This is a simplified implementation
       // In production, you might want to maintain a separate sorted set for popular queries
       const pattern = 'cache:query:*';
       const keys = await this.client.keys(pattern);
-      
+
       const queries: Array<{
         query: string;
         hitCount: number;
         lastAccessed: string;
         tags: string[];
       }> = [];
-      
-      for (const key of keys.slice(0, limit * 2)) { // Get more than needed to filter
+
+      for (const key of keys.slice(0, limit * 2)) {
+        // Get more than needed to filter
         try {
           const data = await this.client.get(key);
           if (data) {
@@ -296,24 +326,24 @@ export class QueryCacheService extends BaseRedisService {
           continue;
         }
       }
-      
+
       // Sort by hit count and return top queries
-      return queries
-        .sort((a, b) => b.hitCount - a.hitCount)
-        .slice(0, limit);
+      return queries.sort((a, b) => b.hitCount - a.hitCount).slice(0, limit);
     });
   }
 
   // Warm cache with predefined queries
-  async warmCache(queries: Array<{
-    query: string;
-    params: any;
-    fetchFn: () => Promise<any>;
-    options?: QueryCacheOptions;
-  }>): Promise<number> {
+  async warmCache(
+    queries: Array<{
+      query: string;
+      params: any;
+      fetchFn: () => Promise<any>;
+      options?: QueryCacheOptions;
+    }>,
+  ): Promise<number> {
     return this.executeWithMonitoring('warm_cache', async () => {
       let warmedCount = 0;
-      
+
       for (const { query, params, fetchFn, options } of queries) {
         try {
           // Check if already cached
@@ -328,7 +358,7 @@ export class QueryCacheService extends BaseRedisService {
           console.error(`Error warming cache for query: ${query}`, error);
         }
       }
-      
+
       console.log(`🔥 Cache warmed: ${warmedCount} queries`);
       return warmedCount;
     });
@@ -340,28 +370,30 @@ export class QueryCacheService extends BaseRedisService {
       // Redis automatically removes expired keys, but we can clean up orphaned tag references
       const tagPattern = 'cache:tag:*';
       const tagKeys = await this.client.keys(tagPattern);
-      
+
       let cleanedCount = 0;
-      
+
       for (const tagKey of tagKeys) {
         const cacheKeys = await this.client.smembers(tagKey);
         const existingKeys = await this.existsMultiple(cacheKeys);
-        
+
         // Remove references to non-existent cache keys
-        const keysToRemove = cacheKeys.filter((_, index) => !existingKeys[index]);
-        
+        const keysToRemove = cacheKeys.filter(
+          (_, index) => !existingKeys[index],
+        );
+
         if (keysToRemove.length > 0) {
           await this.client.srem(tagKey, ...keysToRemove);
           cleanedCount += keysToRemove.length;
         }
-        
+
         // Remove empty tag sets
         const remainingCount = await this.client.scard(tagKey);
         if (remainingCount === 0) {
           await this.client.del(tagKey);
         }
       }
-      
+
       console.log(`🧹 Cleaned ${cleanedCount} orphaned cache references`);
       return cleanedCount;
     });
@@ -376,7 +408,7 @@ export class QueryCacheService extends BaseRedisService {
         'cache:stats:queries:stored',
         'cache:stats:queries:invalidated',
       ];
-      
+
       await this.client.del(...statsKeys);
       console.log('📊 Cache statistics reset');
     });
@@ -391,13 +423,13 @@ export class QueryCacheService extends BaseRedisService {
     return this.executeWithMonitoring('get_cache_size', async () => {
       const pattern = 'cache:query:*';
       const keys = await this.client.keys(pattern);
-      
+
       let totalMemory = 0;
-      
+
       // Sample a subset of keys to estimate memory usage
       const sampleSize = Math.min(100, keys.length);
       const sampleKeys = keys.slice(0, sampleSize);
-      
+
       for (const key of sampleKeys) {
         try {
           const data = await this.client.get(key);
@@ -409,14 +441,14 @@ export class QueryCacheService extends BaseRedisService {
           continue;
         }
       }
-      
+
       // Extrapolate total memory usage
-      const estimatedTotalMemory = sampleSize > 0 
-        ? (totalMemory / sampleSize) * keys.length 
-        : 0;
-      
-      const averageKeySize = keys.length > 0 ? estimatedTotalMemory / keys.length : 0;
-      
+      const estimatedTotalMemory =
+        sampleSize > 0 ? (totalMemory / sampleSize) * keys.length : 0;
+
+      const averageKeySize =
+        keys.length > 0 ? estimatedTotalMemory / keys.length : 0;
+
       return {
         totalKeys: keys.length,
         totalMemory: Math.round(estimatedTotalMemory),

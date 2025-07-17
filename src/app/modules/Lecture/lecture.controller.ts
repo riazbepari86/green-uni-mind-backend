@@ -3,6 +3,8 @@ import sendResponse from '../../utils/sendResponse';
 import { LectureService } from './lecture.service';
 import httpStatus from 'http-status';
 import { VideoResolution } from './lecture.interface';
+import EnterpriseCacheService from '../../services/cache/EnterpriseCache';
+import LectureUpdateCacheInvalidator from '../../services/cache/LectureUpdateCacheInvalidator';
 
 const createLecture = catchAsync(async (req, res) => {
   const { courseId } = req.params;
@@ -85,6 +87,25 @@ const updateLecture = catchAsync(async (req, res) => {
   const { courseId, lectureId } = req.params;
   const payload = req.body;
 
+  // Validate required parameters
+  if (!courseId || courseId === 'undefined' || courseId === 'null') {
+    return sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: 'Valid course ID is required',
+      data: null,
+    });
+  }
+
+  if (!lectureId || lectureId === 'undefined' || lectureId === 'null') {
+    return sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: 'Valid lecture ID is required',
+      data: null,
+    });
+  }
+
   // Process the payload to handle adaptive streaming data
   if (payload.videoResolutions && Array.isArray(payload.videoResolutions)) {
     // Make sure each resolution has the required fields
@@ -105,11 +126,84 @@ const updateLecture = catchAsync(async (req, res) => {
     payload,
   );
 
+  // COMPREHENSIVE CACHE INVALIDATION - SOLUTION TO YOUR ISSUE
+  // This ensures immediate updates in creator courses endpoint
+  try {
+    console.log('🎯 Starting comprehensive cache invalidation for lecture update:', {
+      lectureId,
+      courseId,
+      updatedFields: Object.keys(payload)
+    });
+
+    // Use both enterprise cache service and specialized invalidator
+    const [enterpriseCache, cacheInvalidator] = [
+      new EnterpriseCacheService(),
+      LectureUpdateCacheInvalidator.getInstance()
+    ];
+
+    // Run both invalidation strategies in parallel for maximum effectiveness
+    await Promise.all([
+      enterpriseCache.invalidateLectureUpdate(lectureId, courseId, Object.keys(payload)),
+      cacheInvalidator.invalidateAfterLectureUpdate(lectureId, courseId)
+    ]);
+
+    // Validate that cache invalidation worked
+    const isInvalidated = await cacheInvalidator.validateCacheInvalidation(lectureId, courseId);
+    console.log('🔍 Cache invalidation validation:', isInvalidated ? 'SUCCESS' : 'PARTIAL');
+
+    console.log('✅ Comprehensive cache invalidation completed successfully');
+  } catch (cacheError) {
+    console.error('❌ Cache invalidation failed:', cacheError);
+    
+    // Emergency fallback - clear all course caches
+    try {
+      console.log('🚨 Attempting emergency cache clear...');
+      await LectureUpdateCacheInvalidator.getInstance().emergencyClearAllCourseCaches();
+      console.log('🚨 Emergency cache clear completed');
+    } catch (emergencyError) {
+      console.error('❌ Emergency cache clear also failed:', emergencyError);
+    }
+    
+    // Don't fail the request if cache invalidation fails
+  }
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Lecture updated successfully',
     data: updated,
+  });
+});
+
+const deleteLecture = catchAsync(async (req, res) => {
+  const { courseId, lectureId } = req.params;
+
+  // Validate required parameters
+  if (!courseId || courseId === 'undefined' || courseId === 'null') {
+    return sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: 'Valid course ID is required',
+      data: null,
+    });
+  }
+
+  if (!lectureId || lectureId === 'undefined' || lectureId === 'null') {
+    return sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: 'Valid lecture ID is required',
+      data: null,
+    });
+  }
+
+  const result = await LectureService.deleteLecture(courseId, lectureId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Lecture deleted successfully',
+    data: result,
   });
 });
 
@@ -119,4 +213,5 @@ export const LectureController = {
   getLecturesByCourseId,
   updateLectureOrder,
   updateLecture,
+  deleteLecture,
 };

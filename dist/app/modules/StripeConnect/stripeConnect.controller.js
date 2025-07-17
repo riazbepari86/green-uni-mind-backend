@@ -81,14 +81,45 @@ const createAccountLink = (0, catchAsync_1.default)((req, res) => __awaiter(void
 const getAccountStatus = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+    const { forceRefresh } = req.query;
     if (!userId) {
         throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'User ID not found');
     }
-    const result = yield stripeConnect_service_1.StripeConnectService.getAccountStatus(userId);
+    const result = yield stripeConnect_service_1.StripeConnectService.getAccountStatus(userId, forceRefresh === 'true');
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
         message: 'Account status retrieved successfully',
+        data: result,
+    });
+}));
+// Quick status check for real-time updates
+const quickStatusCheck = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+    if (!userId) {
+        throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'User ID not found');
+    }
+    const result = yield stripeConnect_service_1.StripeConnectService.quickStatusCheck(userId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Quick status check completed',
+        data: result,
+    });
+}));
+// Proactive verification check
+const proactiveVerificationCheck = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+    if (!userId) {
+        throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, 'User ID not found');
+    }
+    const result = yield stripeConnect_service_1.StripeConnectService.proactiveVerificationCheck(userId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Proactive verification check completed',
         data: result,
     });
 }));
@@ -189,6 +220,8 @@ exports.StripeConnectController = {
     createAccount,
     createAccountLink,
     getAccountStatus,
+    quickStatusCheck,
+    proactiveVerificationCheck,
     updateAccount,
     disconnectAccount,
     retryConnection,

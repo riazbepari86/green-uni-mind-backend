@@ -13,18 +13,61 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentControllers = void 0;
+const http_status_1 = __importDefault(require("http-status"));
+const mongoose_1 = require("mongoose");
+const AppError_1 = __importDefault(require("../../errors/AppError"));
 const catchAsync_1 = __importDefault(require("../../utils/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../utils/sendResponse"));
-const payment_service_1 = require("./payment.service");
-const stripe_service_1 = require("./stripe.service");
-const http_status_1 = __importDefault(require("http-status"));
+const stripe_1 = require("../../utils/stripe");
 const course_model_1 = require("../Course/course.model");
-const transaction_model_1 = require("./transaction.model");
 const student_model_1 = require("../Student/student.model");
 const teacher_model_1 = require("../Teacher/teacher.model");
-const stripe_1 = require("../../utils/stripe");
-const AppError_1 = __importDefault(require("../../errors/AppError"));
-const mongoose_1 = require("mongoose");
+const payment_service_1 = require("./payment.service");
+const stripe_service_1 = require("./stripe.service");
+const transaction_model_1 = require("./transaction.model");
+/**
+ * Helper function to validate and resolve teacher ID
+ * Handles cases where frontend passes user._id instead of teacher._id
+ */
+const validateAndResolveTeacherId = (teacherId, authenticatedUser) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log('🔍 validateAndResolveTeacherId called with:', {
+        teacherId,
+        userRole: authenticatedUser.role,
+        userId: authenticatedUser._id,
+    });
+    if (authenticatedUser.role !== 'teacher') {
+        console.log('✅ Non-teacher user, returning original teacherId');
+        return teacherId; // For non-teacher users, return as-is
+    }
+    // Try to find teacher by the provided ID first
+    console.log('🔍 Looking for teacher by ID:', teacherId);
+    let teacher = yield teacher_model_1.Teacher.findById(teacherId);
+    console.log('📊 Teacher.findById result:', teacher ? 'Found' : 'Not found');
+    // If not found, try to find by user ID (common case when frontend passes user._id)
+    if (!teacher) {
+        console.log('🔍 Looking for teacher by user ID:', teacherId);
+        teacher = yield teacher_model_1.Teacher.findOne({ user: teacherId });
+        console.log('📊 Teacher.findOne({user}) result:', teacher ? 'Found' : 'Not found');
+    }
+    // Validate that the teacher belongs to the authenticated user
+    if (!teacher) {
+        console.log('❌ No teacher found for ID:', teacherId);
+        throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'Teacher not found');
+    }
+    console.log('🔍 Teacher found:', {
+        teacherId: teacher._id,
+        userId: teacher.user,
+    });
+    if (teacher.user.toString() !== authenticatedUser._id) {
+        console.log('❌ Teacher user mismatch:', {
+            teacherUserId: teacher.user.toString(),
+            authenticatedUserId: authenticatedUser._id,
+        });
+        throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'You can only access your own data');
+    }
+    console.log('✅ Teacher validation successful, returning teacher ID:', teacher._id.toString());
+    return teacher._id.toString();
+});
 const createPaymentIntent = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { studentId, courseId, amount } = req.body;
     const result = yield payment_service_1.PaymentServices.createPaymentIntent(studentId, courseId, amount);
@@ -66,12 +109,16 @@ const createCheckoutSession = (0, catchAsync_1.default)((req, res) => __awaiter(
     const studentId = student._id.toString();
     console.log(`Creating checkout session for student: ${studentId}, course: ${courseId}, amount: ${amount}`);
     try {
-        console.log('Calling PaymentServices.createCheckoutSession with:', { studentId, courseId, amount });
+        console.log('Calling PaymentServices.createCheckoutSession with:', {
+            studentId,
+            courseId,
+            amount,
+        });
         const session = yield payment_service_1.PaymentServices.createCheckoutSession(studentId, courseId, amount);
         console.log('Stripe session created:', {
             id: session.id,
             url: session.url,
-            status: session.status
+            status: session.status,
         });
         // Extract the URL from the session for the frontend to redirect to
         if (!session.url) {
@@ -80,7 +127,7 @@ const createCheckoutSession = (0, catchAsync_1.default)((req, res) => __awaiter(
         }
         const responseData = {
             url: session.url,
-            sessionId: session.id
+            sessionId: session.id,
         };
         console.log('Sending response to client:', responseData);
         (0, sendResponse_1.default)(res, {
@@ -107,7 +154,9 @@ const handleWebhook = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!endpointSecret) {
         console.error('STRIPE_WEBHOOK_SECRET is not configured');
-        return res.status(500).send('Webhook Error: Webhook secret is not configured');
+        return res
+            .status(500)
+            .send('Webhook Error: Webhook secret is not configured');
     }
     if (!sig) {
         console.error('No Stripe signature found in headers');
@@ -147,7 +196,7 @@ const handleWebhook = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                 payment_intent: session.payment_intent,
                 customer_email: (_a = session.customer_details) === null || _a === void 0 ? void 0 : _a.email,
                 amount_total: session.amount_total,
-                payment_status: session.payment_status
+                payment_status: session.payment_status,
             });
         }
         // Return a 200 response immediately to acknowledge receipt of the webhook
@@ -177,7 +226,7 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
             statusCode: http_status_1.default.BAD_REQUEST,
             success: false,
             message: 'Teacher ID is required',
-            data: null
+            data: null,
         });
     }
     try {
@@ -187,7 +236,7 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
                 statusCode: http_status_1.default.INTERNAL_SERVER_ERROR,
                 success: false,
                 message: 'Stripe API key is not configured',
-                data: null
+                data: null,
             });
         }
         // Check if FRONTEND_URL is configured
@@ -196,7 +245,7 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
                 statusCode: http_status_1.default.INTERNAL_SERVER_ERROR,
                 success: false,
                 message: 'Frontend URL is not configured',
-                data: null
+                data: null,
             });
         }
         const result = yield payment_service_1.PaymentServices.connectTeacherStripe(teacherId);
@@ -236,7 +285,7 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
                     statusCode: http_status_1.default.INTERNAL_SERVER_ERROR,
                     success: false,
                     message: 'Unknown status returned from Stripe',
-                    data: null
+                    data: null,
                 });
         }
     }
@@ -246,7 +295,7 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
                 statusCode: error.statusCode,
                 success: false,
                 message: error.message,
-                data: null
+                data: null,
             });
         }
         else if (error instanceof Error) {
@@ -256,7 +305,7 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
                     statusCode: http_status_1.default.BAD_REQUEST,
                     success: false,
                     message: `Stripe API error: ${error.message}`,
-                    data: null
+                    data: null,
                 });
             }
             else {
@@ -264,7 +313,7 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
                     statusCode: http_status_1.default.INTERNAL_SERVER_ERROR,
                     success: false,
                     message: `Failed to connect Stripe account: ${error.message}`,
-                    data: null
+                    data: null,
                 });
             }
         }
@@ -273,14 +322,23 @@ const connectStripeAccount = (0, catchAsync_1.default)((req, res) => __awaiter(v
                 statusCode: http_status_1.default.INTERNAL_SERVER_ERROR,
                 success: false,
                 message: 'Failed to connect Stripe account',
-                data: null
+                data: null,
             });
         }
     }
 }));
 const getEarnings = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
-    const result = yield payment_service_1.PaymentServices.getTeacherEarnings(teacherId);
+    // Validate teacher ID matches authenticated user
+    const user = req.user;
+    const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
+    // Set no-cache headers for real-time financial data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    const result = yield payment_service_1.PaymentServices.getTeacherEarnings(actualTeacherId);
     (0, sendResponse_1.default)(res, {
         statusCode: 200,
         success: true,
@@ -290,20 +348,20 @@ const getEarnings = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, vo
 }));
 const saveStripeAccountDetails = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
-    const { stripeAccountId, stripeEmail, stripeVerified, stripeOnboardingComplete } = req.body;
+    const { stripeAccountId, stripeEmail, stripeVerified, stripeOnboardingComplete, } = req.body;
     console.log('Received request to save Stripe details:', {
         teacherId,
         stripeAccountId,
         stripeEmail,
         stripeVerified,
-        stripeOnboardingComplete
+        stripeOnboardingComplete,
     });
     try {
         const result = yield payment_service_1.PaymentServices.saveStripeAccountDetails(teacherId, {
             stripeAccountId,
             stripeEmail,
             stripeVerified,
-            stripeOnboardingComplete
+            stripeOnboardingComplete,
         });
         (0, sendResponse_1.default)(res, {
             statusCode: http_status_1.default.OK,
@@ -319,7 +377,7 @@ const saveStripeAccountDetails = (0, catchAsync_1.default)((req, res) => __await
                 statusCode: error.statusCode,
                 success: false,
                 message: error.message,
-                data: null
+                data: null,
             });
         }
         else {
@@ -327,7 +385,7 @@ const saveStripeAccountDetails = (0, catchAsync_1.default)((req, res) => __await
                 statusCode: http_status_1.default.INTERNAL_SERVER_ERROR,
                 success: false,
                 message: 'Failed to save stripe account details',
-                data: null
+                data: null,
             });
         }
     }
@@ -448,6 +506,12 @@ const getTransactionBySessionId = (0, catchAsync_1.default)((req, res) => __awai
 // Get teacher's upcoming payout information
 const getTeacherUpcomingPayout = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
+    // Set no-cache headers for real-time payout data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
     const result = yield stripe_service_1.StripeService.getTeacherUpcomingPayout(teacherId);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
@@ -460,6 +524,12 @@ const getTeacherUpcomingPayout = (0, catchAsync_1.default)((req, res) => __await
 const getTransactionAnalytics = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
     const { startDate, endDate, groupBy = 'day' } = req.query;
+    // Set no-cache headers for real-time analytics data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
     const result = yield stripe_service_1.StripeService.getTransactionAnalytics(teacherId, startDate, endDate, groupBy);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
@@ -472,6 +542,12 @@ const getTransactionAnalytics = (0, catchAsync_1.default)((req, res) => __awaite
 const getFinancialSummary = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
     const { period } = req.query;
+    // Set no-cache headers for real-time financial data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
     // Mock implementation - replace with actual service call
     const result = {
         totalRevenue: 5000,
@@ -509,7 +585,12 @@ const getTopPerformingCourses = (0, catchAsync_1.default)((req, res) => __awaite
     // Mock implementation - replace with actual service call
     const result = [
         { id: '1', title: 'React Masterclass', revenue: 2500, enrollments: 50 },
-        { id: '2', title: 'Node.js Complete Guide', revenue: 2000, enrollments: 40 },
+        {
+            id: '2',
+            title: 'Node.js Complete Guide',
+            revenue: 2000,
+            enrollments: 40,
+        },
     ];
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,

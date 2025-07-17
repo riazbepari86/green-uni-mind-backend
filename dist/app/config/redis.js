@@ -12,25 +12,30 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ensureConnection = exports.safeRedisOperation = exports.redisOperations = exports.redis = exports.testRedisConnection = exports.otpOperations = void 0;
+exports.safeRedisOperation = exports.redisOperations = exports.redis = exports.ensureConnection = exports.testRedisConnection = exports.otpOperations = void 0;
 exports.isRedisHealthy = isRedisHealthy;
 const ioredis_1 = __importDefault(require("ioredis"));
 const index_1 = __importDefault(require("./index"));
-// Redis connection configuration for Upstash
+// Redis connection configuration for Upstash with enhanced reliability
 const redisConfig = {
     host: index_1.default.redis.host || 'localhost',
     port: index_1.default.redis.port || 6379,
     password: index_1.default.redis.password || '',
     family: 4,
-    maxRetriesPerRequest: 3,
-    retryDelayOnFailover: 100,
-    enableReadyCheck: false,
-    maxLoadingTimeout: 1000,
+    maxRetriesPerRequest: 5, // Increased from 3 to 5 for better resilience
+    retryDelayOnFailover: 1000, // Increased from 100 to 1000 for exponential backoff
+    enableReadyCheck: true, // Changed from false to true for better connection health
+    maxLoadingTimeout: 30000, // Increased from 1000 to 30000 for better reliability
     lazyConnect: true, // Don't connect immediately
     keepAlive: 30000,
-    connectTimeout: 10000,
-    commandTimeout: 5000,
-    tls: index_1.default.redis.host && index_1.default.redis.host.includes('upstash.io') ? {} : undefined,
+    connectTimeout: 30000, // Increased from 10000 to 30000 for better reliability
+    commandTimeout: 30000, // Increased from 5000 to 30000 for better reliability
+    // Enhanced retry strategy
+    retryDelayOnClusterDown: 300,
+    enableOfflineQueue: true,
+    tls: index_1.default.redis.host && index_1.default.redis.host.includes('upstash.io')
+        ? {}
+        : undefined,
 };
 // Create a single Redis client instance
 const redis = new ioredis_1.default(redisConfig);
@@ -126,7 +131,7 @@ exports.otpOperations = {
     getOTP(email) {
         return __awaiter(this, void 0, void 0, function* () {
             const key = `otp:${email}`;
-            return (yield safeRedisOperation(() => redis.get(key), null, 'getOTP')) || null;
+            return ((yield safeRedisOperation(() => redis.get(key), null, 'getOTP')) || null);
         });
     },
     deleteOTP(email) {
@@ -139,7 +144,7 @@ exports.otpOperations = {
     getOTPTTL(email) {
         return __awaiter(this, void 0, void 0, function* () {
             const key = `otp:${email}`;
-            return (yield safeRedisOperation(() => redis.ttl(key), -1, 'getOTPTTL')) || -1;
+            return ((yield safeRedisOperation(() => redis.ttl(key), -1, 'getOTPTTL')) || -1);
         });
     },
     // Alias for compatibility
@@ -156,13 +161,13 @@ exports.otpOperations = {
                 const ttl = yield safeRedisOperation(() => redis.ttl(cooldownKey), 0, 'checkResendCooldown-ttl');
                 return {
                     allowed: false,
-                    remainingTime: ttl || 0
+                    remainingTime: ttl || 0,
                 };
             }
             yield safeRedisOperation(() => redis.setex(cooldownKey, cooldownSeconds, '1'), undefined, 'checkResendCooldown-set');
             return {
                 allowed: true,
-                remainingTime: 0
+                remainingTime: 0,
             };
         });
     },
@@ -180,10 +185,10 @@ exports.otpOperations = {
                         return {
                             allowed: false,
                             remaining: 0,
-                            resetTime: Date.now() + ((ttl || 0) * 1000),
+                            resetTime: Date.now() + (ttl || 0) * 1000,
                             isLocked: true,
                             lockDuration: ttl || 0,
-                            lockReason: lock.reason || 'Too many OTP requests'
+                            lockReason: lock.reason || 'Too many OTP requests',
                         };
                     }
                 }
@@ -198,17 +203,17 @@ exports.otpOperations = {
                 const lockInfo = {
                     attempts: attempts + 1,
                     lockedAt: new Date().toISOString(),
-                    reason: 'Exceeded maximum OTP requests'
+                    reason: 'Exceeded maximum OTP requests',
                 };
                 yield safeRedisOperation(() => redis.setex(lockKey, lockDuration, JSON.stringify(lockInfo)), undefined, 'checkOTPRateLimit-setLock');
                 yield safeRedisOperation(() => redis.del(attemptsKey), undefined, 'checkOTPRateLimit-delAttempts');
                 return {
                     allowed: false,
                     remaining: 0,
-                    resetTime: Date.now() + (lockDuration * 1000),
+                    resetTime: Date.now() + lockDuration * 1000,
                     isLocked: true,
                     lockDuration,
-                    lockReason: lockInfo.reason
+                    lockReason: lockInfo.reason,
                 };
             }
             if (current) {
@@ -222,8 +227,8 @@ exports.otpOperations = {
             return {
                 allowed: true,
                 remaining: maxAttempts - newAttempts,
-                resetTime: Date.now() + ((ttl || windowSeconds) * 1000),
-                isLocked: false
+                resetTime: Date.now() + (ttl || windowSeconds) * 1000,
+                isLocked: false,
             };
         });
     },
@@ -235,7 +240,7 @@ exports.otpOperations = {
             const [attempts, lockData, cooldownTTL] = yield Promise.all([
                 safeRedisOperation(() => redis.get(attemptsKey), null, 'getRateLimitStatus-attempts'),
                 safeRedisOperation(() => redis.get(lockKey), null, 'getRateLimitStatus-lockData'),
-                safeRedisOperation(() => redis.ttl(cooldownKey), -1, 'getRateLimitStatus-cooldownTTL')
+                safeRedisOperation(() => redis.ttl(cooldownKey), -1, 'getRateLimitStatus-cooldownTTL'),
             ]);
             const currentAttempts = attempts ? parseInt(attempts) : 0;
             let lockInfo = null;
@@ -243,7 +248,8 @@ exports.otpOperations = {
             if (lockData) {
                 try {
                     lockInfo = JSON.parse(lockData);
-                    lockTimeRemaining = (yield safeRedisOperation(() => redis.ttl(lockKey), 0, 'getRateLimitStatus-lockTTL')) || 0;
+                    lockTimeRemaining =
+                        (yield safeRedisOperation(() => redis.ttl(lockKey), 0, 'getRateLimitStatus-lockTTL')) || 0;
                 }
                 catch (parseError) {
                     console.warn('Failed to parse lock data in getRateLimitStatus:', parseError);
@@ -254,10 +260,10 @@ exports.otpOperations = {
                 remaining: Math.max(5 - currentAttempts, 0),
                 isLocked: !!lockInfo,
                 lockTimeRemaining: Math.max(lockTimeRemaining, 0),
-                cooldownTimeRemaining: Math.max(cooldownTTL || -1, 0)
+                cooldownTimeRemaining: Math.max(cooldownTTL || -1, 0),
             };
         });
-    }
+    },
 };
 // Test Redis connection
 const testRedisConnection = () => __awaiter(void 0, void 0, void 0, function* () {
@@ -298,83 +304,149 @@ const redisOperations = {
     },
     del(...keys) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.del(...keys), 0, `del:${keys.join(',')}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.del(...keys), 0, `del:${keys.join(',')}`)) || 0);
         });
     },
     keys(pattern) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.keys(pattern), [], `keys:${pattern}`)) || [];
+            return ((yield safeRedisOperation(() => redis.keys(pattern), [], `keys:${pattern}`)) || []);
         });
     },
     exists(key) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.exists(key), 0, `exists:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.exists(key), 0, `exists:${key}`)) ||
+                0);
         });
     },
     ttl(key) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.ttl(key), -1, `ttl:${key}`)) || -1;
+            return ((yield safeRedisOperation(() => redis.ttl(key), -1, `ttl:${key}`)) || -1);
         });
     },
     incr(key) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.incr(key), 0, `incr:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.incr(key), 0, `incr:${key}`)) || 0);
         });
     },
     sadd(key, member) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.sadd(key, member), 0, `sadd:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.sadd(key, member), 0, `sadd:${key}`)) || 0);
         });
     },
     smembers(key) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.smembers(key), [], `smembers:${key}`)) || [];
+            return ((yield safeRedisOperation(() => redis.smembers(key), [], `smembers:${key}`)) || []);
         });
     },
     expire(key, seconds) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.expire(key, seconds), 0, `expire:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.expire(key, seconds), 0, `expire:${key}`)) || 0);
         });
     },
     ping() {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.ping(), 'PONG', 'ping')) || 'PONG';
+            return ((yield safeRedisOperation(() => redis.ping(), 'PONG', 'ping')) || 'PONG');
         });
     },
     mget(keys) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.mget(...keys), keys.map(() => null), `mget:${keys.join(',')}`)) || keys.map(() => null);
+            return ((yield safeRedisOperation(() => redis.mget(...keys), keys.map(() => null), `mget:${keys.join(',')}`)) || keys.map(() => null));
         });
     },
     zadd(key, score, member) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.zadd(key, score, member), 0, `zadd:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.zadd(key, score, member), 0, `zadd:${key}`)) || 0);
         });
     },
     zremrangebyscore(key, min, max) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.zremrangebyscore(key, min, max), 0, `zremrangebyscore:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.zremrangebyscore(key, min, max), 0, `zremrangebyscore:${key}`)) || 0);
         });
     },
     zcard(key) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.zcard(key), 0, `zcard:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.zcard(key), 0, `zcard:${key}`)) || 0);
         });
     },
     zrange(key, start, stop, withScores) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => withScores ? redis.zrange(key, start, stop, withScores) : redis.zrange(key, start, stop), [], `zrange:${key}`)) || [];
+            return ((yield safeRedisOperation(() => withScores
+                ? redis.zrange(key, start, stop, withScores)
+                : redis.zrange(key, start, stop), [], `zrange:${key}`)) || []);
         });
     },
     zcount(key, min, max) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (yield safeRedisOperation(() => redis.zcount(key, min, max), 0, `zcount:${key}`)) || 0;
+            return ((yield safeRedisOperation(() => redis.zcount(key, min, max), 0, `zcount:${key}`)) || 0);
+        });
+    },
+    // SCAN operation for pattern-based key scanning (CRITICAL FIX)
+    scan(cursor, ...args) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return ((yield safeRedisOperation(() => __awaiter(this, void 0, void 0, function* () {
+                // Handle different SCAN argument patterns
+                if (args.length >= 4 && args[0] === 'MATCH' && args[2] === 'COUNT') {
+                    // SCAN cursor MATCH pattern COUNT count
+                    return yield redis.scan(String(cursor), 'MATCH', String(args[1]), 'COUNT', Number(args[3]));
+                }
+                else if (args.length >= 2 && args[0] === 'MATCH') {
+                    // SCAN cursor MATCH pattern
+                    return yield redis.scan(String(cursor), 'MATCH', String(args[1]));
+                }
+                else {
+                    // Basic SCAN cursor
+                    return yield redis.scan(String(cursor));
+                }
+            }), ['0', []], `scan:${cursor}:${args.join(':')}`)) || ['0', []]);
         });
     },
     // Pipeline operations
     pipeline() {
         return redis.pipeline();
-    }
+    },
+    // Multi operations
+    multi() {
+        return redis.multi();
+    },
+    // INFO command for Redis server information
+    info(section) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return ((yield safeRedisOperation(() => (section ? redis.info(section) : redis.info()), '', `info:${section || 'all'}`)) || '');
+        });
+    },
+    // MEMORY command for memory analysis (using raw command for flexibility)
+    memory(subcommand, ...args) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield safeRedisOperation(() => redis.call('MEMORY', subcommand, ...args.map(String)), null, `memory:${subcommand}:${args.join(':')}`);
+        });
+    },
+    // TTL command to check key expiration
+    getTtl(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return ((yield safeRedisOperation(() => redis.ttl(key), -2, `ttl:${key}`)) || -2);
+        });
+    },
+    // CONFIG SET command for Redis configuration
+    configSet(parameter, value) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const result = yield safeRedisOperation(() => redis.config('SET', parameter, value), 'OK', `config:set:${parameter}`);
+            return result || 'OK';
+        });
+    },
+    // CONFIG GET command for Redis configuration
+    configGet(parameter) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const result = yield safeRedisOperation(() => redis.config('GET', parameter), [], `config:get:${parameter}`);
+            return result || [];
+        });
+    },
+    // OBJECT IDLETIME command for key age analysis
+    objectIdletime(key) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const result = yield safeRedisOperation(() => redis.object('IDLETIME', key), null, `object:idletime:${key}`);
+            return result;
+        });
+    },
 };
 exports.redisOperations = redisOperations;
 // Export the main Redis client and operations

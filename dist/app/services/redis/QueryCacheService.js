@@ -13,9 +13,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QueryCacheService = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const BaseRedisService_1 = require("./BaseRedisService");
 const interfaces_1 = require("./interfaces");
-const crypto_1 = __importDefault(require("crypto"));
 class QueryCacheService extends BaseRedisService_1.BaseRedisService {
     constructor(client, monitoring) {
         super(client, monitoring);
@@ -26,7 +26,10 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
     generateCacheKey(query, params = {}) {
         const normalizedQuery = query.replace(/\s+/g, ' ').trim();
         const paramsString = JSON.stringify(params, Object.keys(params).sort());
-        const hash = crypto_1.default.createHash('sha256').update(normalizedQuery + paramsString).digest('hex');
+        const hash = crypto_1.default
+            .createHash('sha256')
+            .update(normalizedQuery + paramsString)
+            .digest('hex');
         return interfaces_1.RedisKeys.QUERY_RESULT(hash);
     }
     // Cache query result
@@ -51,7 +54,8 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
                 const serializedData = JSON.stringify(cachedQuery);
                 // Compress if data is large
                 let dataToStore = serializedData;
-                if (options.compression && serializedData.length > this.compressionThreshold) {
+                if (options.compression &&
+                    serializedData.length > this.compressionThreshold) {
                     // In a real implementation, you'd use a compression library like zlib
                     // For now, we'll just mark it as compressed
                     cachedQuery.result = { __compressed: true, data: cachedQuery.result };
@@ -61,7 +65,7 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
                 // Store the cached query
                 pipeline.setex(cacheKey, ttl, dataToStore);
                 // Add to tag sets for invalidation
-                tags.forEach(tag => {
+                tags.forEach((tag) => {
                     const tagKey = `cache:tag:${tag}`;
                     pipeline.sadd(tagKey, cacheKey);
                     pipeline.expire(tagKey, ttl + 300); // Tag expires 5 minutes after content
@@ -144,7 +148,7 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
                     if (cacheKeys.length > 0) {
                         const pipeline = this.client.pipeline();
                         // Delete all cached queries with this tag
-                        cacheKeys.forEach(key => pipeline.del(key));
+                        cacheKeys.forEach((key) => pipeline.del(key));
                         // Delete the tag set
                         pipeline.del(tagKey);
                         yield pipeline.exec();
@@ -158,19 +162,28 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
             }));
         });
     }
-    // Invalidate cache by pattern
+    // Invalidate cache by pattern using SCAN instead of KEYS
     invalidateByPattern(pattern) {
         return __awaiter(this, void 0, void 0, function* () {
             return this.executeWithMonitoring('invalidate_by_pattern', () => __awaiter(this, void 0, void 0, function* () {
-                const keys = yield this.client.keys(pattern);
+                const keys = yield this.scanKeysWithPattern(pattern, 1000);
                 if (keys.length === 0) {
                     return 0;
                 }
-                yield this.client.del(...keys);
+                // Delete in batches to avoid overwhelming Redis
+                const batchSize = 50;
+                let totalDeleted = 0;
+                for (let i = 0; i < keys.length; i += batchSize) {
+                    const batch = keys.slice(i, i + batchSize);
+                    if (batch.length > 0) {
+                        const deleted = yield this.client.del(...batch);
+                        totalDeleted += deleted;
+                    }
+                }
                 // Track invalidation stats
-                yield this.client.incrby('cache:stats:queries:invalidated', keys.length);
-                console.log(`🗑️ Invalidated ${keys.length} queries matching pattern: ${pattern}`);
-                return keys.length;
+                yield this.client.incrby('cache:stats:queries:invalidated', totalDeleted);
+                console.log(`🗑️ Invalidated ${totalDeleted} queries matching pattern: ${pattern}`);
+                return totalDeleted;
             }));
         });
     }
@@ -210,7 +223,8 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
                 const pattern = 'cache:query:*';
                 const keys = yield this.client.keys(pattern);
                 const queries = [];
-                for (const key of keys.slice(0, limit * 2)) { // Get more than needed to filter
+                for (const key of keys.slice(0, limit * 2)) {
+                    // Get more than needed to filter
                     try {
                         const data = yield this.client.get(key);
                         if (data) {
@@ -229,9 +243,7 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
                     }
                 }
                 // Sort by hit count and return top queries
-                return queries
-                    .sort((a, b) => b.hitCount - a.hitCount)
-                    .slice(0, limit);
+                return queries.sort((a, b) => b.hitCount - a.hitCount).slice(0, limit);
             }));
         });
     }
@@ -326,9 +338,7 @@ class QueryCacheService extends BaseRedisService_1.BaseRedisService {
                     }
                 }
                 // Extrapolate total memory usage
-                const estimatedTotalMemory = sampleSize > 0
-                    ? (totalMemory / sampleSize) * keys.length
-                    : 0;
+                const estimatedTotalMemory = sampleSize > 0 ? (totalMemory / sampleSize) * keys.length : 0;
                 const averageKeySize = keys.length > 0 ? estimatedTotalMemory / keys.length : 0;
                 return {
                     totalKeys: keys.length,

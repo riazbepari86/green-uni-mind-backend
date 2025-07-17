@@ -1,13 +1,13 @@
-import Stripe from 'stripe';
-import mongoose, { Types } from 'mongoose';
-import config from '../../config';
-import { Teacher } from '../Teacher/teacher.model';
-import { Student } from '../Student/student.model';
-import { Course } from '../Course/course.model';
-import { Transaction } from './transaction.model';
-import { PayoutSummary } from './payoutSummary.model';
-import AppError from '../../errors/AppError';
 import httpStatus from 'http-status';
+import mongoose, { Types } from 'mongoose';
+import Stripe from 'stripe';
+import config from '../../config';
+import AppError from '../../errors/AppError';
+import { Course } from '../Course/course.model';
+import { Student } from '../Student/student.model';
+import { Teacher } from '../Teacher/teacher.model';
+import { PayoutSummary } from './payoutSummary.model';
+import { Transaction } from './transaction.model';
 
 // Initialize Stripe with the secret key
 const stripe = new Stripe(config.stripe_secret_key, {
@@ -77,7 +77,7 @@ const createStripeAccountForTeacher = async (teacherId: string) => {
     console.error('Error creating Stripe account:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to create Stripe account'
+      'Failed to create Stripe account',
     );
   }
 };
@@ -97,10 +97,13 @@ const createStripeOnboardingLink = async (teacherId: string) => {
     if (!teacher.stripeAccountId) {
       // Create a new account if one doesn't exist
       const accountResult = await createStripeAccountForTeacher(teacherId);
-      if (accountResult.status !== 'pending' && accountResult.status !== 'complete') {
+      if (
+        accountResult.status !== 'pending' &&
+        accountResult.status !== 'complete'
+      ) {
         throw new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
-          'Failed to create Stripe account'
+          'Failed to create Stripe account',
         );
       }
     }
@@ -122,7 +125,7 @@ const createStripeOnboardingLink = async (teacherId: string) => {
     console.error('Error creating onboarding link:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to create onboarding link'
+      'Failed to create onboarding link',
     );
   }
 };
@@ -142,7 +145,7 @@ const checkStripeAccountStatus = async (teacherId: string) => {
       teacherId,
       stripeAccountId: teacher.stripeAccountId,
       stripeVerified: teacher.stripeVerified,
-      stripeOnboardingComplete: teacher.stripeOnboardingComplete
+      stripeOnboardingComplete: teacher.stripeOnboardingComplete,
     });
 
     // Check if teacher has a Stripe account
@@ -157,38 +160,45 @@ const checkStripeAccountStatus = async (teacherId: string) => {
     const account = await stripe.accounts.retrieve(teacher.stripeAccountId);
 
     // Check if the account is fully set up
-    const isComplete = account.details_submitted && account.charges_enabled && account.payouts_enabled;
+    const isComplete =
+      account.details_submitted &&
+      account.charges_enabled &&
+      account.payouts_enabled;
 
     // Get any pending requirements
     const requirements = account.requirements?.currently_due || [];
 
     // If the account is complete in Stripe but not marked as verified in our database, update it
-    if (isComplete && (!teacher.stripeVerified || !teacher.stripeOnboardingComplete)) {
-
+    if (
+      isComplete &&
+      (!teacher.stripeVerified || !teacher.stripeOnboardingComplete)
+    ) {
       await Teacher.findByIdAndUpdate(teacherId, {
         stripeVerified: true,
         stripeOnboardingComplete: true,
-        stripeRequirements: []
+        stripeRequirements: [],
       });
     }
 
     return {
       status: isComplete ? 'complete' : 'incomplete',
-      message: isComplete ? 'Stripe account is fully set up' : 'Stripe account setup is incomplete',
+      message: isComplete
+        ? 'Stripe account is fully set up'
+        : 'Stripe account setup is incomplete',
       detailsSubmitted: account.details_submitted,
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,
       requirements,
       teacherStatus: {
         stripeVerified: teacher.stripeVerified,
-        stripeOnboardingComplete: teacher.stripeOnboardingComplete
-      }
+        stripeOnboardingComplete: teacher.stripeOnboardingComplete,
+      },
     };
   } catch (error) {
     console.error('Error checking Stripe account status:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to check Stripe account status'
+      'Failed to check Stripe account status',
     );
   }
 };
@@ -199,7 +209,7 @@ const checkStripeAccountStatus = async (teacherId: string) => {
 const createCheckoutSession = async (
   studentId: string,
   courseId: string,
-  amount?: number
+  amount?: number,
 ) => {
   try {
     // Find the student
@@ -223,12 +233,12 @@ const createCheckoutSession = async (
     // Check if student is already enrolled
     if (
       student.enrolledCourses.some(
-        (course) => course.courseId.toString() === courseId
+        (course) => course.courseId.toString() === courseId,
       )
     ) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Already enrolled in this course'
+        'Already enrolled in this course',
       );
     }
 
@@ -299,12 +309,13 @@ const createCheckoutSession = async (
         teacherId: teacher._id.toString(),
         teacherShare: (teacherShareInCents / 100).toString(),
         platformFee: (platformFeeInCents / 100).toString(),
-      }
+      },
     };
 
     // Only add transfer data if the account is valid
     if (isValidStripeAccount) {
-      sessionParams.payment_intent_data.application_fee_amount = platformFeeInCents;
+      sessionParams.payment_intent_data.application_fee_amount =
+        platformFeeInCents;
       sessionParams.payment_intent_data.transfer_data = {
         destination: teacher.stripeAccountId!,
       };
@@ -320,7 +331,7 @@ const createCheckoutSession = async (
     console.error('Error creating checkout session:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to create checkout session'
+      'Failed to create checkout session',
     );
   }
 };
@@ -380,7 +391,9 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
 
     if (session.invoice) {
       try {
-        const invoice = await stripe.invoices.retrieve(session.invoice as string);
+        const invoice = await stripe.invoices.retrieve(
+          session.invoice as string,
+        );
         invoiceUrl = invoice.hosted_invoice_url || '';
         invoicePdfUrl = invoice.invoice_pdf || '';
       } catch (error) {
@@ -391,15 +404,17 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
     // 2. Create transaction record
     const amount = (session.amount_total || 0) / 100; // Convert from cents to dollars
     // Convert from cents to dollars and ensure we're using the teacher's 70% share
-    const teacherShareAmount = (parseFloat(teacherShare || '0') / 100) || (amount * 0.7);
-    const platformShareAmount = (parseFloat(platformFee || '0') / 100) || (amount * 0.3);
+    const teacherShareAmount =
+      parseFloat(teacherShare || '0') / 100 || amount * 0.7;
+    const platformShareAmount =
+      parseFloat(platformFee || '0') / 100 || amount * 0.3;
 
     console.log('Calculated amounts:', {
       amount,
       teacherShareAmount,
       platformShareAmount,
       originalTeacherShare: teacherShare,
-      originalPlatformFee: platformFee
+      originalPlatformFee: platformFee,
     });
 
     console.log('Creating transaction record with data:', {
@@ -409,7 +424,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
       amount,
       teacherShareAmount,
       platformShareAmount,
-      paymentIntentId
+      paymentIntentId,
     });
 
     const transactionData = {
@@ -426,7 +441,9 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
     };
 
     // Create the transaction
-    const transaction = await Transaction.create([transactionData], { session: mongoSession });
+    const transaction = await Transaction.create([transactionData], {
+      session: mongoSession,
+    });
     // Get the transaction ID as a Types.ObjectId to avoid type issues
     const transactionId = transaction[0]._id as Types.ObjectId;
 
@@ -445,7 +462,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
           },
         },
       },
-      { session: mongoSession }
+      { session: mongoSession },
     );
 
     // 4. Update course's enrolled students and total enrollment
@@ -456,7 +473,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
         $addToSet: { enrolledStudents: new Types.ObjectId(studentId) },
         $inc: { totalEnrollment: 1 },
       },
-      { session: mongoSession }
+      { session: mongoSession },
     );
 
     // 5. Update teacher's earnings
@@ -473,7 +490,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
           'earnings.weekly': teacherShareAmount,
         },
       },
-      { session: mongoSession }
+      { session: mongoSession },
     );
 
     // 6. Update or create payout summary
@@ -497,13 +514,14 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
 
       // Check if course already exists in coursesSold
       const existingCourseIndex = payoutSummary.coursesSold.findIndex(
-        (c) => c.courseId.toString() === courseId
+        (c) => c.courseId.toString() === courseId,
       );
 
       if (existingCourseIndex >= 0) {
         // Update existing course
         payoutSummary.coursesSold[existingCourseIndex].count += 1;
-        payoutSummary.coursesSold[existingCourseIndex].earnings += teacherShareAmount;
+        payoutSummary.coursesSold[existingCourseIndex].earnings +=
+          teacherShareAmount;
       } else {
         // Add new course
         payoutSummary.coursesSold.push({
@@ -517,21 +535,23 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
     } else {
       // Create new summary
       await PayoutSummary.create(
-        [{
-          teacherId: new Types.ObjectId(teacherId),
-          totalEarned: teacherShareAmount,
-          month,
-          year,
-          transactions: [transactionId],
-          coursesSold: [
-            {
-              courseId: new Types.ObjectId(courseId),
-              count: 1,
-              earnings: teacherShareAmount,
-            },
-          ],
-        }],
-        { session: mongoSession }
+        [
+          {
+            teacherId: new Types.ObjectId(teacherId),
+            totalEarned: teacherShareAmount,
+            month,
+            year,
+            transactions: [transactionId],
+            coursesSold: [
+              {
+                courseId: new Types.ObjectId(courseId),
+                count: 1,
+                earnings: teacherShareAmount,
+              },
+            ],
+          },
+        ],
+        { session: mongoSession },
       );
     }
 
@@ -539,11 +559,15 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
     const teacher = await Teacher.findById(teacherId);
     if (teacher?.stripeAccountId) {
       try {
-        console.log('Creating transfer to teacher Stripe account:', teacher.stripeAccountId);
+        console.log(
+          'Creating transfer to teacher Stripe account:',
+          teacher.stripeAccountId,
+        );
         const transfer = await stripe.transfers.create({
           // Stripe requires amount in cents, so we need to convert back to cents
           // If teacherShare is provided, use it, otherwise calculate 70% of the amount
-          amount: parseInt(teacherShare || '0') || Math.round(amount * 100 * 0.7), // Convert to cents and take 70%
+          amount:
+            parseInt(teacherShare || '0') || Math.round(amount * 100 * 0.7), // Convert to cents and take 70%
           currency: 'usd',
           destination: teacher.stripeAccountId,
           transfer_group: `course_${courseId}`,
@@ -565,7 +589,7 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
             stripeTransferId: transfer.id,
             stripeTransferStatus: 'completed',
           },
-          { session: mongoSession }
+          { session: mongoSession },
         );
       } catch (error) {
         console.error('Error creating transfer:', error);
@@ -575,11 +599,13 @@ const handleCheckoutSessionCompleted = async (event: Stripe.Event) => {
           {
             stripeTransferStatus: 'failed',
           },
-          { session: mongoSession }
+          { session: mongoSession },
         );
       }
     } else {
-      console.log('Teacher does not have a valid Stripe account, skipping transfer');
+      console.log(
+        'Teacher does not have a valid Stripe account, skipping transfer',
+      );
     }
 
     // Commit the transaction
@@ -667,34 +693,47 @@ const getTeacherPayoutInfo = async (teacherId: string, period?: string) => {
       console.log('No payout summary found, getting transaction data directly');
 
       // Build query for transactions in the specified period
-      const startDate = new Date(yearToQuery, parseInt(monthToQuery.split('-')[1]) - 1, 1);
-      const endDate = new Date(yearToQuery, parseInt(monthToQuery.split('-')[1]), 0);
+      const startDate = new Date(
+        yearToQuery,
+        parseInt(monthToQuery.split('-')[1]) - 1,
+        1,
+      );
+      const endDate = new Date(
+        yearToQuery,
+        parseInt(monthToQuery.split('-')[1]),
+        0,
+      );
 
       const transactions = await Transaction.find({
         teacherId: new Types.ObjectId(teacherId),
         status: 'success',
-        createdAt: { $gte: startDate, $lte: endDate }
+        createdAt: { $gte: startDate, $lte: endDate },
       }).populate({
         path: 'courseId',
-        select: 'title courseThumbnail'
+        select: 'title courseThumbnail',
       });
 
-      console.log(`Found ${transactions.length} transactions for period ${monthToQuery}`);
+      console.log(
+        `Found ${transactions.length} transactions for period ${monthToQuery}`,
+      );
 
       if (transactions.length > 0) {
         // Calculate total earnings
-        const totalEarnings = transactions.reduce((sum, t) => sum + t.teacherEarning, 0);
+        const totalEarnings = transactions.reduce(
+          (sum, t) => sum + t.teacherEarning,
+          0,
+        );
 
         // Group transactions by course
         const courseMap = new Map();
 
-        transactions.forEach(transaction => {
+        transactions.forEach((transaction) => {
           const courseId = transaction.courseId._id.toString();
           if (!courseMap.has(courseId)) {
             courseMap.set(courseId, {
               courseId: transaction.courseId,
               count: 1,
-              earnings: transaction.teacherEarning
+              earnings: transaction.teacherEarning,
             });
           } else {
             const course = courseMap.get(courseId);
@@ -708,7 +747,7 @@ const getTeacherPayoutInfo = async (teacherId: string, period?: string) => {
           month: monthToQuery,
           year: yearToQuery,
           earnings: totalEarnings,
-          coursesSold: Array.from(courseMap.values())
+          coursesSold: Array.from(courseMap.values()),
         };
       }
     }
@@ -723,11 +762,16 @@ const getTeacherPayoutInfo = async (teacherId: string, period?: string) => {
     let monthlyBreakdown = allPayoutSummaries.map((summary) => ({
       month: summary.month,
       earnings: summary.totalEarned,
-      coursesSold: summary.coursesSold.reduce((total, course) => total + course.count, 0),
+      coursesSold: summary.coursesSold.reduce(
+        (total, course) => total + course.count,
+        0,
+      ),
     }));
 
     if (monthlyBreakdown.length === 0) {
-      console.log('No monthly breakdown found, getting transaction data directly');
+      console.log(
+        'No monthly breakdown found, getting transaction data directly',
+      );
 
       // Get all transactions for the year
       const yearStart = new Date(yearToQuery, 0, 1);
@@ -736,16 +780,18 @@ const getTeacherPayoutInfo = async (teacherId: string, period?: string) => {
       const yearTransactions = await Transaction.find({
         teacherId: new Types.ObjectId(teacherId),
         status: 'success',
-        createdAt: { $gte: yearStart, $lte: yearEnd }
+        createdAt: { $gte: yearStart, $lte: yearEnd },
       });
 
-      console.log(`Found ${yearTransactions.length} transactions for year ${yearToQuery}`);
+      console.log(
+        `Found ${yearTransactions.length} transactions for year ${yearToQuery}`,
+      );
 
       if (yearTransactions.length > 0) {
         // Group transactions by month
         const monthMap = new Map();
 
-        yearTransactions.forEach(transaction => {
+        yearTransactions.forEach((transaction) => {
           // Make sure createdAt is not undefined
           if (transaction.createdAt) {
             const date = new Date(transaction.createdAt);
@@ -755,7 +801,7 @@ const getTeacherPayoutInfo = async (teacherId: string, period?: string) => {
               monthMap.set(month, {
                 month,
                 earnings: transaction.teacherEarning,
-                coursesSold: 1
+                coursesSold: 1,
               });
             } else {
               const monthData = monthMap.get(month);
@@ -783,7 +829,7 @@ const getTeacherPayoutInfo = async (teacherId: string, period?: string) => {
     console.error('Error getting teacher payout info:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to get teacher payout information'
+      'Failed to get teacher payout information',
     );
   }
 };
@@ -791,7 +837,10 @@ const getTeacherPayoutInfo = async (teacherId: string, period?: string) => {
 /**
  * Get teacher's transaction summary
  */
-const getTeacherTransactionSummary = async (teacherId: string, period?: string) => {
+const getTeacherTransactionSummary = async (
+  teacherId: string,
+  period?: string,
+) => {
   try {
     // Find the teacher
     const teacher = await Teacher.findById(teacherId);
@@ -802,7 +851,7 @@ const getTeacherTransactionSummary = async (teacherId: string, period?: string) 
     // Build query based on period
     const query: any = {
       teacherId: new Types.ObjectId(teacherId),
-      status: 'success' // Only get successful transactions
+      status: 'success', // Only get successful transactions
     };
 
     if (period) {
@@ -838,7 +887,7 @@ const getTeacherTransactionSummary = async (teacherId: string, period?: string) 
     console.error('Error getting teacher transaction summary:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to get teacher transaction summary'
+      'Failed to get teacher transaction summary',
     );
   }
 };
@@ -890,55 +939,134 @@ const getTransactionBySessionId = async (sessionId: string) => {
     if (error instanceof Stripe.errors.StripeError) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `Stripe error: ${error.message}`
+        `Stripe error: ${error.message}`,
       );
     }
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to get transaction details'
+      'Failed to get transaction details',
     );
   }
 };
 
 /**
- * Get teacher's upcoming payout information from Stripe
+ * Get teacher's upcoming payout information from Stripe with Redis caching
  */
 const getTeacherUpcomingPayout = async (teacherId: string) => {
   try {
+    // Check Redis cache first (5-minute cache for payout data)
+    const cacheKey = `payout:upcoming:${teacherId}`;
+    const { redisOperations } = await import('../../config/redis');
+
+    try {
+      const cachedData = await redisOperations.get(cacheKey);
+      if (cachedData) {
+        console.log(`🎯 Cache hit for upcoming payout: ${teacherId}`);
+        return JSON.parse(cachedData);
+      }
+    } catch (cacheError) {
+      console.warn('Redis cache read failed for upcoming payout:', cacheError);
+    }
+
     // Find the teacher
     const teacher = await Teacher.findById(teacherId);
     if (!teacher) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Teacher not found');
+      const notFoundResult = {
+        status: 'teacher_not_found',
+        message: 'Teacher not found',
+        upcomingPayout: null,
+        balance: null,
+      };
+
+      // Cache the not found status for 5 minutes
+      try {
+        await redisOperations.setex(
+          cacheKey,
+          300,
+          JSON.stringify(notFoundResult),
+        );
+      } catch (cacheError) {
+        console.warn('Redis cache write failed:', cacheError);
+      }
+
+      return notFoundResult;
     }
 
     // Check if teacher has a Stripe account
     if (!teacher.stripeAccountId) {
-      return {
+      const notConnectedResult = {
         status: 'not_connected',
         message: 'Teacher does not have a connected Stripe account',
         upcomingPayout: null,
         balance: null,
       };
+
+      // Cache the not connected status for 1 hour
+      try {
+        await redisOperations.setex(
+          cacheKey,
+          3600,
+          JSON.stringify(notConnectedResult),
+        );
+      } catch (cacheError) {
+        console.warn('Redis cache write failed:', cacheError);
+      }
+
+      return notConnectedResult;
     }
 
-    // Get the Stripe account balance
-    const balance = await stripe.balance.retrieve({
-      stripeAccount: teacher.stripeAccountId,
-    });
+    // Get the Stripe account balance with error handling
+    let balance,
+      account,
+      availableBalance = 0,
+      pendingBalance = 0;
 
-    // Get available and pending balances in dollars (convert from cents)
-    const availableBalance = balance.available.reduce(
-      (sum, balance) => sum + balance.amount / 100,
-      0
-    );
+    try {
+      balance = await stripe.balance.retrieve({
+        stripeAccount: teacher.stripeAccountId,
+      });
 
-    const pendingBalance = balance.pending.reduce(
-      (sum, balance) => sum + balance.amount / 100,
-      0
-    );
+      // Get available and pending balances in dollars (convert from cents)
+      availableBalance = balance.available.reduce(
+        (sum, balance) => sum + balance.amount / 100,
+        0,
+      );
 
-    // Get payout schedule
-    const account = await stripe.accounts.retrieve(teacher.stripeAccountId);
+      pendingBalance = balance.pending.reduce(
+        (sum, balance) => sum + balance.amount / 100,
+        0,
+      );
+
+      // Get payout schedule
+      account = await stripe.accounts.retrieve(teacher.stripeAccountId);
+    } catch (stripeError: any) {
+      console.error('Stripe API error for teacher:', teacherId, stripeError);
+
+      const stripeErrorResult = {
+        status: 'stripe_error',
+        message: 'Unable to retrieve Stripe account information',
+        upcomingPayout: null,
+        balance: {
+          available: 0,
+          pending: 0,
+          currency: 'usd',
+        },
+        error: stripeError.message,
+      };
+
+      // Cache the error result for 1 minute to prevent repeated API calls
+      try {
+        await redisOperations.setex(
+          cacheKey,
+          60,
+          JSON.stringify(stripeErrorResult),
+        );
+      } catch (cacheError) {
+        console.warn('Redis cache write failed:', cacheError);
+      }
+
+      return stripeErrorResult;
+    }
 
     // Get upcoming payouts if any
     let upcomingPayout = null;
@@ -947,7 +1075,7 @@ const getTeacherUpcomingPayout = async (teacherId: string) => {
       // List payouts with a limit of 1 to get the most recent
       const payouts = await stripe.payouts.list(
         { limit: 10, status: 'pending' },
-        { stripeAccount: teacher.stripeAccountId }
+        { stripeAccount: teacher.stripeAccountId },
       );
 
       if (payouts.data.length > 0) {
@@ -956,7 +1084,9 @@ const getTeacherUpcomingPayout = async (teacherId: string) => {
           id: payouts.data[0].id,
           amount: payouts.data[0].amount / 100, // Convert from cents to dollars
           currency: payouts.data[0].currency,
-          arrivalDate: new Date(payouts.data[0].arrival_date * 1000).toISOString(),
+          arrivalDate: new Date(
+            payouts.data[0].arrival_date * 1000,
+          ).toISOString(),
           status: payouts.data[0].status,
         };
       }
@@ -966,25 +1096,14 @@ const getTeacherUpcomingPayout = async (teacherId: string) => {
     }
 
     // Get payout schedule information
-    const payoutSchedule = account.settings?.payouts?.schedule || {};
+    const payoutSchedule = account?.settings?.payouts?.schedule || {};
 
-    // Update teacher's payout information
-    await Teacher.findByIdAndUpdate(teacherId, {
-      $set: {
-        'payoutInfo.availableBalance': availableBalance,
-        'payoutInfo.pendingBalance': pendingBalance,
-        'payoutInfo.lastSyncedAt': new Date(),
-        'payoutInfo.nextPayoutDate': upcomingPayout ? new Date(upcomingPayout.arrivalDate) : undefined,
-        'payoutInfo.nextPayoutAmount': upcomingPayout ? upcomingPayout.amount : 0,
-      },
-    });
-
-    return {
+    const result = {
       status: 'success',
       balance: {
         available: availableBalance,
         pending: pendingBalance,
-        currency: balance.available[0]?.currency || 'usd',
+        currency: balance?.available[0]?.currency || 'usd',
       },
       upcomingPayout,
       payoutSchedule: {
@@ -994,11 +1113,42 @@ const getTeacherUpcomingPayout = async (teacherId: string) => {
         delayDays: (payoutSchedule as any).delay_days,
       },
     };
+
+    // Cache the result for 5 minutes (300 seconds)
+    try {
+      await redisOperations.setex(cacheKey, 300, JSON.stringify(result));
+      console.log(`💾 Cached upcoming payout data for teacher: ${teacherId}`);
+    } catch (cacheError) {
+      console.warn('Redis cache write failed for upcoming payout:', cacheError);
+    }
+
+    // Update teacher's payout information asynchronously (don't block response)
+    setImmediate(async () => {
+      try {
+        await Teacher.findByIdAndUpdate(teacherId, {
+          $set: {
+            'payoutInfo.availableBalance': availableBalance,
+            'payoutInfo.pendingBalance': pendingBalance,
+            'payoutInfo.lastSyncedAt': new Date(),
+            'payoutInfo.nextPayoutDate': upcomingPayout
+              ? new Date(upcomingPayout.arrivalDate)
+              : undefined,
+            'payoutInfo.nextPayoutAmount': upcomingPayout
+              ? upcomingPayout.amount
+              : 0,
+          },
+        });
+      } catch (updateError) {
+        console.error('Failed to update teacher payout info:', updateError);
+      }
+    });
+
+    return result;
   } catch (error) {
     console.error('Error getting teacher upcoming payout info:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to get teacher upcoming payout information'
+      'Failed to get teacher upcoming payout information',
     );
   }
 };
@@ -1010,7 +1160,7 @@ const getTransactionAnalytics = async (
   teacherId: string,
   startDate?: string,
   endDate?: string,
-  groupBy: string = 'day'
+  groupBy: string = 'day',
 ) => {
   try {
     // Find the teacher
@@ -1020,7 +1170,9 @@ const getTransactionAnalytics = async (
     }
 
     // Parse dates
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Default to last 30 days
+    const start = startDate
+      ? new Date(startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Default to last 30 days
     const end = endDate ? new Date(endDate) : new Date();
 
     // Set end date to end of day
@@ -1030,54 +1182,74 @@ const getTransactionAnalytics = async (
     const query = {
       teacherId: new Types.ObjectId(teacherId),
       status: 'success',
-      createdAt: { $gte: start, $lte: end }
+      createdAt: { $gte: start, $lte: end },
     };
 
     // Get all transactions in the date range
     const transactions = await Transaction.find(query)
       .populate({
         path: 'courseId',
-        select: 'title courseThumbnail'
+        select: 'title courseThumbnail',
       })
       .sort({ createdAt: 1 });
 
     // Calculate summary metrics
     const totalSales = transactions.length;
-    const totalRevenue = transactions.reduce((sum, t) => sum + t.totalAmount, 0);
-    const totalEarnings = transactions.reduce((sum, t) => sum + t.teacherEarning, 0);
+    const totalRevenue = transactions.reduce(
+      (sum, t) => sum + t.totalAmount,
+      0,
+    );
+    const totalEarnings = transactions.reduce(
+      (sum, t) => sum + t.teacherEarning,
+      0,
+    );
 
     // Calculate growth metrics by comparing to previous period
     const previousPeriodStart = new Date(start);
-    previousPeriodStart.setDate(previousPeriodStart.getDate() - (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+    previousPeriodStart.setDate(
+      previousPeriodStart.getDate() -
+        (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000),
+    );
 
     const previousPeriodQuery = {
       teacherId: new Types.ObjectId(teacherId),
       status: 'success',
-      createdAt: { $gte: previousPeriodStart, $lt: start }
+      createdAt: { $gte: previousPeriodStart, $lt: start },
     };
 
     const previousTransactions = await Transaction.find(previousPeriodQuery);
     const previousSales = previousTransactions.length;
-    const previousRevenue = previousTransactions.reduce((sum, t) => sum + t.totalAmount, 0);
-    const previousEarnings = previousTransactions.reduce((sum, t) => sum + t.teacherEarning, 0);
+    const previousRevenue = previousTransactions.reduce(
+      (sum, t) => sum + t.totalAmount,
+      0,
+    );
+    const previousEarnings = previousTransactions.reduce(
+      (sum, t) => sum + t.teacherEarning,
+      0,
+    );
 
     // Calculate growth percentages
-    const salesGrowth = previousSales > 0
-      ? Math.round(((totalSales - previousSales) / previousSales) * 100)
-      : null;
+    const salesGrowth =
+      previousSales > 0
+        ? Math.round(((totalSales - previousSales) / previousSales) * 100)
+        : null;
 
-    const revenueGrowth = previousRevenue > 0
-      ? Math.round(((totalRevenue - previousRevenue) / previousRevenue) * 100)
-      : null;
+    const revenueGrowth =
+      previousRevenue > 0
+        ? Math.round(((totalRevenue - previousRevenue) / previousRevenue) * 100)
+        : null;
 
-    const earningsGrowth = previousEarnings > 0
-      ? Math.round(((totalEarnings - previousEarnings) / previousEarnings) * 100)
-      : null;
+    const earningsGrowth =
+      previousEarnings > 0
+        ? Math.round(
+            ((totalEarnings - previousEarnings) / previousEarnings) * 100,
+          )
+        : null;
 
     // Group transactions by course
     const courseMap = new Map();
 
-    transactions.forEach(transaction => {
+    transactions.forEach((transaction) => {
       // Check if courseId is populated and has the expected properties
       if (transaction.courseId && typeof transaction.courseId === 'object') {
         const courseIdObj = transaction.courseId as any;
@@ -1092,7 +1264,7 @@ const getTransactionAnalytics = async (
             courseThumbnail,
             count: 1,
             amount: transaction.totalAmount,
-            teacherEarnings: transaction.teacherEarning
+            teacherEarnings: transaction.teacherEarning,
           });
         } else {
           const course = courseMap.get(courseId);
@@ -1104,20 +1276,25 @@ const getTransactionAnalytics = async (
     });
 
     // Convert course map to array and sort by earnings
-    const courseBreakdown = Array.from(courseMap.values())
-      .sort((a, b) => b.teacherEarnings - a.teacherEarnings);
+    const courseBreakdown = Array.from(courseMap.values()).sort(
+      (a, b) => b.teacherEarnings - a.teacherEarnings,
+    );
 
     // Group transactions by time period (day, week, month)
     const timeSeriesMap = new Map();
 
-    transactions.forEach(transaction => {
+    transactions.forEach((transaction) => {
       const date = new Date(transaction.createdAt || new Date());
       let period;
 
       switch (groupBy) {
         case 'week':
           // Get the week number and year
-          const weekNumber = Math.ceil((date.getDate() + new Date(date.getFullYear(), date.getMonth(), 1).getDay()) / 7);
+          const weekNumber = Math.ceil(
+            (date.getDate() +
+              new Date(date.getFullYear(), date.getMonth(), 1).getDay()) /
+              7,
+          );
           period = `${date.getFullYear()}-W${weekNumber}`;
           break;
         case 'month':
@@ -1135,7 +1312,7 @@ const getTransactionAnalytics = async (
           period,
           count: 1,
           amount: transaction.totalAmount,
-          teacherEarnings: transaction.teacherEarning
+          teacherEarnings: transaction.teacherEarning,
         });
       } else {
         const timePeriod = timeSeriesMap.get(period);
@@ -1146,8 +1323,9 @@ const getTransactionAnalytics = async (
     });
 
     // Convert time series map to array and sort by period
-    const timeSeriesData = Array.from(timeSeriesMap.values())
-      .sort((a, b) => a.period.localeCompare(b.period));
+    const timeSeriesData = Array.from(timeSeriesMap.values()).sort((a, b) =>
+      a.period.localeCompare(b.period),
+    );
 
     return {
       summary: {
@@ -1159,17 +1337,17 @@ const getTransactionAnalytics = async (
         earningsGrowth,
         dateRange: {
           start: start.toISOString(),
-          end: end.toISOString()
-        }
+          end: end.toISOString(),
+        },
       },
       courseBreakdown,
-      timeSeriesData
+      timeSeriesData,
     };
   } catch (error) {
     console.error('Error getting transaction analytics:', error);
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to get transaction analytics'
+      'Failed to get transaction analytics',
     );
   }
 };

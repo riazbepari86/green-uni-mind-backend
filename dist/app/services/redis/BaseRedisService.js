@@ -106,7 +106,7 @@ class BaseRedisService {
             }
             return this.executeWithMonitoring('mget', () => __awaiter(this, void 0, void 0, function* () {
                 const values = yield this.client.mget(...keys);
-                return values.map(value => this.deserializeValue(value));
+                return values.map((value) => this.deserializeValue(value));
             }));
         });
     }
@@ -134,12 +134,47 @@ class BaseRedisService {
     deletePattern(pattern) {
         return __awaiter(this, void 0, void 0, function* () {
             return this.executeWithMonitoring('delete_pattern', () => __awaiter(this, void 0, void 0, function* () {
-                const keys = yield this.client.keys(pattern);
+                const keys = yield this.scanKeysWithPattern(pattern, 1000);
                 if (keys.length === 0) {
                     return 0;
                 }
-                return yield this.client.del(...keys);
+                // Delete in batches to avoid overwhelming Redis
+                const batchSize = 50;
+                let totalDeleted = 0;
+                for (let i = 0; i < keys.length; i += batchSize) {
+                    const batch = keys.slice(i, i + batchSize);
+                    if (batch.length > 0) {
+                        const deleted = yield this.client.del(...batch);
+                        totalDeleted += deleted;
+                    }
+                }
+                return totalDeleted;
             }));
+        });
+    }
+    /**
+     * Scan keys with pattern using SCAN instead of KEYS for better performance
+     */
+    scanKeysWithPattern(pattern_1) {
+        return __awaiter(this, arguments, void 0, function* (pattern, limit = 1000) {
+            const keys = [];
+            let cursor = '0';
+            do {
+                try {
+                    const result = yield this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 50);
+                    cursor = result[0];
+                    keys.push(...result[1]);
+                    // Stop when we have enough keys or hit the limit
+                    if (keys.length >= limit) {
+                        break;
+                    }
+                }
+                catch (error) {
+                    console.error(`Error scanning pattern ${pattern}:`, error);
+                    break;
+                }
+            } while (cursor !== '0' && keys.length < limit);
+            return keys.slice(0, limit);
         });
     }
     existsMultiple(keys) {
@@ -149,9 +184,9 @@ class BaseRedisService {
             }
             return this.executeWithMonitoring('exists_multiple', () => __awaiter(this, void 0, void 0, function* () {
                 const pipeline = this.client.pipeline();
-                keys.forEach(key => pipeline.exists(key));
+                keys.forEach((key) => pipeline.exists(key));
                 const results = yield pipeline.exec();
-                return (results === null || results === void 0 ? void 0 : results.map(result => result[1] === 1)) || [];
+                return (results === null || results === void 0 ? void 0 : results.map((result) => result[1] === 1)) || [];
             }));
         });
     }

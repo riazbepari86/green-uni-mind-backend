@@ -1,7 +1,7 @@
+import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { UserServices } from './user.service';
-import httpStatus from 'http-status';
 
 const createStudent = catchAsync(async (req, res) => {
   const { password, student: studentData } = req.body;
@@ -104,6 +104,21 @@ const getMe = catchAsync(async (req, res) => {
 
   const result = await UserServices.getMe(email, role);
 
+  console.log('=== GET ME API DEBUG ===');
+  console.log('User email:', email);
+  console.log('User role:', role);
+  console.log('Result structure:', {
+    id: result?._id,
+    email: result?.email,
+    user: result?.user
+      ? {
+          id: result.user._id,
+          // Removed email access since user is ObjectId, not populated user object
+        }
+      : 'No user field',
+  });
+  console.log('========================');
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -131,6 +146,74 @@ const updateUserProfile = catchAsync(async (req, res) => {
   });
 });
 
+const getTeacherProfile = catchAsync(async (req, res) => {
+  const { teacherId } = req.params;
+  const { _id, role } = req.user!;
+
+  // Allow teachers to access any teacher profile, but students and regular users can only access their own data
+  if (role !== 'teacher' && _id !== teacherId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.FORBIDDEN,
+      success: false,
+      message: 'You can only access your own profile data',
+      data: null,
+    });
+  }
+
+  const result = await UserServices.getSingleUserFromDB(teacherId);
+
+  // Ensure the user is actually a teacher
+  if (result && result.role !== 'teacher') {
+    return sendResponse(res, {
+      statusCode: httpStatus.NOT_FOUND,
+      success: false,
+      message: 'Teacher not found',
+      data: null,
+    });
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Teacher profile retrieved successfully!',
+    data: result,
+  });
+});
+
+const getStudentProfile = catchAsync(async (req, res) => {
+  const { studentId } = req.params;
+  const { _id, role } = req.user!;
+
+  // Allow teachers to access any student profile, but students can only access their own data
+  if (role !== 'teacher' && _id !== studentId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.FORBIDDEN,
+      success: false,
+      message: 'You can only access your own profile data',
+      data: null,
+    });
+  }
+
+  const result = await UserServices.getSingleUserFromDB(studentId);
+
+  // Ensure the user is actually a student
+  if (result && result.role !== 'student') {
+    return sendResponse(res, {
+      statusCode: httpStatus.NOT_FOUND,
+      success: false,
+      message: 'Student not found',
+      data: null,
+    });
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Student profile retrieved successfully!',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   // registerUser,
   createStudent,
@@ -140,4 +223,6 @@ export const UserControllers = {
   getMe,
   changeStatus,
   updateUserProfile,
+  getTeacherProfile,
+  getStudentProfile,
 };

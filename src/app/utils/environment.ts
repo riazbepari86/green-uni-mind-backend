@@ -13,7 +13,7 @@ export type Environment = 'development' | 'production' | 'test' | 'staging';
  */
 export const getEnvironment = (): Environment => {
   const env = (config.NODE_ENV || 'development').toLowerCase();
-  
+
   switch (env) {
     case 'production':
     case 'prod':
@@ -70,28 +70,40 @@ export const Environment = {
    */
   isDebuggingEnabled: (): boolean => {
     const env = getEnvironment();
-    return env === 'development' || env === 'test' || process.env.ENABLE_DEBUG === 'true';
+    return (
+      env === 'development' ||
+      env === 'test' ||
+      process.env.ENABLE_DEBUG === 'true'
+    );
   },
 
   /**
    * Check if verbose logging should be enabled
    */
   isVerboseLoggingEnabled: (): boolean => {
-    return Environment.isDevelopment() || process.env.ENABLE_VERBOSE_LOGGING === 'true';
+    return (
+      Environment.isDevelopment() ||
+      process.env.ENABLE_VERBOSE_LOGGING === 'true'
+    );
   },
 
   /**
    * Check if performance monitoring should be enabled
    */
   isPerformanceMonitoringEnabled: (): boolean => {
-    return Environment.isProduction() || process.env.ENABLE_PERFORMANCE_MONITORING === 'true';
+    return (
+      Environment.isProduction() ||
+      process.env.ENABLE_PERFORMANCE_MONITORING === 'true'
+    );
   },
 
   /**
    * Check if error tracking should be enabled
    */
   isErrorTrackingEnabled: (): boolean => {
-    return Environment.isProduction() || process.env.ENABLE_ERROR_TRACKING === 'true';
+    return (
+      Environment.isProduction() || process.env.ENABLE_ERROR_TRACKING === 'true'
+    );
   },
 
   /**
@@ -99,21 +111,28 @@ export const Environment = {
    */
   isRedisCachingEnabled: (): boolean => {
     // Enable Redis caching in production by default, or when explicitly enabled
-    return Environment.isProduction() || process.env.ENABLE_REDIS_CACHING === 'true';
+    return (
+      Environment.isProduction() || process.env.ENABLE_REDIS_CACHING === 'true'
+    );
   },
 
   /**
    * Check if file logging should be enabled
    */
   isFileLoggingEnabled: (): boolean => {
-    return Environment.isProduction() || process.env.ENABLE_FILE_LOGGING === 'true';
+    return (
+      Environment.isProduction() || process.env.ENABLE_FILE_LOGGING === 'true'
+    );
   },
 
   /**
    * Check if security features should be strict
    */
   isStrictSecurityEnabled: (): boolean => {
-    return Environment.isProduction() || process.env.ENABLE_STRICT_SECURITY === 'true';
+    return (
+      Environment.isProduction() ||
+      process.env.ENABLE_STRICT_SECURITY === 'true'
+    );
   },
 };
 
@@ -216,6 +235,8 @@ export const EnvironmentConfig = {
             config.frontend_url,
             'https://green-uni-mind.pages.dev',
             'https://green-uni-mind-frontend.vercel.app',
+            'https://www.greenunimind.com',
+            'https://greenunimind.com',
           ],
           credentials: true,
           optionsSuccessStatus: 200,
@@ -259,7 +280,7 @@ export const EnvironmentConfig = {
    */
   getSessionConfig: () => {
     const isProduction = Environment.isProduction();
-    
+
     return {
       secret: config.jwt_access_secret,
       resave: false,
@@ -297,11 +318,11 @@ export const EnvironmentValidation = {
       'EMAIL_PASS',
     ];
 
-    const allRequired = Environment.isProduction() 
+    const allRequired = Environment.isProduction()
       ? [...required, ...productionRequired]
       : required;
 
-    const missing = allRequired.filter(envVar => !process.env[envVar]);
+    const missing = allRequired.filter((envVar) => !process.env[envVar]);
 
     return {
       isValid: missing.length === 0,
@@ -313,24 +334,37 @@ export const EnvironmentValidation = {
    * Validate environment configuration and log warnings
    */
   validateAndWarn: (): void => {
-    const { isValid, missing } = EnvironmentValidation.validateRequiredEnvVars();
+    const { isValid, missing } =
+      EnvironmentValidation.validateRequiredEnvVars();
 
     if (!isValid) {
-      console.warn('⚠️ Missing required environment variables:', missing.join(', '));
-      
+      console.warn(
+        '⚠️ Missing required environment variables:',
+        missing.join(', '),
+      );
+
       if (Environment.isProduction()) {
-        console.error('❌ Production environment is missing critical environment variables!');
+        console.error(
+          '❌ Production environment is missing critical environment variables!',
+        );
         process.exit(1);
       }
     }
 
     // Additional warnings
     if (Environment.isProduction() && !config.redis.url && !config.redis.host) {
-      console.warn('⚠️ Redis configuration is missing in production environment');
+      console.warn(
+        '⚠️ Redis configuration is missing in production environment',
+      );
     }
 
-    if (Environment.isProduction() && config.frontend_url.includes('localhost')) {
-      console.warn('⚠️ Frontend URL appears to be localhost in production environment');
+    if (
+      Environment.isProduction() &&
+      config.frontend_url.includes('localhost')
+    ) {
+      console.warn(
+        '⚠️ Frontend URL appears to be localhost in production environment',
+      );
     }
   },
 };

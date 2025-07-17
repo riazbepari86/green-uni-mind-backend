@@ -4,28 +4,30 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const user_route_1 = require("../modules/User/user.route");
+const ai_route_1 = require("../modules/AI/ai.route");
+const analytics_route_1 = require("../modules/Analytics/analytics.route");
 const auth_route_1 = require("../modules/Auth/auth.route");
 const oauth_route_1 = require("../modules/Auth/oauth.route");
 const oauthCallback_route_1 = require("../modules/Auth/oauthCallback.route");
+const bookmark_route_1 = require("../modules/Bookmark/bookmark.route");
 const category_route_1 = require("../modules/Category/category.route");
-const subCategory_route_1 = require("../modules/SubCategory/subCategory.route");
 const course_route_1 = require("../modules/Course/course.route");
-const lecture_route_1 = require("../modules/Lecture/lecture.route");
-const payment_route_1 = require("../modules/Payment/payment.route");
 const invoice_routes_1 = require("../modules/Invoice/invoice.routes");
+const lecture_route_1 = require("../modules/Lecture/lecture.route");
+const messaging_route_1 = require("../modules/Messaging/messaging.route");
+const note_route_1 = require("../modules/Note/note.route");
+const payment_route_1 = require("../modules/Payment/payment.route");
+const review_route_1 = require("../modules/Payment/review.route");
+const question_route_1 = require("../modules/Question/question.route");
 const stripeConnect_routes_1 = require("../modules/StripeConnect/stripeConnect.routes");
 const student_route_1 = require("../modules/Student/student.route");
+const subCategory_route_1 = require("../modules/SubCategory/subCategory.route");
 const teacher_route_1 = require("../modules/Teacher/teacher.route");
-const bookmark_route_1 = require("../modules/Bookmark/bookmark.route");
-const question_route_1 = require("../modules/Question/question.route");
-const note_route_1 = require("../modules/Note/note.route");
-const ai_route_1 = require("../modules/AI/ai.route");
-const analytics_route_1 = require("../modules/Analytics/analytics.route");
-const messaging_route_1 = require("../modules/Messaging/messaging.route");
-const review_route_1 = require("../modules/Payment/review.route");
-const monitoringRoutes_1 = __importDefault(require("./monitoringRoutes"));
+const user_route_1 = require("../modules/User/user.route");
+const apiValidationRoutes_1 = __importDefault(require("./apiValidationRoutes"));
+const dashboardRoutes_1 = __importDefault(require("./dashboardRoutes"));
 const databaseRoutes_1 = __importDefault(require("./databaseRoutes"));
+const monitoringRoutes_1 = __importDefault(require("./monitoringRoutes"));
 const router = (0, express_1.Router)();
 const moduleRoutes = [
     {
@@ -115,6 +117,14 @@ const moduleRoutes = [
     {
         path: '/database',
         route: databaseRoutes_1.default,
+    },
+    {
+        path: '/dashboard',
+        route: dashboardRoutes_1.default,
+    },
+    {
+        path: '/api-validation',
+        route: apiValidationRoutes_1.default,
     },
 ];
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

@@ -38,24 +38,33 @@ const cacheApiResponse = (options) => {
     });
 };
 exports.cacheApiResponse = cacheApiResponse;
-// User-specific caching
+// User-specific caching - MODIFIED to exclude course/lecture endpoints
 const cacheUserData = (ttl = 900) => {
     return (0, exports.cacheApiResponse)({
         ttl,
-        tags: ['user_data'],
+        tags: ['user_data'], // Removed course_creator tag to prevent conflicts
         varyBy: ['authorization'],
-        condition: (req) => !!req.user,
+        condition: (req) => {
+            // Skip caching for course and lecture endpoints to prevent conflicts with Redux
+            const isCourseOrLectureEndpoint = req.path.includes('/courses/') || req.path.includes('/lectures/');
+            return !!req.user && !isCourseOrLectureEndpoint;
+        },
         keyGenerator: (req) => { var _a; return `user:${(_a = req.user) === null || _a === void 0 ? void 0 : _a._id}:${req.path}:${JSON.stringify(req.query)}`; },
     });
 };
 exports.cacheUserData = cacheUserData;
-// Course content caching
+// Course content caching - DEPRECATED for course/lecture endpoints
+// Use only for non-course content to avoid caching conflicts with Redux
 const cacheCourseContent = (ttl = 1800) => {
     return (0, exports.cacheApiResponse)({
         ttl,
         tags: ['course_content', 'course_list'],
         varyBy: ['authorization'],
-        condition: (req) => req.method === 'GET',
+        condition: (req) => {
+            // Skip caching for course and lecture endpoints to prevent conflicts
+            const isCourseOrLectureEndpoint = req.path.includes('/courses/') || req.path.includes('/lectures/');
+            return req.method === 'GET' && !isCourseOrLectureEndpoint;
+        },
     });
 };
 exports.cacheCourseContent = cacheCourseContent;

@@ -1,13 +1,13 @@
 import { model, Schema } from 'mongoose';
 import {
-  ICourseAnalytics,
-  IStudentEngagement,
-  IRevenueAnalytics,
-  IPerformanceMetrics,
-  IAnalyticsSummary,
-  IActivity,
+  ActivityPriority,
   ActivityType,
-  ActivityPriority
+  IActivity,
+  IAnalyticsSummary,
+  ICourseAnalytics,
+  IPerformanceMetrics,
+  IRevenueAnalytics,
+  IStudentEngagement,
 } from './analytics.interface';
 
 // Course Analytics Schema
@@ -23,7 +23,6 @@ const courseAnalyticsSchema = new Schema<ICourseAnalytics>(
       type: Schema.Types.ObjectId,
       ref: 'Teacher',
       required: true,
-      index: true,
     },
     totalEnrollments: {
       type: Number,
@@ -68,7 +67,7 @@ const courseAnalyticsSchema = new Schema<ICourseAnalytics>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Student Engagement Schema
@@ -90,7 +89,6 @@ const studentEngagementSchema = new Schema<IStudentEngagement>(
       type: Schema.Types.ObjectId,
       ref: 'Teacher',
       required: true,
-      index: true,
     },
     totalTimeSpent: {
       type: Number,
@@ -134,7 +132,7 @@ const studentEngagementSchema = new Schema<IStudentEngagement>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Revenue Analytics Schema
@@ -179,17 +177,25 @@ const revenueAnalyticsSchema = new Schema<IRevenueAnalytics>(
       min: 0,
       max: 100,
     },
-    paymentTrends: [{
-      period: { type: String, required: true },
-      amount: { type: Number, required: true, min: 0 },
-      count: { type: Number, required: true, min: 0 },
-      date: { type: Date, required: true },
-    }],
-    topPerformingCourses: [{
-      courseId: { type: Schema.Types.ObjectId, ref: 'Course', required: true },
-      revenue: { type: Number, required: true, min: 0 },
-      enrollments: { type: Number, required: true, min: 0 },
-    }],
+    paymentTrends: [
+      {
+        period: { type: String, required: true },
+        amount: { type: Number, required: true, min: 0 },
+        count: { type: Number, required: true, min: 0 },
+        date: { type: Date, required: true },
+      },
+    ],
+    topPerformingCourses: [
+      {
+        courseId: {
+          type: Schema.Types.ObjectId,
+          ref: 'Course',
+          required: true,
+        },
+        revenue: { type: Number, required: true, min: 0 },
+        enrollments: { type: Number, required: true, min: 0 },
+      },
+    ],
     lastUpdated: {
       type: Date,
       default: Date.now,
@@ -199,7 +205,7 @@ const revenueAnalyticsSchema = new Schema<IRevenueAnalytics>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Performance Metrics Schema
@@ -272,7 +278,7 @@ const performanceMetricsSchema = new Schema<IPerformanceMetrics>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Analytics Summary Schema
@@ -293,14 +299,20 @@ const analyticsSummarySchema = new Schema<IAnalyticsSummary>(
       startDate: { type: Date, required: true },
       endDate: { type: Date, required: true },
     },
-    courseAnalytics: [{
-      courseId: { type: Schema.Types.ObjectId, ref: 'Course', required: true },
-      courseName: { type: String, required: true },
-      enrollments: { type: Number, default: 0, min: 0 },
-      revenue: { type: Number, default: 0, min: 0 },
-      completionRate: { type: Number, default: 0, min: 0, max: 100 },
-      rating: { type: Number, default: 0, min: 0, max: 5 },
-    }],
+    courseAnalytics: [
+      {
+        courseId: {
+          type: Schema.Types.ObjectId,
+          ref: 'Course',
+          required: true,
+        },
+        courseName: { type: String, required: true },
+        enrollments: { type: Number, default: 0, min: 0 },
+        revenue: { type: Number, default: 0, min: 0 },
+        completionRate: { type: Number, default: 0, min: 0, max: 100 },
+        rating: { type: Number, default: 0, min: 0, max: 5 },
+      },
+    ],
     revenueAnalytics: {
       totalRevenue: { type: Number, default: 0, min: 0 },
       growth: { type: Number, default: 0 },
@@ -333,7 +345,7 @@ const analyticsSummarySchema = new Schema<IAnalyticsSummary>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Activity Schema
@@ -405,14 +417,17 @@ const activitySchema = new Schema<IActivity>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Create indexes for better performance
 courseAnalyticsSchema.index({ teacherId: 1, courseId: 1 }, { unique: true });
 courseAnalyticsSchema.index({ lastUpdated: -1 });
 
-studentEngagementSchema.index({ teacherId: 1, courseId: 1, studentId: 1 }, { unique: true });
+studentEngagementSchema.index(
+  { teacherId: 1, courseId: 1, studentId: 1 },
+  { unique: true },
+);
 studentEngagementSchema.index({ lastActivity: -1 });
 studentEngagementSchema.index({ engagementScore: -1 });
 
@@ -423,7 +438,11 @@ performanceMetricsSchema.index({ teacherId: 1, courseId: 1 });
 performanceMetricsSchema.index({ averageRating: -1 });
 performanceMetricsSchema.index({ lastUpdated: -1 });
 
-analyticsSummarySchema.index({ teacherId: 1, period: 1, 'dateRange.startDate': 1 });
+analyticsSummarySchema.index({
+  teacherId: 1,
+  period: 1,
+  'dateRange.startDate': 1,
+});
 analyticsSummarySchema.index({ generatedAt: -1 });
 
 activitySchema.index({ teacherId: 1, createdAt: -1 });
@@ -443,7 +462,10 @@ export const StudentEngagement = (() => {
   try {
     return model<IStudentEngagement>('StudentEngagement');
   } catch (error) {
-    return model<IStudentEngagement>('StudentEngagement', studentEngagementSchema);
+    return model<IStudentEngagement>(
+      'StudentEngagement',
+      studentEngagementSchema,
+    );
   }
 })();
 
@@ -459,7 +481,10 @@ export const PerformanceMetrics = (() => {
   try {
     return model<IPerformanceMetrics>('PerformanceMetrics');
   } catch (error) {
-    return model<IPerformanceMetrics>('PerformanceMetrics', performanceMetricsSchema);
+    return model<IPerformanceMetrics>(
+      'PerformanceMetrics',
+      performanceMetricsSchema,
+    );
   }
 })();
 

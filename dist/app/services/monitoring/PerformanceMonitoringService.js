@@ -136,7 +136,10 @@ class PerformanceMonitoringService {
                 }, {});
                 for (const [endpointKey, endpointMetrics] of Object.entries(endpointGroups)) {
                     const stats = yield this.calculateEndpointStats(endpointKey, endpointMetrics);
-                    yield EnhancedCacheService_1.default.set(`endpoint_stats:${endpointKey}`, stats, { ttl: 3600, namespace: 'performance' });
+                    yield EnhancedCacheService_1.default.set(`endpoint_stats:${endpointKey}`, stats, {
+                        ttl: 3600,
+                        namespace: 'performance',
+                    });
                 }
             }
             catch (error) {
@@ -150,9 +153,9 @@ class PerformanceMonitoringService {
     calculateEndpointStats(endpointKey, newMetrics) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Get recent metrics from Redis
+                // Get recent metrics from Redis using SCAN instead of KEYS
                 const pattern = `metrics:${endpointKey.split(':')[1]}:*`;
-                const keys = yield redis_1.redisOperations.keys(pattern);
+                const keys = yield this.scanKeysWithPattern(pattern, 500);
                 const recentMetrics = [];
                 if (keys.length > 0) {
                     const values = yield redis_1.redisOperations.mget(keys);
@@ -181,14 +184,16 @@ class PerformanceMonitoringService {
                     };
                 }
                 // Calculate statistics
-                const responseTimes = allMetrics.map(m => m.responseTime).sort((a, b) => a - b);
+                const responseTimes = allMetrics
+                    .map((m) => m.responseTime)
+                    .sort((a, b) => a - b);
                 const totalRequests = allMetrics.length;
                 const averageResponseTime = responseTimes.reduce((sum, time) => sum + time, 0) / totalRequests;
                 const p95ResponseTime = responseTimes[Math.floor(totalRequests * 0.95)] || 0;
                 const p99ResponseTime = responseTimes[Math.floor(totalRequests * 0.99)] || 0;
-                const errorCount = allMetrics.filter(m => m.statusCode >= 400).length;
+                const errorCount = allMetrics.filter((m) => m.statusCode >= 400).length;
                 const errorRate = (errorCount / totalRequests) * 100;
-                const cacheHits = allMetrics.filter(m => m.cacheHit).length;
+                const cacheHits = allMetrics.filter((m) => m.cacheHit).length;
                 const cacheHitRate = (cacheHits / totalRequests) * 100;
                 return {
                     totalRequests,
@@ -235,9 +240,9 @@ class PerformanceMonitoringService {
     getSystemMetrics() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Get all endpoint stats
+                // Get all endpoint stats using SCAN instead of KEYS
                 const pattern = 'performance:endpoint_stats:*';
-                const keys = yield redis_1.redisOperations.keys(pattern);
+                const keys = yield this.scanKeysWithPattern(pattern, 500);
                 const allStats = [];
                 if (keys.length > 0) {
                     const values = yield redis_1.redisOperations.mget(keys);
@@ -264,11 +269,11 @@ class PerformanceMonitoringService {
                 }
                 // Calculate overall metrics
                 const totalRequests = allStats.reduce((sum, stat) => sum + stat.totalRequests, 0);
-                const weightedResponseTime = allStats.reduce((sum, stat) => sum + (stat.averageResponseTime * stat.totalRequests), 0);
+                const weightedResponseTime = allStats.reduce((sum, stat) => sum + stat.averageResponseTime * stat.totalRequests, 0);
                 const averageResponseTime = totalRequests > 0 ? weightedResponseTime / totalRequests : 0;
-                const weightedErrorRate = allStats.reduce((sum, stat) => sum + (stat.errorRate * stat.totalRequests), 0);
+                const weightedErrorRate = allStats.reduce((sum, stat) => sum + stat.errorRate * stat.totalRequests, 0);
                 const errorRate = totalRequests > 0 ? weightedErrorRate / totalRequests : 0;
-                const weightedCacheHitRate = allStats.reduce((sum, stat) => sum + (stat.cacheHitRate * stat.totalRequests), 0);
+                const weightedCacheHitRate = allStats.reduce((sum, stat) => sum + stat.cacheHitRate * stat.totalRequests, 0);
                 const cacheHitRate = totalRequests > 0 ? weightedCacheHitRate / totalRequests : 0;
                 // Get top slow endpoints
                 const topSlowEndpoints = keys
@@ -290,7 +295,7 @@ class PerformanceMonitoringService {
                         errorRate: ((_a = allStats[index]) === null || _a === void 0 ? void 0 : _a.errorRate) || 0,
                     });
                 })
-                    .filter(item => item.errorRate > 0)
+                    .filter((item) => item.errorRate > 0)
                     .sort((a, b) => b.errorRate - a.errorRate)
                     .slice(0, 5);
                 return {
@@ -333,6 +338,31 @@ class PerformanceMonitoringService {
         }
     }
     /**
+     * Scan keys with pattern using SCAN instead of KEYS for better performance
+     */
+    scanKeysWithPattern(pattern_1) {
+        return __awaiter(this, arguments, void 0, function* (pattern, limit = 1000) {
+            const keys = [];
+            let cursor = '0';
+            do {
+                try {
+                    const result = yield redis_1.redisOperations.scan(cursor, 'MATCH', pattern, 'COUNT', 50);
+                    cursor = result[0];
+                    keys.push(...result[1]);
+                    // Stop when we have enough keys or hit the limit
+                    if (keys.length >= limit) {
+                        break;
+                    }
+                }
+                catch (error) {
+                    console.error(`Error scanning pattern ${pattern}:`, error);
+                    break;
+                }
+            } while (cursor !== '0' && keys.length < limit);
+            return keys.slice(0, limit);
+        });
+    }
+    /**
      * Get performance statistics
      */
     getStats() {
@@ -344,7 +374,7 @@ class PerformanceMonitoringService {
             sets: 0,
             deletes: 0,
             errors: 0,
-            hitRate
+            hitRate,
         };
     }
     /**
@@ -355,7 +385,8 @@ class PerformanceMonitoringService {
     }
     static getInstance() {
         if (!PerformanceMonitoringService.instance) {
-            PerformanceMonitoringService.instance = new PerformanceMonitoringService();
+            PerformanceMonitoringService.instance =
+                new PerformanceMonitoringService();
         }
         return PerformanceMonitoringService.instance;
     }

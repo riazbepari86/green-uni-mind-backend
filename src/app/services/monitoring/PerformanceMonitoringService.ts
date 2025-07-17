@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { Logger } from '../../config/logger';
 import { redisOperations } from '../../config/redis';
 import EnhancedCacheService from '../cache/EnhancedCacheService';
@@ -54,7 +54,11 @@ class PerformanceMonitoringService {
 
       // Override res.end to capture metrics
       const originalEnd = res.end.bind(res);
-      res.end = function(chunk?: any, encoding?: any, cb?: () => void): Response {
+      res.end = function (
+        chunk?: any,
+        encoding?: any,
+        cb?: () => void,
+      ): Response {
         const responseTime = Date.now() - startTime;
         const endMemory = process.memoryUsage().heapUsed;
         const memoryUsage = endMemory - startMemory;
@@ -78,25 +82,31 @@ class PerformanceMonitoringService {
 
         // Log slow requests
         if (responseTime > 1000) {
-          Logger.warn(`🐌 Slow request detected: ${req.method} ${req.path} - ${responseTime}ms`, {
-            endpoint: req.path,
-            method: req.method,
-            responseTime,
-            statusCode: res.statusCode,
-            userId: metrics.userId,
-            dbQueries,
-          });
+          Logger.warn(
+            `🐌 Slow request detected: ${req.method} ${req.path} - ${responseTime}ms`,
+            {
+              endpoint: req.path,
+              method: req.method,
+              responseTime,
+              statusCode: res.statusCode,
+              userId: metrics.userId,
+              dbQueries,
+            },
+          );
         }
 
         // Log errors
         if (res.statusCode >= 400) {
-          Logger.error(`❌ Request error: ${req.method} ${req.path} - ${res.statusCode}`, {
-            endpoint: req.path,
-            method: req.method,
-            responseTime,
-            statusCode: res.statusCode,
-            userId: metrics.userId,
-          });
+          Logger.error(
+            `❌ Request error: ${req.method} ${req.path} - ${res.statusCode}`,
+            {
+              endpoint: req.path,
+              method: req.method,
+              responseTime,
+              statusCode: res.statusCode,
+              userId: metrics.userId,
+            },
+          );
         }
 
         return originalEnd(chunk, encoding, cb);
@@ -134,14 +144,17 @@ class PerformanceMonitoringService {
 
       for (const metric of metrics) {
         const key = `metrics:${metric.endpoint}:${now}:${Math.random()}`;
-        pipeline.setex(key, this.METRICS_RETENTION_DAYS * 24 * 60 * 60, JSON.stringify(metric));
+        pipeline.setex(
+          key,
+          this.METRICS_RETENTION_DAYS * 24 * 60 * 60,
+          JSON.stringify(metric),
+        );
       }
 
       await pipeline.exec();
 
       // Update endpoint statistics
       await this.updateEndpointStats(metrics);
-
     } catch (error) {
       Logger.error('❌ Failed to flush performance metrics:', error);
     }
@@ -150,24 +163,33 @@ class PerformanceMonitoringService {
   /**
    * Update endpoint statistics
    */
-  private async updateEndpointStats(metrics: PerformanceMetrics[]): Promise<void> {
+  private async updateEndpointStats(
+    metrics: PerformanceMetrics[],
+  ): Promise<void> {
     try {
-      const endpointGroups = metrics.reduce((groups, metric) => {
-        const key = `${metric.method}:${metric.endpoint}`;
-        if (!groups[key]) {
-          groups[key] = [];
-        }
-        groups[key].push(metric);
-        return groups;
-      }, {} as Record<string, PerformanceMetrics[]>);
+      const endpointGroups = metrics.reduce(
+        (groups, metric) => {
+          const key = `${metric.method}:${metric.endpoint}`;
+          if (!groups[key]) {
+            groups[key] = [];
+          }
+          groups[key].push(metric);
+          return groups;
+        },
+        {} as Record<string, PerformanceMetrics[]>,
+      );
 
-      for (const [endpointKey, endpointMetrics] of Object.entries(endpointGroups)) {
-        const stats = await this.calculateEndpointStats(endpointKey, endpointMetrics);
-        await EnhancedCacheService.set(
-          `endpoint_stats:${endpointKey}`,
-          stats,
-          { ttl: 3600, namespace: 'performance' }
+      for (const [endpointKey, endpointMetrics] of Object.entries(
+        endpointGroups,
+      )) {
+        const stats = await this.calculateEndpointStats(
+          endpointKey,
+          endpointMetrics,
         );
+        await EnhancedCacheService.set(`endpoint_stats:${endpointKey}`, stats, {
+          ttl: 3600,
+          namespace: 'performance',
+        });
       }
     } catch (error) {
       Logger.error('❌ Failed to update endpoint stats:', error);
@@ -179,12 +201,12 @@ class PerformanceMonitoringService {
    */
   private async calculateEndpointStats(
     endpointKey: string,
-    newMetrics: PerformanceMetrics[]
+    newMetrics: PerformanceMetrics[],
   ): Promise<EndpointStats> {
     try {
-      // Get recent metrics from Redis
+      // Get recent metrics from Redis using SCAN instead of KEYS
       const pattern = `metrics:${endpointKey.split(':')[1]}:*`;
-      const keys = await redisOperations.keys(pattern);
+      const keys = await this.scanKeysWithPattern(pattern, 500);
       const recentMetrics: PerformanceMetrics[] = [];
 
       if (keys.length > 0) {
@@ -202,7 +224,7 @@ class PerformanceMonitoringService {
 
       // Combine with new metrics
       const allMetrics = [...recentMetrics, ...newMetrics];
-      
+
       if (allMetrics.length === 0) {
         return {
           totalRequests: 0,
@@ -216,16 +238,21 @@ class PerformanceMonitoringService {
       }
 
       // Calculate statistics
-      const responseTimes = allMetrics.map(m => m.responseTime).sort((a, b) => a - b);
+      const responseTimes = allMetrics
+        .map((m) => m.responseTime)
+        .sort((a, b) => a - b);
       const totalRequests = allMetrics.length;
-      const averageResponseTime = responseTimes.reduce((sum, time) => sum + time, 0) / totalRequests;
-      const p95ResponseTime = responseTimes[Math.floor(totalRequests * 0.95)] || 0;
-      const p99ResponseTime = responseTimes[Math.floor(totalRequests * 0.99)] || 0;
-      
-      const errorCount = allMetrics.filter(m => m.statusCode >= 400).length;
+      const averageResponseTime =
+        responseTimes.reduce((sum, time) => sum + time, 0) / totalRequests;
+      const p95ResponseTime =
+        responseTimes[Math.floor(totalRequests * 0.95)] || 0;
+      const p99ResponseTime =
+        responseTimes[Math.floor(totalRequests * 0.99)] || 0;
+
+      const errorCount = allMetrics.filter((m) => m.statusCode >= 400).length;
       const errorRate = (errorCount / totalRequests) * 100;
-      
-      const cacheHits = allMetrics.filter(m => m.cacheHit).length;
+
+      const cacheHits = allMetrics.filter((m) => m.cacheHit).length;
       const cacheHitRate = (cacheHits / totalRequests) * 100;
 
       return {
@@ -254,12 +281,15 @@ class PerformanceMonitoringService {
   /**
    * Get performance statistics for an endpoint
    */
-  public async getEndpointStats(method: string, endpoint: string): Promise<EndpointStats | null> {
+  public async getEndpointStats(
+    method: string,
+    endpoint: string,
+  ): Promise<EndpointStats | null> {
     try {
       const key = `${method}:${endpoint}`;
       return await EnhancedCacheService.get<EndpointStats>(
         `endpoint_stats:${key}`,
-        { namespace: 'performance' }
+        { namespace: 'performance' },
       );
     } catch (error) {
       Logger.error('❌ Failed to get endpoint stats:', error);
@@ -279,9 +309,9 @@ class PerformanceMonitoringService {
     topErrorEndpoints: Array<{ endpoint: string; errorRate: number }>;
   }> {
     try {
-      // Get all endpoint stats
+      // Get all endpoint stats using SCAN instead of KEYS
       const pattern = 'performance:endpoint_stats:*';
-      const keys = await redisOperations.keys(pattern);
+      const keys = await this.scanKeysWithPattern(pattern, 500);
       const allStats: EndpointStats[] = [];
 
       if (keys.length > 0) {
@@ -309,24 +339,30 @@ class PerformanceMonitoringService {
       }
 
       // Calculate overall metrics
-      const totalRequests = allStats.reduce((sum, stat) => sum + stat.totalRequests, 0);
-      const weightedResponseTime = allStats.reduce(
-        (sum, stat) => sum + (stat.averageResponseTime * stat.totalRequests),
-        0
+      const totalRequests = allStats.reduce(
+        (sum, stat) => sum + stat.totalRequests,
+        0,
       );
-      const averageResponseTime = totalRequests > 0 ? weightedResponseTime / totalRequests : 0;
+      const weightedResponseTime = allStats.reduce(
+        (sum, stat) => sum + stat.averageResponseTime * stat.totalRequests,
+        0,
+      );
+      const averageResponseTime =
+        totalRequests > 0 ? weightedResponseTime / totalRequests : 0;
 
       const weightedErrorRate = allStats.reduce(
-        (sum, stat) => sum + (stat.errorRate * stat.totalRequests),
-        0
+        (sum, stat) => sum + stat.errorRate * stat.totalRequests,
+        0,
       );
-      const errorRate = totalRequests > 0 ? weightedErrorRate / totalRequests : 0;
+      const errorRate =
+        totalRequests > 0 ? weightedErrorRate / totalRequests : 0;
 
       const weightedCacheHitRate = allStats.reduce(
-        (sum, stat) => sum + (stat.cacheHitRate * stat.totalRequests),
-        0
+        (sum, stat) => sum + stat.cacheHitRate * stat.totalRequests,
+        0,
       );
-      const cacheHitRate = totalRequests > 0 ? weightedCacheHitRate / totalRequests : 0;
+      const cacheHitRate =
+        totalRequests > 0 ? weightedCacheHitRate / totalRequests : 0;
 
       // Get top slow endpoints
       const topSlowEndpoints = keys
@@ -343,7 +379,7 @@ class PerformanceMonitoringService {
           endpoint: key.replace('performance:endpoint_stats:', ''),
           errorRate: allStats[index]?.errorRate || 0,
         }))
-        .filter(item => item.errorRate > 0)
+        .filter((item) => item.errorRate > 0)
         .sort((a, b) => b.errorRate - a.errorRate)
         .slice(0, 5);
 
@@ -388,9 +424,51 @@ class PerformanceMonitoringService {
   }
 
   /**
+   * Scan keys with pattern using SCAN instead of KEYS for better performance
+   */
+  private async scanKeysWithPattern(
+    pattern: string,
+    limit: number = 1000,
+  ): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      try {
+        const result = await redisOperations.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          50,
+        );
+        cursor = result[0];
+        keys.push(...result[1]);
+
+        // Stop when we have enough keys or hit the limit
+        if (keys.length >= limit) {
+          break;
+        }
+      } catch (error) {
+        console.error(`Error scanning pattern ${pattern}:`, error);
+        break;
+      }
+    } while (cursor !== '0' && keys.length < limit);
+
+    return keys.slice(0, limit);
+  }
+
+  /**
    * Get performance statistics
    */
-  public getStats(): { hits: number; misses: number; sets: number; deletes: number; errors: number; hitRate: number } {
+  public getStats(): {
+    hits: number;
+    misses: number;
+    sets: number;
+    deletes: number;
+    errors: number;
+    hitRate: number;
+  } {
     const total = this.metricsBuffer.length;
     const hitRate = total > 0 ? 100 : 0; // Simplified calculation
 
@@ -400,7 +478,7 @@ class PerformanceMonitoringService {
       sets: 0,
       deletes: 0,
       errors: 0,
-      hitRate
+      hitRate,
     };
   }
 
@@ -418,7 +496,8 @@ class PerformanceMonitoringService {
 
   public static getInstance(): PerformanceMonitoringService {
     if (!PerformanceMonitoringService.instance) {
-      PerformanceMonitoringService.instance = new PerformanceMonitoringService();
+      PerformanceMonitoringService.instance =
+        new PerformanceMonitoringService();
     }
     return PerformanceMonitoringService.instance;
   }

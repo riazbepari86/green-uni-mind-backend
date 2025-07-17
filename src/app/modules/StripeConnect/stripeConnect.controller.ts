@@ -82,17 +82,54 @@ const createAccountLink = catchAsync(async (req: Request, res: Response) => {
 // Get account status
 const getAccountStatus = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?._id;
+  const { forceRefresh } = req.query;
 
   if (!userId) {
     throw new AppError(httpStatus.UNAUTHORIZED, 'User ID not found');
   }
 
-  const result = await StripeConnectService.getAccountStatus(userId);
+  const result = await StripeConnectService.getAccountStatus(userId, forceRefresh === 'true');
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Account status retrieved successfully',
+    data: result,
+  });
+});
+
+// Quick status check for real-time updates
+const quickStatusCheck = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?._id;
+
+  if (!userId) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'User ID not found');
+  }
+
+  const result = await StripeConnectService.quickStatusCheck(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Quick status check completed',
+    data: result,
+  });
+});
+
+// Proactive verification check
+const proactiveVerificationCheck = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?._id;
+
+  if (!userId) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'User ID not found');
+  }
+
+  const result = await StripeConnectService.proactiveVerificationCheck(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Proactive verification check completed',
     data: result,
   });
 });
@@ -209,6 +246,8 @@ export const StripeConnectController = {
   createAccount,
   createAccountLink,
   getAccountStatus,
+  quickStatusCheck,
+  proactiveVerificationCheck,
   updateAccount,
   disconnectAccount,
   retryConnection,

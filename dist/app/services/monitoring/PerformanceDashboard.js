@@ -10,11 +10,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.performanceDashboard = exports.PerformanceDashboard = void 0;
-const RedisServiceManager_1 = require("../redis/RedisServiceManager");
-const ApiCacheService_1 = require("../redis/ApiCacheService");
-const QueryCacheService_1 = require("../redis/QueryCacheService");
-const CacheInvalidationService_1 = require("../redis/CacheInvalidationService");
 const JobQueueManager_1 = require("../jobs/JobQueueManager");
+const ApiCacheService_1 = require("../redis/ApiCacheService");
+const CacheInvalidationService_1 = require("../redis/CacheInvalidationService");
+const QueryCacheService_1 = require("../redis/QueryCacheService");
+const RedisServiceManager_1 = require("../redis/RedisServiceManager");
 class PerformanceDashboard {
     constructor() {
         this.alertRules = new Map();
@@ -85,7 +85,7 @@ class PerformanceDashboard {
                 cooldown: 20,
             },
         ];
-        defaultRules.forEach(rule => {
+        defaultRules.forEach((rule) => {
             this.alertRules.set(rule.name, rule);
         });
     }
@@ -102,8 +102,8 @@ class PerformanceDashboard {
                     system: {
                         uptime: process.uptime(),
                         memory: process.memoryUsage(),
-                        cpu: process.cpuUsage()
-                    }
+                        cpu: process.cpuUsage(),
+                    },
                 };
                 // Store only in memory, not Redis
                 this.metricsHistory.push(basicMetrics);
@@ -143,9 +143,18 @@ class PerformanceDashboard {
                     health: redisHealth,
                     memory: redisMemory,
                     connections: {
-                        active: (typeof redisHealth === 'object' && redisHealth !== null && ((_b = (_a = redisHealth.clients) === null || _a === void 0 ? void 0 : _a.primary) === null || _b === void 0 ? void 0 : _b.connections)) || 0,
-                        total: (typeof redisHealth === 'object' && redisHealth !== null && ((_d = (_c = redisHealth.clients) === null || _c === void 0 ? void 0 : _c.primary) === null || _d === void 0 ? void 0 : _d.totalConnections)) || 0,
-                        failed: (typeof redisHealth === 'object' && redisHealth !== null && ((_f = (_e = redisHealth.clients) === null || _e === void 0 ? void 0 : _e.primary) === null || _f === void 0 ? void 0 : _f.failedConnections)) || 0,
+                        active: (typeof redisHealth === 'object' &&
+                            redisHealth !== null &&
+                            ((_b = (_a = redisHealth.clients) === null || _a === void 0 ? void 0 : _a.primary) === null || _b === void 0 ? void 0 : _b.connections)) ||
+                            0,
+                        total: (typeof redisHealth === 'object' &&
+                            redisHealth !== null &&
+                            ((_d = (_c = redisHealth.clients) === null || _c === void 0 ? void 0 : _c.primary) === null || _d === void 0 ? void 0 : _d.totalConnections)) ||
+                            0,
+                        failed: (typeof redisHealth === 'object' &&
+                            redisHealth !== null &&
+                            ((_f = (_e = redisHealth.clients) === null || _e === void 0 ? void 0 : _e.primary) === null || _f === void 0 ? void 0 : _f.failedConnections)) ||
+                            0,
                     },
                     operations: {
                         totalCommands: ((_g = redisPerformance.overall) === null || _g === void 0 ? void 0 : _g.totalOperations) || 0,
@@ -169,7 +178,7 @@ class PerformanceDashboard {
                             completed: jobStats.completedJobs,
                             failed: jobStats.failedJobs,
                             delayed: jobStats.delayedJobs,
-                        }
+                        },
                     },
                     workers: {},
                     performance: {
@@ -231,14 +240,17 @@ class PerformanceDashboard {
     calculateAverageResponseTime() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const keys = yield this.redis.keys('metrics:api:*:response_times');
+                const keys = yield this.scanKeysWithPattern('metrics:api:*:response_times', 10);
                 if (keys.length === 0)
                     return 0;
                 let totalTime = 0;
                 let totalRequests = 0;
-                for (const key of keys.slice(0, 10)) { // Sample first 10 endpoints
+                for (const key of keys) {
+                    // Use scanned keys (already limited to 10)
                     const times = yield this.redis.lrange(key, 0, -1);
-                    const numericTimes = times.map(t => parseInt(t)).filter(t => !isNaN(t));
+                    const numericTimes = times
+                        .map((t) => parseInt(t))
+                        .filter((t) => !isNaN(t));
                     if (numericTimes.length > 0) {
                         totalTime += numericTimes.reduce((sum, time) => sum + time, 0);
                         totalRequests += numericTimes.length;
@@ -250,6 +262,31 @@ class PerformanceDashboard {
                 console.error('Error calculating average response time:', error);
                 return 0;
             }
+        });
+    }
+    /**
+     * Scan keys with pattern using SCAN instead of KEYS for better performance
+     */
+    scanKeysWithPattern(pattern_1) {
+        return __awaiter(this, arguments, void 0, function* (pattern, limit = 100) {
+            const keys = [];
+            let cursor = '0';
+            do {
+                try {
+                    const result = yield this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 50);
+                    cursor = result[0];
+                    keys.push(...result[1]);
+                    // Stop when we have enough keys or hit the limit
+                    if (keys.length >= limit) {
+                        break;
+                    }
+                }
+                catch (error) {
+                    console.error(`Error scanning pattern ${pattern}:`, error);
+                    break;
+                }
+            } while (cursor !== '0' && keys.length < limit);
+            return keys.slice(0, limit);
         });
     }
     calculateJobProcessingTime() {
@@ -330,12 +367,18 @@ class PerformanceDashboard {
     }
     evaluateCondition(value, threshold, operator) {
         switch (operator) {
-            case 'gt': return value > threshold;
-            case 'gte': return value >= threshold;
-            case 'lt': return value < threshold;
-            case 'lte': return value <= threshold;
-            case 'eq': return value === threshold;
-            default: return false;
+            case 'gt':
+                return value > threshold;
+            case 'gte':
+                return value >= threshold;
+            case 'lt':
+                return value < threshold;
+            case 'lte':
+                return value <= threshold;
+            case 'eq':
+                return value === threshold;
+            default:
+                return false;
         }
     }
     triggerAlert(rule, value) {
@@ -389,19 +432,19 @@ class PerformanceDashboard {
     getMetricsHistory() {
         return __awaiter(this, arguments, void 0, function* (hours = 24) {
             const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
-            return this.metricsHistory.filter(m => new Date(m.timestamp) >= cutoff);
+            return this.metricsHistory.filter((m) => new Date(m.timestamp) >= cutoff);
         });
     }
     getActiveAlerts() {
         return __awaiter(this, void 0, void 0, function* () {
-            return Array.from(this.activeAlerts.values()).filter(a => !a.resolvedAt);
+            return Array.from(this.activeAlerts.values()).filter((a) => !a.resolvedAt);
         });
     }
     getResolvedAlerts() {
         return __awaiter(this, arguments, void 0, function* (limit = 50) {
             try {
                 const alerts = yield this.redis.lrange('alerts:resolved', 0, limit - 1);
-                return alerts.map(a => JSON.parse(a));
+                return alerts.map((a) => JSON.parse(a));
             }
             catch (error) {
                 console.error('Error getting resolved alerts:', error);

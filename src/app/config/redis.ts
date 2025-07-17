@@ -1,21 +1,27 @@
 import Redis from 'ioredis';
 import config from './index';
 
-// Redis connection configuration for Upstash
+// Redis connection configuration for Upstash with enhanced reliability
 const redisConfig = {
   host: config.redis.host || 'localhost',
   port: config.redis.port || 6379,
   password: config.redis.password || '',
   family: 4,
-  maxRetriesPerRequest: 3,
-  retryDelayOnFailover: 100,
-  enableReadyCheck: false,
-  maxLoadingTimeout: 1000,
+  maxRetriesPerRequest: 5, // Increased from 3 to 5 for better resilience
+  retryDelayOnFailover: 1000, // Increased from 100 to 1000 for exponential backoff
+  enableReadyCheck: true, // Changed from false to true for better connection health
+  maxLoadingTimeout: 30000, // Increased from 1000 to 30000 for better reliability
   lazyConnect: true, // Don't connect immediately
   keepAlive: 30000,
-  connectTimeout: 10000,
-  commandTimeout: 5000,
-  tls: config.redis.host && config.redis.host.includes('upstash.io') ? {} : undefined,
+  connectTimeout: 30000, // Increased from 10000 to 30000 for better reliability
+  commandTimeout: 30000, // Increased from 5000 to 30000 for better reliability
+  // Enhanced retry strategy
+  retryDelayOnClusterDown: 300,
+  enableOfflineQueue: true,
+  tls:
+    config.redis.host && config.redis.host.includes('upstash.io')
+      ? {}
+      : undefined,
 };
 
 // Create a single Redis client instance
@@ -57,7 +63,7 @@ export async function isRedisHealthy(): Promise<boolean> {
     const result = await safeRedisOperation(
       () => redis.ping(),
       null,
-      'health-check'
+      'health-check',
     );
     return result === 'PONG';
   } catch (error) {
@@ -69,7 +75,7 @@ export async function isRedisHealthy(): Promise<boolean> {
 // Helper function to ensure connection
 const ensureConnection = async (): Promise<void> => {
   if (isConnected) return;
-  
+
   if (isConnecting) {
     // Wait for connection to complete
     await new Promise((resolve) => {
@@ -99,123 +105,130 @@ const ensureConnection = async (): Promise<void> => {
 const safeRedisOperation = async <T>(
   operation: () => Promise<T>,
   fallback?: T,
-  operationName?: string
+  operationName?: string,
 ): Promise<T | undefined> => {
   try {
     await ensureConnection();
     return await operation();
   } catch (error) {
-    console.warn(`Redis operation failed${operationName ? ` (${operationName})` : ''}:`, error);
+    console.warn(
+      `Redis operation failed${operationName ? ` (${operationName})` : ''}:`,
+      error,
+    );
     return fallback;
   }
 };
 
 // OTP-related Redis operations with error handling
 export const otpOperations = {
-  async storeOTP(email: string, otp: string, ttlSeconds: number = 300): Promise<void> {
+  async storeOTP(
+    email: string,
+    otp: string,
+    ttlSeconds: number = 300,
+  ): Promise<void> {
     const key = `otp:${email}`;
     await safeRedisOperation(
       () => redis.setex(key, ttlSeconds, otp),
       undefined,
-      'storeOTP'
+      'storeOTP',
     );
     console.log(`✅ OTP stored for ${email} with TTL ${ttlSeconds}s`);
   },
 
   async getOTP(email: string): Promise<string | null> {
     const key = `otp:${email}`;
-    return await safeRedisOperation(
-      () => redis.get(key),
-      null,
-      'getOTP'
-    ) || null;
+    return (
+      (await safeRedisOperation(() => redis.get(key), null, 'getOTP')) || null
+    );
   },
 
   async deleteOTP(email: string): Promise<void> {
     const key = `otp:${email}`;
-    await safeRedisOperation(
-      () => redis.del(key),
-      undefined,
-      'deleteOTP'
-    );
+    await safeRedisOperation(() => redis.del(key), undefined, 'deleteOTP');
     console.log(`✅ OTP deleted for ${email}`);
   },
 
   async getOTPTTL(email: string): Promise<number> {
     const key = `otp:${email}`;
-    return await safeRedisOperation(
-      () => redis.ttl(key),
-      -1,
-      'getOTPTTL'
-    ) || -1;
+    return (
+      (await safeRedisOperation(() => redis.ttl(key), -1, 'getOTPTTL')) || -1
+    );
   },
 
   // Alias for compatibility
-  setOTP: async function(email: string, otp: string, ttlSeconds: number = 300): Promise<void> {
+  setOTP: async function (
+    email: string,
+    otp: string,
+    ttlSeconds: number = 300,
+  ): Promise<void> {
     return this.storeOTP(email, otp, ttlSeconds);
   },
 
   async checkResendCooldown(email: string, cooldownSeconds: number = 60) {
     const cooldownKey = `otp:cooldown:${email}`;
-    
+
     const exists = await safeRedisOperation(
       () => redis.exists(cooldownKey),
       0,
-      'checkResendCooldown-exists'
+      'checkResendCooldown-exists',
     );
-    
+
     if (exists) {
       const ttl = await safeRedisOperation(
         () => redis.ttl(cooldownKey),
         0,
-        'checkResendCooldown-ttl'
+        'checkResendCooldown-ttl',
       );
       return {
         allowed: false,
-        remainingTime: ttl || 0
+        remainingTime: ttl || 0,
       };
     }
 
     await safeRedisOperation(
       () => redis.setex(cooldownKey, cooldownSeconds, '1'),
       undefined,
-      'checkResendCooldown-set'
+      'checkResendCooldown-set',
     );
-    
+
     return {
       allowed: true,
-      remainingTime: 0
+      remainingTime: 0,
     };
   },
 
-  async checkOTPRateLimit(email: string, maxAttempts: number = 5, windowSeconds: number = 3600) {
+  async checkOTPRateLimit(
+    email: string,
+    maxAttempts: number = 5,
+    windowSeconds: number = 3600,
+  ) {
     const attemptsKey = `otp:attempts:${email}`;
     const lockKey = `otp:lock:${email}`;
-    
+
     // Check if locked
     const lockData = await safeRedisOperation(
       () => redis.get(lockKey),
       null,
-      'checkOTPRateLimit-lockData'
+      'checkOTPRateLimit-lockData',
     );
-    
+
     if (lockData) {
       try {
         const lock = JSON.parse(lockData);
         const ttl = await safeRedisOperation(
           () => redis.ttl(lockKey),
           0,
-          'checkOTPRateLimit-lockTTL'
+          'checkOTPRateLimit-lockTTL',
         );
 
         if (lock.attempts >= maxAttempts) {
           return {
             allowed: false,
             remaining: 0,
-            resetTime: Date.now() + ((ttl || 0) * 1000),
+            resetTime: Date.now() + (ttl || 0) * 1000,
             isLocked: true,
             lockDuration: ttl || 0,
-            lockReason: lock.reason || 'Too many OTP requests'
+            lockReason: lock.reason || 'Too many OTP requests',
           };
         }
       } catch (parseError) {
@@ -226,9 +239,9 @@ export const otpOperations = {
     const current = await safeRedisOperation(
       () => redis.get(attemptsKey),
       null,
-      'checkOTPRateLimit-current'
+      'checkOTPRateLimit-current',
     );
-    
+
     const attempts = current ? parseInt(current) : 0;
 
     if (attempts >= maxAttempts) {
@@ -236,28 +249,28 @@ export const otpOperations = {
       const lockInfo = {
         attempts: attempts + 1,
         lockedAt: new Date().toISOString(),
-        reason: 'Exceeded maximum OTP requests'
+        reason: 'Exceeded maximum OTP requests',
       };
 
       await safeRedisOperation(
         () => redis.setex(lockKey, lockDuration, JSON.stringify(lockInfo)),
         undefined,
-        'checkOTPRateLimit-setLock'
+        'checkOTPRateLimit-setLock',
       );
-      
+
       await safeRedisOperation(
         () => redis.del(attemptsKey),
         undefined,
-        'checkOTPRateLimit-delAttempts'
+        'checkOTPRateLimit-delAttempts',
       );
 
       return {
         allowed: false,
         remaining: 0,
-        resetTime: Date.now() + (lockDuration * 1000),
+        resetTime: Date.now() + lockDuration * 1000,
         isLocked: true,
         lockDuration,
-        lockReason: lockInfo.reason
+        lockReason: lockInfo.reason,
       };
     }
 
@@ -265,29 +278,29 @@ export const otpOperations = {
       await safeRedisOperation(
         () => redis.incr(attemptsKey),
         undefined,
-        'checkOTPRateLimit-incr'
+        'checkOTPRateLimit-incr',
       );
     } else {
       await safeRedisOperation(
         () => redis.setex(attemptsKey, windowSeconds, '1'),
         undefined,
-        'checkOTPRateLimit-setex'
+        'checkOTPRateLimit-setex',
       );
     }
 
     const ttl = await safeRedisOperation(
       () => redis.ttl(attemptsKey),
       windowSeconds,
-      'checkOTPRateLimit-ttl'
+      'checkOTPRateLimit-ttl',
     );
-    
+
     const newAttempts = attempts + 1;
 
     return {
       allowed: true,
       remaining: maxAttempts - newAttempts,
-      resetTime: Date.now() + ((ttl || windowSeconds) * 1000),
-      isLocked: false
+      resetTime: Date.now() + (ttl || windowSeconds) * 1000,
+      isLocked: false,
     };
   },
 
@@ -297,9 +310,21 @@ export const otpOperations = {
     const cooldownKey = `otp:cooldown:${email}`;
 
     const [attempts, lockData, cooldownTTL] = await Promise.all([
-      safeRedisOperation(() => redis.get(attemptsKey), null, 'getRateLimitStatus-attempts'),
-      safeRedisOperation(() => redis.get(lockKey), null, 'getRateLimitStatus-lockData'),
-      safeRedisOperation(() => redis.ttl(cooldownKey), -1, 'getRateLimitStatus-cooldownTTL')
+      safeRedisOperation(
+        () => redis.get(attemptsKey),
+        null,
+        'getRateLimitStatus-attempts',
+      ),
+      safeRedisOperation(
+        () => redis.get(lockKey),
+        null,
+        'getRateLimitStatus-lockData',
+      ),
+      safeRedisOperation(
+        () => redis.ttl(cooldownKey),
+        -1,
+        'getRateLimitStatus-cooldownTTL',
+      ),
     ]);
 
     const currentAttempts = attempts ? parseInt(attempts) : 0;
@@ -309,13 +334,17 @@ export const otpOperations = {
     if (lockData) {
       try {
         lockInfo = JSON.parse(lockData);
-        lockTimeRemaining = await safeRedisOperation(
-          () => redis.ttl(lockKey),
-          0,
-          'getRateLimitStatus-lockTTL'
-        ) || 0;
+        lockTimeRemaining =
+          (await safeRedisOperation(
+            () => redis.ttl(lockKey),
+            0,
+            'getRateLimitStatus-lockTTL',
+          )) || 0;
       } catch (parseError) {
-        console.warn('Failed to parse lock data in getRateLimitStatus:', parseError);
+        console.warn(
+          'Failed to parse lock data in getRateLimitStatus:',
+          parseError,
+        );
       }
     }
 
@@ -324,9 +353,9 @@ export const otpOperations = {
       remaining: Math.max(5 - currentAttempts, 0),
       isLocked: !!lockInfo,
       lockTimeRemaining: Math.max(lockTimeRemaining, 0),
-      cooldownTimeRemaining: Math.max(cooldownTTL || -1, 0)
+      cooldownTimeRemaining: Math.max(cooldownTTL || -1, 0),
     };
-  }
+  },
 };
 
 // Test Redis connection
@@ -348,7 +377,7 @@ const redisOperations = {
     const result = await safeRedisOperation(
       () => redis.get(key),
       null,
-      `get:${key}`
+      `get:${key}`,
     );
     return result || null;
   },
@@ -358,13 +387,13 @@ const redisOperations = {
       await safeRedisOperation(
         () => redis.setex(key, ttlSeconds, value),
         undefined,
-        `setex:${key}`
+        `setex:${key}`,
       );
     } else {
       await safeRedisOperation(
         () => redis.set(key, value),
         undefined,
-        `set:${key}`
+        `set:${key}`,
       );
     }
   },
@@ -373,136 +402,253 @@ const redisOperations = {
     await safeRedisOperation(
       () => redis.setex(key, ttlSeconds, value),
       undefined,
-      `setex:${key}`
+      `setex:${key}`,
     );
   },
 
   async del(...keys: string[]): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.del(...keys),
-      0,
-      `del:${keys.join(',')}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(
+        () => redis.del(...keys),
+        0,
+        `del:${keys.join(',')}`,
+      )) || 0
+    );
   },
 
   async keys(pattern: string): Promise<string[]> {
-    return await safeRedisOperation(
-      () => redis.keys(pattern),
-      [],
-      `keys:${pattern}`
-    ) || [];
+    return (
+      (await safeRedisOperation(
+        () => redis.keys(pattern),
+        [],
+        `keys:${pattern}`,
+      )) || []
+    );
   },
 
   async exists(key: string): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.exists(key),
-      0,
-      `exists:${key}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(() => redis.exists(key), 0, `exists:${key}`)) ||
+      0
+    );
   },
 
   async ttl(key: string): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.ttl(key),
-      -1,
-      `ttl:${key}`
-    ) || -1;
+    return (
+      (await safeRedisOperation(() => redis.ttl(key), -1, `ttl:${key}`)) || -1
+    );
   },
 
   async incr(key: string): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.incr(key),
-      0,
-      `incr:${key}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(() => redis.incr(key), 0, `incr:${key}`)) || 0
+    );
   },
 
   async sadd(key: string, member: string): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.sadd(key, member),
-      0,
-      `sadd:${key}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(
+        () => redis.sadd(key, member),
+        0,
+        `sadd:${key}`,
+      )) || 0
+    );
   },
 
   async smembers(key: string): Promise<string[]> {
-    return await safeRedisOperation(
-      () => redis.smembers(key),
-      [],
-      `smembers:${key}`
-    ) || [];
+    return (
+      (await safeRedisOperation(
+        () => redis.smembers(key),
+        [],
+        `smembers:${key}`,
+      )) || []
+    );
   },
 
   async expire(key: string, seconds: number): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.expire(key, seconds),
-      0,
-      `expire:${key}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(
+        () => redis.expire(key, seconds),
+        0,
+        `expire:${key}`,
+      )) || 0
+    );
   },
 
   async ping(): Promise<string> {
-    return await safeRedisOperation(
-      () => redis.ping(),
-      'PONG',
-      'ping'
-    ) || 'PONG';
+    return (
+      (await safeRedisOperation(() => redis.ping(), 'PONG', 'ping')) || 'PONG'
+    );
   },
 
   async mget(keys: string[]): Promise<(string | null)[]> {
-    return await safeRedisOperation(
-      () => redis.mget(...keys),
-      keys.map(() => null),
-      `mget:${keys.join(',')}`
-    ) || keys.map(() => null);
+    return (
+      (await safeRedisOperation(
+        () => redis.mget(...keys),
+        keys.map(() => null),
+        `mget:${keys.join(',')}`,
+      )) || keys.map(() => null)
+    );
   },
 
   async zadd(key: string, score: number, member: string): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.zadd(key, score, member),
-      0,
-      `zadd:${key}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(
+        () => redis.zadd(key, score, member),
+        0,
+        `zadd:${key}`,
+      )) || 0
+    );
   },
 
-  async zremrangebyscore(key: string, min: number, max: number): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.zremrangebyscore(key, min, max),
-      0,
-      `zremrangebyscore:${key}`
-    ) || 0;
+  async zremrangebyscore(
+    key: string,
+    min: number,
+    max: number,
+  ): Promise<number> {
+    return (
+      (await safeRedisOperation(
+        () => redis.zremrangebyscore(key, min, max),
+        0,
+        `zremrangebyscore:${key}`,
+      )) || 0
+    );
   },
 
   async zcard(key: string): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.zcard(key),
-      0,
-      `zcard:${key}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(() => redis.zcard(key), 0, `zcard:${key}`)) || 0
+    );
   },
 
-  async zrange(key: string, start: number, stop: number, withScores?: 'WITHSCORES'): Promise<string[]> {
-    return await safeRedisOperation(
-      () => withScores ? redis.zrange(key, start, stop, withScores) : redis.zrange(key, start, stop),
-      [],
-      `zrange:${key}`
-    ) || [];
+  async zrange(
+    key: string,
+    start: number,
+    stop: number,
+    withScores?: 'WITHSCORES',
+  ): Promise<string[]> {
+    return (
+      (await safeRedisOperation(
+        () =>
+          withScores
+            ? redis.zrange(key, start, stop, withScores)
+            : redis.zrange(key, start, stop),
+        [],
+        `zrange:${key}`,
+      )) || []
+    );
   },
 
   async zcount(key: string, min: number, max: number): Promise<number> {
-    return await safeRedisOperation(
-      () => redis.zcount(key, min, max),
-      0,
-      `zcount:${key}`
-    ) || 0;
+    return (
+      (await safeRedisOperation(
+        () => redis.zcount(key, min, max),
+        0,
+        `zcount:${key}`,
+      )) || 0
+    );
+  },
+
+  // SCAN operation for pattern-based key scanning (CRITICAL FIX)
+  async scan(
+    cursor: string | number,
+    ...args: (string | number)[]
+  ): Promise<[string, string[]]> {
+    return (
+      (await safeRedisOperation(
+        async () => {
+          // Handle different SCAN argument patterns
+          if (args.length >= 4 && args[0] === 'MATCH' && args[2] === 'COUNT') {
+            // SCAN cursor MATCH pattern COUNT count
+            return await redis.scan(
+              String(cursor),
+              'MATCH',
+              String(args[1]),
+              'COUNT',
+              Number(args[3]),
+            );
+          } else if (args.length >= 2 && args[0] === 'MATCH') {
+            // SCAN cursor MATCH pattern
+            return await redis.scan(String(cursor), 'MATCH', String(args[1]));
+          } else {
+            // Basic SCAN cursor
+            return await redis.scan(String(cursor));
+          }
+        },
+        ['0', []],
+        `scan:${cursor}:${args.join(':')}`,
+      )) || ['0', []]
+    );
   },
 
   // Pipeline operations
   pipeline() {
     return redis.pipeline();
-  }
+  },
+
+  // Multi operations
+  multi() {
+    return redis.multi();
+  },
+
+  // INFO command for Redis server information
+  async info(section?: string): Promise<string> {
+    return (
+      (await safeRedisOperation(
+        () => (section ? redis.info(section) : redis.info()),
+        '',
+        `info:${section || 'all'}`,
+      )) || ''
+    );
+  },
+
+  // MEMORY command for memory analysis (using raw command for flexibility)
+  async memory(subcommand: string, ...args: (string | number)[]): Promise<any> {
+    return await safeRedisOperation(
+      () => redis.call('MEMORY', subcommand, ...args.map(String)),
+      null,
+      `memory:${subcommand}:${args.join(':')}`,
+    );
+  },
+
+  // TTL command to check key expiration
+  async getTtl(key: string): Promise<number> {
+    return (
+      (await safeRedisOperation(() => redis.ttl(key), -2, `ttl:${key}`)) || -2
+    );
+  },
+
+  // CONFIG SET command for Redis configuration
+  async configSet(parameter: string, value: string): Promise<string> {
+    const result = await safeRedisOperation(
+      () => redis.config('SET', parameter, value),
+      'OK',
+      `config:set:${parameter}`,
+    );
+    return (result as string) || 'OK';
+  },
+
+  // CONFIG GET command for Redis configuration
+  async configGet(parameter: string): Promise<string[]> {
+    const result = await safeRedisOperation(
+      () => redis.config('GET', parameter),
+      [],
+      `config:get:${parameter}`,
+    );
+    return (result as string[]) || [];
+  },
+
+  // OBJECT IDLETIME command for key age analysis
+  async objectIdletime(key: string): Promise<number | null> {
+    const result = await safeRedisOperation(
+      () => redis.object('IDLETIME', key),
+      null,
+      `object:idletime:${key}`,
+    );
+    return result as number | null;
+  },
 };
 
 // Export the main Redis client and operations
 export default redis;
-export { redis, redisOperations, safeRedisOperation, ensureConnection };
+export { ensureConnection, redis, redisOperations, safeRedisOperation };

@@ -1,26 +1,28 @@
 import { Router } from 'express';
-import { UserRoutes } from '../modules/User/user.route';
+import { AIRoutes } from '../modules/AI/ai.route';
+import { AnalyticsRoutes } from '../modules/Analytics/analytics.route';
 import { AuthRoutes } from '../modules/Auth/auth.route';
 import { OAuthRoutes } from '../modules/Auth/oauth.route';
 import { OAuthCallbackRoutes } from '../modules/Auth/oauthCallback.route';
+import { BookmarkRoutes } from '../modules/Bookmark/bookmark.route';
 import { CategoryRoutes } from '../modules/Category/category.route';
-import { SubCategoryRoutes } from '../modules/SubCategory/subCategory.route';
 import { CourseRoutes } from '../modules/Course/course.route';
-import { LectureRoutes } from '../modules/Lecture/lecture.route';
-import { PaymentRoutes } from '../modules/Payment/payment.route';
 import { InvoiceRoutes } from '../modules/Invoice/invoice.routes';
+import { LectureRoutes } from '../modules/Lecture/lecture.route';
+import { MessagingRoutes } from '../modules/Messaging/messaging.route';
+import { NoteRoutes } from '../modules/Note/note.route';
+import { PaymentRoutes } from '../modules/Payment/payment.route';
+import { ReviewRoutes } from '../modules/Payment/review.route';
+import { QuestionRoutes } from '../modules/Question/question.route';
 import { StripeConnectRoutes } from '../modules/StripeConnect/stripeConnect.routes';
 import { StudentRoutes } from '../modules/Student/student.route';
+import { SubCategoryRoutes } from '../modules/SubCategory/subCategory.route';
 import { TeacherRoutes } from '../modules/Teacher/teacher.route';
-import { BookmarkRoutes } from '../modules/Bookmark/bookmark.route';
-import { QuestionRoutes } from '../modules/Question/question.route';
-import { NoteRoutes } from '../modules/Note/note.route';
-import { AIRoutes } from '../modules/AI/ai.route';
-import { AnalyticsRoutes } from '../modules/Analytics/analytics.route';
-import { MessagingRoutes } from '../modules/Messaging/messaging.route';
-import { ReviewRoutes } from '../modules/Payment/review.route';
-import monitoringRoutes from './monitoringRoutes';
+import { UserRoutes } from '../modules/User/user.route';
+import apiValidationRoutes from './apiValidationRoutes';
+import dashboardRoutes from './dashboardRoutes';
 import databaseRoutes from './databaseRoutes';
+import monitoringRoutes from './monitoringRoutes';
 
 type TModuleRoutes = {
   path: string;
@@ -117,6 +119,14 @@ const moduleRoutes: TModuleRoutes[] = [
   {
     path: '/database',
     route: databaseRoutes,
+  },
+  {
+    path: '/dashboard',
+    route: dashboardRoutes,
+  },
+  {
+    path: '/api-validation',
+    route: apiValidationRoutes,
   },
 ];
 

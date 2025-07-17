@@ -1,10 +1,10 @@
 import express from 'express';
+import { z } from 'zod';
+import auth from '../../middlewares/auth';
+import validateRequest from '../../middlewares/validateRequest';
+import { USER_ROLE } from '../User/user.constant';
 import { StripeConnectController } from './stripeConnect.controller';
 import { StripeConnectWebhook } from './stripeConnect.webhook';
-import auth from '../../middlewares/auth';
-import { USER_ROLE } from '../User/user.constant';
-import validateRequest from '../../middlewares/validateRequest';
-import { z } from 'zod';
 
 const router = express.Router();
 
@@ -28,19 +28,29 @@ const createAccountLinkSchema = z.object({
 
 const updateAccountSchema = z.object({
   body: z.object({
-    business_profile: z.object({
-      name: z.string().optional(),
-      url: z.string().url().optional(),
-      support_phone: z.string().optional(),
-      support_email: z.string().email().optional(),
-    }).optional(),
-    settings: z.object({
-      payouts: z.object({
-        schedule: z.object({
-          interval: z.enum(['manual', 'daily', 'weekly', 'monthly']).optional(),
-        }).optional(),
-      }).optional(),
-    }).optional(),
+    business_profile: z
+      .object({
+        name: z.string().optional(),
+        url: z.string().url().optional(),
+        support_phone: z.string().optional(),
+        support_email: z.string().email().optional(),
+      })
+      .optional(),
+    settings: z
+      .object({
+        payouts: z
+          .object({
+            schedule: z
+              .object({
+                interval: z
+                  .enum(['manual', 'daily', 'weekly', 'monthly'])
+                  .optional(),
+              })
+              .optional(),
+          })
+          .optional(),
+      })
+      .optional(),
   }),
 });
 
@@ -49,7 +59,7 @@ router.post(
   '/create-account',
   auth(USER_ROLE.teacher),
   validateRequest(createAccountSchema),
-  StripeConnectController.createAccount
+  StripeConnectController.createAccount,
 );
 
 // Create account link for onboarding
@@ -57,14 +67,28 @@ router.post(
   '/create-account-link',
   auth(USER_ROLE.teacher),
   validateRequest(createAccountLinkSchema),
-  StripeConnectController.createAccountLink
+  StripeConnectController.createAccountLink,
 );
 
 // Get account status
 router.get(
   '/account-status',
   auth(USER_ROLE.teacher, USER_ROLE.admin),
-  StripeConnectController.getAccountStatus
+  StripeConnectController.getAccountStatus,
+);
+
+// Quick status check for real-time updates
+router.get(
+  '/quick-status',
+  auth(USER_ROLE.teacher, USER_ROLE.admin),
+  StripeConnectController.quickStatusCheck,
+);
+
+// Proactive verification check
+router.post(
+  '/proactive-verification',
+  auth(USER_ROLE.teacher),
+  StripeConnectController.proactiveVerificationCheck,
 );
 
 // Update account information
@@ -72,14 +96,14 @@ router.post(
   '/update-account',
   auth(USER_ROLE.teacher),
   validateRequest(updateAccountSchema),
-  StripeConnectController.updateAccount
+  StripeConnectController.updateAccount,
 );
 
 // Disconnect account
 router.delete(
   '/disconnect-account',
   auth(USER_ROLE.teacher),
-  StripeConnectController.disconnectAccount
+  StripeConnectController.disconnectAccount,
 );
 
 // Enterprise features
@@ -87,24 +111,32 @@ router.delete(
 router.post(
   '/retry-connection',
   auth(USER_ROLE.teacher),
-  StripeConnectController.retryConnection
+  StripeConnectController.retryConnection,
 );
 
 // Get audit log for compliance
 router.get(
   '/audit-log',
   auth(USER_ROLE.teacher, USER_ROLE.admin),
-  StripeConnectController.getAuditLog
+  StripeConnectController.getAuditLog,
 );
 
 // Enhanced disconnect with tracking
 router.delete(
   '/disconnect-enhanced',
   auth(USER_ROLE.teacher),
-  StripeConnectController.disconnectAccountEnhanced
+  StripeConnectController.disconnectAccountEnhanced,
 );
 
 // Webhook endpoint (no auth required - Stripe handles verification)
 router.post('/webhook', StripeConnectWebhook.handleWebhook);
+
+// Alias route for backward compatibility and API testing
+router.post(
+  '/connect',
+  auth(USER_ROLE.teacher),
+  validateRequest(createAccountLinkSchema),
+  StripeConnectController.createAccountLink,
+);
 
 export const StripeConnectRoutes = router;

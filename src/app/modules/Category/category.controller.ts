@@ -28,6 +28,13 @@ const getAllCategories = catchAsync(async (req, res) => {
 const getAllCategoriesWithSubcategories = catchAsync(async (req, res) => {
   const result = await CategoryService.getAllCategoriesWithSubcategories();
 
+  // Set Cache-Control headers to prevent disk caching and ensure fresh data
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Last-Modified', new Date().toUTCString());
+  res.setHeader('ETag', `"${Date.now()}"`);
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

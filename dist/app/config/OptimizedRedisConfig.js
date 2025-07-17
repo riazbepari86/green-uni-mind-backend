@@ -79,7 +79,8 @@ class OptimizedRedisConfig {
                     this.connectionPool.sessions = yield this.createConnection('sessions', Object.assign(Object.assign({}, baseConfig), { keyPrefix: 'sessions:' }));
                 }
                 // Jobs connection only in production or when explicitly enabled
-                if (process.env.NODE_ENV === 'production' || process.env.ENABLE_REDIS_JOBS === 'true') {
+                if (process.env.NODE_ENV === 'production' ||
+                    process.env.ENABLE_REDIS_JOBS === 'true') {
                     this.connectionPool.jobs = yield this.createConnection('jobs', Object.assign(Object.assign({}, baseConfig), { maxRetriesPerRequest: null, keyPrefix: undefined }));
                 }
                 this.isInitialized = true;
@@ -100,14 +101,21 @@ class OptimizedRedisConfig {
             port: index_1.default.redis.port || 6379,
             password: index_1.default.redis.password || '',
             family: 4,
-            connectTimeout: 5000, // Reduced from 10000
-            commandTimeout: 3000, // Reduced from 5000
-            retryDelayOnFailover: 100,
+            connectTimeout: 30000, // Increased from 5000 to 30000 for better reliability
+            commandTimeout: 30000, // Increased from 3000 to 30000 for better reliability
+            retryDelayOnFailover: 1000, // Increased from 100 to 1000 for exponential backoff
             enableOfflineQueue: true, // Enable offline queue to prevent errors
-            maxRetriesPerRequest: 2, // Reduced from 3
+            maxRetriesPerRequest: 5, // Increased from 2 to 5 for better resilience
             lazyConnect: true,
             keepAlive: 30000,
-            tls: index_1.default.redis.host && index_1.default.redis.host.includes('upstash.io') ? {} : undefined,
+            // Enhanced retry strategy with exponential backoff
+            retryDelayOnClusterDown: 300,
+            // Circuit breaker configuration
+            enableReadyCheck: true,
+            maxLoadingTimeout: 30000,
+            tls: index_1.default.redis.host && index_1.default.redis.host.includes('upstash.io')
+                ? {}
+                : undefined,
         };
     }
     /**
@@ -133,7 +141,7 @@ class OptimizedRedisConfig {
             try {
                 yield Promise.race([
                     redis.ping(),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 3000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 3000)),
                 ]);
                 console.log(`✅ Redis ${name} connection tested successfully`);
                 return redis;
@@ -180,7 +188,7 @@ class OptimizedRedisConfig {
                     return false;
                 yield Promise.race([
                     primary.ping(),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), 1000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), 1000)),
                 ]);
                 return true;
             }
@@ -199,7 +207,8 @@ class OptimizedRedisConfig {
      * Get active connection count
      */
     getActiveConnectionCount() {
-        return Object.values(this.connectionPool).filter(conn => conn !== null).length;
+        return Object.values(this.connectionPool).filter((conn) => conn !== null)
+            .length;
     }
     /**
      * Cleanup connections
@@ -207,8 +216,8 @@ class OptimizedRedisConfig {
     cleanup() {
         return __awaiter(this, void 0, void 0, function* () {
             console.log('🧹 Cleaning up Redis connections...');
-            const connections = Object.values(this.connectionPool).filter(conn => conn !== null);
-            yield Promise.allSettled(connections.map(conn => conn === null || conn === void 0 ? void 0 : conn.disconnect()));
+            const connections = Object.values(this.connectionPool).filter((conn) => conn !== null);
+            yield Promise.allSettled(connections.map((conn) => conn === null || conn === void 0 ? void 0 : conn.disconnect()));
             this.connectionPool = {
                 primary: null,
                 cache: null,

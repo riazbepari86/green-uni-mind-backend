@@ -1,12 +1,16 @@
 import { Redis } from 'ioredis';
-import { IRedisService, RedisServiceError, IRedisMonitoringService } from './interfaces';
+import {
+  IRedisMonitoringService,
+  IRedisService,
+  RedisServiceError,
+} from './interfaces';
 
 export abstract class BaseRedisService implements IRedisService {
   protected monitoring?: IRedisMonitoringService;
-  
+
   constructor(
     public client: Redis,
-    monitoring?: IRedisMonitoringService
+    monitoring?: IRedisMonitoringService,
   ) {
     this.monitoring = monitoring;
     this.setupErrorHandling();
@@ -36,13 +40,16 @@ export abstract class BaseRedisService implements IRedisService {
     try {
       this.client.disconnect();
     } catch (error) {
-      console.error(`Error disconnecting Redis client in ${this.constructor.name}:`, error);
+      console.error(
+        `Error disconnecting Redis client in ${this.constructor.name}:`,
+        error,
+      );
     }
   }
 
   protected async executeWithMonitoring<T>(
     operation: string,
-    fn: () => Promise<T>
+    fn: () => Promise<T>,
   ): Promise<T> {
     const start = Date.now();
     try {
@@ -56,7 +63,7 @@ export abstract class BaseRedisService implements IRedisService {
       throw new RedisServiceError(
         `Redis operation '${operation}' failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         operation,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -64,7 +71,7 @@ export abstract class BaseRedisService implements IRedisService {
   protected async safeExecute<T>(
     operation: () => Promise<T>,
     fallback?: T,
-    errorMessage?: string
+    errorMessage?: string,
   ): Promise<T | undefined> {
     try {
       return await operation();
@@ -85,7 +92,7 @@ export abstract class BaseRedisService implements IRedisService {
     if (value === null) {
       return null;
     }
-    
+
     try {
       return JSON.parse(value);
     } catch {
@@ -105,13 +112,13 @@ export abstract class BaseRedisService implements IRedisService {
 
     return this.executeWithMonitoring('mget', async () => {
       const values = await this.client.mget(...keys);
-      return values.map(value => this.deserializeValue<T>(value));
+      return values.map((value) => this.deserializeValue<T>(value));
     });
   }
 
   protected async setMultipleKeys<T>(
     keyValuePairs: Record<string, T>,
-    ttlSeconds?: number
+    ttlSeconds?: number,
   ): Promise<void> {
     const keys = Object.keys(keyValuePairs);
     if (keys.length === 0) {
@@ -120,7 +127,7 @@ export abstract class BaseRedisService implements IRedisService {
 
     return this.executeWithMonitoring('mset', async () => {
       const pipeline = this.client.pipeline();
-      
+
       for (const [key, value] of Object.entries(keyValuePairs)) {
         const serializedValue = this.serializeValue(value);
         if (ttlSeconds) {
@@ -129,19 +136,67 @@ export abstract class BaseRedisService implements IRedisService {
           pipeline.set(key, serializedValue);
         }
       }
-      
+
       await pipeline.exec();
     });
   }
 
   protected async deletePattern(pattern: string): Promise<number> {
     return this.executeWithMonitoring('delete_pattern', async () => {
-      const keys = await this.client.keys(pattern);
+      const keys = await this.scanKeysWithPattern(pattern, 1000);
       if (keys.length === 0) {
         return 0;
       }
-      return await this.client.del(...keys);
+
+      // Delete in batches to avoid overwhelming Redis
+      const batchSize = 50;
+      let totalDeleted = 0;
+
+      for (let i = 0; i < keys.length; i += batchSize) {
+        const batch = keys.slice(i, i + batchSize);
+        if (batch.length > 0) {
+          const deleted = await this.client.del(...batch);
+          totalDeleted += deleted;
+        }
+      }
+
+      return totalDeleted;
     });
+  }
+
+  /**
+   * Scan keys with pattern using SCAN instead of KEYS for better performance
+   */
+  protected async scanKeysWithPattern(
+    pattern: string,
+    limit: number = 1000,
+  ): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      try {
+        const result = await this.client.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          50,
+        );
+        cursor = result[0];
+        keys.push(...result[1]);
+
+        // Stop when we have enough keys or hit the limit
+        if (keys.length >= limit) {
+          break;
+        }
+      } catch (error) {
+        console.error(`Error scanning pattern ${pattern}:`, error);
+        break;
+      }
+    } while (cursor !== '0' && keys.length < limit);
+
+    return keys.slice(0, limit);
   }
 
   protected async existsMultiple(keys: string[]): Promise<boolean[]> {
@@ -151,19 +206,25 @@ export abstract class BaseRedisService implements IRedisService {
 
     return this.executeWithMonitoring('exists_multiple', async () => {
       const pipeline = this.client.pipeline();
-      keys.forEach(key => pipeline.exists(key));
+      keys.forEach((key) => pipeline.exists(key));
       const results = await pipeline.exec();
-      return results?.map(result => result[1] === 1) || [];
+      return results?.map((result) => result[1] === 1) || [];
     });
   }
 
-  protected async incrementCounter(key: string, increment: number = 1): Promise<number> {
+  protected async incrementCounter(
+    key: string,
+    increment: number = 1,
+  ): Promise<number> {
     return this.executeWithMonitoring('increment', async () => {
       return await this.client.incrby(key, increment);
     });
   }
 
-  protected async decrementCounter(key: string, decrement: number = 1): Promise<number> {
+  protected async decrementCounter(
+    key: string,
+    decrement: number = 1,
+  ): Promise<number> {
     return this.executeWithMonitoring('decrement', async () => {
       return await this.client.decrby(key, decrement);
     });
@@ -175,7 +236,10 @@ export abstract class BaseRedisService implements IRedisService {
     });
   }
 
-  protected async removeFromSet(key: string, ...members: string[]): Promise<number> {
+  protected async removeFromSet(
+    key: string,
+    ...members: string[]
+  ): Promise<number> {
     return this.executeWithMonitoring('srem', async () => {
       return await this.client.srem(key, ...members);
     });
@@ -197,7 +261,7 @@ export abstract class BaseRedisService implements IRedisService {
   protected async addToSortedSet(
     key: string,
     score: number,
-    member: string
+    member: string,
   ): Promise<number> {
     return this.executeWithMonitoring('zadd', async () => {
       return await this.client.zadd(key, score, member);
@@ -208,7 +272,7 @@ export abstract class BaseRedisService implements IRedisService {
     key: string,
     start: number = 0,
     stop: number = -1,
-    withScores: boolean = false
+    withScores: boolean = false,
   ): Promise<string[]> {
     return this.executeWithMonitoring('zrange', async () => {
       if (withScores) {
@@ -218,13 +282,19 @@ export abstract class BaseRedisService implements IRedisService {
     });
   }
 
-  protected async removeFromSortedSet(key: string, ...members: string[]): Promise<number> {
+  protected async removeFromSortedSet(
+    key: string,
+    ...members: string[]
+  ): Promise<number> {
     return this.executeWithMonitoring('zrem', async () => {
       return await this.client.zrem(key, ...members);
     });
   }
 
-  protected async pushToList(key: string, ...values: string[]): Promise<number> {
+  protected async pushToList(
+    key: string,
+    ...values: string[]
+  ): Promise<number> {
     return this.executeWithMonitoring('lpush', async () => {
       return await this.client.lpush(key, ...values);
     });
@@ -239,44 +309,63 @@ export abstract class BaseRedisService implements IRedisService {
   protected async getListRange(
     key: string,
     start: number = 0,
-    stop: number = -1
+    stop: number = -1,
   ): Promise<string[]> {
     return this.executeWithMonitoring('lrange', async () => {
       return await this.client.lrange(key, start, stop);
     });
   }
 
-  protected async trimList(key: string, start: number, stop: number): Promise<void> {
+  protected async trimList(
+    key: string,
+    start: number,
+    stop: number,
+  ): Promise<void> {
     return this.executeWithMonitoring('ltrim', async () => {
       await this.client.ltrim(key, start, stop);
     });
   }
 
-  protected async setHashField(key: string, field: string, value: string): Promise<void> {
+  protected async setHashField(
+    key: string,
+    field: string,
+    value: string,
+  ): Promise<void> {
     return this.executeWithMonitoring('hset', async () => {
       await this.client.hset(key, field, value);
     });
   }
 
-  protected async getHashField(key: string, field: string): Promise<string | null> {
+  protected async getHashField(
+    key: string,
+    field: string,
+  ): Promise<string | null> {
     return this.executeWithMonitoring('hget', async () => {
       return await this.client.hget(key, field);
     });
   }
 
-  protected async getAllHashFields(key: string): Promise<Record<string, string>> {
+  protected async getAllHashFields(
+    key: string,
+  ): Promise<Record<string, string>> {
     return this.executeWithMonitoring('hgetall', async () => {
       return await this.client.hgetall(key);
     });
   }
 
-  protected async deleteHashField(key: string, ...fields: string[]): Promise<number> {
+  protected async deleteHashField(
+    key: string,
+    ...fields: string[]
+  ): Promise<number> {
     return this.executeWithMonitoring('hdel', async () => {
       return await this.client.hdel(key, ...fields);
     });
   }
 
-  protected async setExpiration(key: string, ttlSeconds: number): Promise<boolean> {
+  protected async setExpiration(
+    key: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
     return this.executeWithMonitoring('expire', async () => {
       const result = await this.client.expire(key, ttlSeconds);
       return result === 1;

@@ -75,6 +75,15 @@ const stripeConnectSchema = new Schema<IStripeConnectInfo>({
   lastWebhookReceived: {
     type: Date,
   },
+  // New fields for enhanced verification tracking
+  verificationStage: {
+    type: String,
+    enum: ['not_started', 'account_created', 'onboarding_started', 'processing_capabilities', 'under_review', 'completed', 'action_required', 'error'],
+    default: 'not_started',
+  },
+  estimatedCompletionTime: {
+    type: Date,
+  },
 });
 
 const stripeAuditLogSchema = new Schema<IStripeAuditLog>({

@@ -60,4 +60,11 @@ const lectureSchema = new Schema<ILecture>(
   { timestamps: true },
 );
 
+// Create indexes for optimal query performance
+lectureSchema.index({ courseId: 1, order: 1 }); // Primary query pattern
+lectureSchema.index({ courseId: 1, createdAt: -1 }); // For recent lectures
+lectureSchema.index({ courseId: 1, isPreviewFree: 1 }); // For preview filtering
+lectureSchema.index({ order: 1 }); // For ordering operations
+lectureSchema.index({ createdAt: -1 }); // For general sorting
+
 export const Lecture = model<ILecture>('Lecture', lectureSchema);

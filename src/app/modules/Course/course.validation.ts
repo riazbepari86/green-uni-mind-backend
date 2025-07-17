@@ -11,10 +11,29 @@ const createCourseZodSchema = z.object({
       .string({
         required_error: 'Title is required',
       })
-      .min(1, { message: 'Title cannot be empty' }),
+      .min(3, { message: 'Title must be at least 3 characters' })
+      .max(200, { message: 'Title must not exceed 200 characters' }),
 
-    subtitle: z.string().optional(),
-    description: z.string().optional(),
+    subtitle: z
+      .string()
+      .max(300, { message: 'Subtitle must not exceed 300 characters' })
+      .optional(),
+    description: z
+      .string()
+      .max(5000, { message: 'Description must not exceed 5000 characters' })
+      .optional(),
+
+    coursePrice: z
+      .union([
+        z.number().min(0, 'Course price cannot be negative'),
+        z.string().transform((val) => {
+          const num = parseFloat(val);
+          if (isNaN(num)) throw new Error('Invalid price format');
+          if (num < 0) throw new Error('Course price cannot be negative');
+          return num;
+        })
+      ])
+      .optional(),
 
     categoryId: z
       .string({
@@ -66,11 +85,33 @@ const createCourseZodSchema = z.object({
 
 const updateCourseZodSchema = z.object({
   body: z.object({
-    title: z.string().min(1, { message: 'Title cannot be empty' }).optional(),
+    title: z
+      .string()
+      .min(3, { message: 'Title must be at least 3 characters' })
+      .max(200, { message: 'Title must not exceed 200 characters' })
+      .optional(),
 
-    subtitle: z.string().optional(),
+    subtitle: z
+      .string()
+      .max(300, { message: 'Subtitle must not exceed 300 characters' })
+      .optional(),
 
-    description: z.string().optional(),
+    description: z
+      .string()
+      .max(5000, { message: 'Description must not exceed 5000 characters' })
+      .optional(),
+
+    coursePrice: z
+      .union([
+        z.number().min(0, 'Course price cannot be negative'),
+        z.string().transform((val) => {
+          const num = parseFloat(val);
+          if (isNaN(num)) throw new Error('Invalid price format');
+          if (num < 0) throw new Error('Course price cannot be negative');
+          return num;
+        })
+      ])
+      .optional(),
 
     categoryId: z.string().optional(),
 

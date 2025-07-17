@@ -13,10 +13,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserControllers = void 0;
+const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../utils/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../utils/sendResponse"));
 const user_service_1 = require("./user.service");
-const http_status_1 = __importDefault(require("http-status"));
 const createStudent = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { password, student: studentData } = req.body;
     const result = yield user_service_1.UserServices.createStudentIntoDB(req.file, password, studentData);
@@ -93,6 +93,20 @@ const changeStatus = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, v
 const getMe = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { email, role } = req.user;
     const result = yield user_service_1.UserServices.getMe(email, role);
+    console.log('=== GET ME API DEBUG ===');
+    console.log('User email:', email);
+    console.log('User role:', role);
+    console.log('Result structure:', {
+        id: result === null || result === void 0 ? void 0 : result._id,
+        email: result === null || result === void 0 ? void 0 : result.email,
+        user: (result === null || result === void 0 ? void 0 : result.user)
+            ? {
+                id: result.user._id,
+                // Removed email access since user is ObjectId, not populated user object
+            }
+            : 'No user field',
+    });
+    console.log('========================');
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -111,6 +125,64 @@ const updateUserProfile = (0, catchAsync_1.default)((req, res) => __awaiter(void
         data: result,
     });
 }));
+const getTeacherProfile = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { teacherId } = req.params;
+    const { _id, role } = req.user;
+    // Allow teachers to access any teacher profile, but students and regular users can only access their own data
+    if (role !== 'teacher' && _id !== teacherId) {
+        return (0, sendResponse_1.default)(res, {
+            statusCode: http_status_1.default.FORBIDDEN,
+            success: false,
+            message: 'You can only access your own profile data',
+            data: null,
+        });
+    }
+    const result = yield user_service_1.UserServices.getSingleUserFromDB(teacherId);
+    // Ensure the user is actually a teacher
+    if (result && result.role !== 'teacher') {
+        return (0, sendResponse_1.default)(res, {
+            statusCode: http_status_1.default.NOT_FOUND,
+            success: false,
+            message: 'Teacher not found',
+            data: null,
+        });
+    }
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Teacher profile retrieved successfully!',
+        data: result,
+    });
+}));
+const getStudentProfile = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { studentId } = req.params;
+    const { _id, role } = req.user;
+    // Allow teachers to access any student profile, but students can only access their own data
+    if (role !== 'teacher' && _id !== studentId) {
+        return (0, sendResponse_1.default)(res, {
+            statusCode: http_status_1.default.FORBIDDEN,
+            success: false,
+            message: 'You can only access your own profile data',
+            data: null,
+        });
+    }
+    const result = yield user_service_1.UserServices.getSingleUserFromDB(studentId);
+    // Ensure the user is actually a student
+    if (result && result.role !== 'student') {
+        return (0, sendResponse_1.default)(res, {
+            statusCode: http_status_1.default.NOT_FOUND,
+            success: false,
+            message: 'Student not found',
+            data: null,
+        });
+    }
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Student profile retrieved successfully!',
+        data: result,
+    });
+}));
 exports.UserControllers = {
     // registerUser,
     createStudent,
@@ -120,4 +192,6 @@ exports.UserControllers = {
     getMe,
     changeStatus,
     updateUserProfile,
+    getTeacherProfile,
+    getStudentProfile,
 };

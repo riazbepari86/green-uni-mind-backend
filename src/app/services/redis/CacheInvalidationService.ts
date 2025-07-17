@@ -458,15 +458,17 @@ export class CacheInvalidationService extends BaseRedisService implements ICache
   }
 
   // Smart invalidation based on data relationships
+  // Modified to focus on database-level operations rather than API response caching
   async smartInvalidate(entityType: string, entityId: string, operation: 'create' | 'update' | 'delete'): Promise<void> {
     return this.executeWithMonitoring('smart_invalidate', async () => {
+      // Simplified invalidation map - removed course/lecture API caching
+      // Only handle database-level cache invalidation for non-course entities
       const invalidationMap: Record<string, string[]> = {
         user: ['user_profile', 'user_data', 'user_dashboard'],
-        course: ['course_content', 'course_list', 'course_details', 'course_enrollments'],
         enrollment: ['user_courses', 'course_enrollments', 'student_list'],
         payment: ['payment_history', 'balance', 'earnings', 'dashboard'],
-        lesson: ['course_content', 'lesson_content'],
-        assignment: ['course_content', 'assignment_list'],
+        // Removed course and lecture entries to eliminate API response caching conflicts
+        // Frontend Redux will handle all course/lecture caching
       };
 
       const tags = invalidationMap[entityType] || [];
@@ -477,6 +479,9 @@ export class CacheInvalidationService extends BaseRedisService implements ICache
           entityType === 'user' ? entityId : undefined,
           'smart_invalidation'
         );
+      } else if (entityType === 'course' || entityType === 'lecture') {
+        // Log course/lecture operations but don't cache at API level
+        console.log(`📝 ${entityType} ${operation} operation logged: ${entityId} (Frontend Redux handles caching)`);
       }
     });
   }

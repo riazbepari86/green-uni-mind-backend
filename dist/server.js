@@ -59,9 +59,11 @@ const StartupProfiler_1 = require("./app/utils/StartupProfiler");
 // Import related services
 const ActivityTrackingService_1 = __importDefault(require("./app/services/activity/ActivityTrackingService"));
 const MessagingService_1 = __importDefault(require("./app/services/messaging/MessagingService"));
+const DatabaseEventListener_1 = __importDefault(require("./app/services/cache/DatabaseEventListener"));
 let server;
 let activityTrackingService;
 let messagingService;
+let databaseEventListener;
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -108,6 +110,27 @@ function main() {
                 catch (error) {
                     logger_1.Logger.error('❌ Service initialization failed:', { error });
                     (0, StartupProfiler_1.failPhase)('Service Initialization', error);
+                }
+                // Initialize Enterprise Cache Event Listener
+                (0, StartupProfiler_1.startPhase)('Database Event Listener');
+                try {
+                    databaseEventListener = new DatabaseEventListener_1.default();
+                    // Start listening after database connection is established
+                    setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                        try {
+                            yield databaseEventListener.startListening();
+                            logger_1.Logger.info('✅ Database event listener started successfully');
+                            console_replacement_1.specializedLog.system.startup('Database event listener');
+                        }
+                        catch (error) {
+                            logger_1.Logger.error('❌ Database event listener failed to start:', { error });
+                        }
+                    }), 2000); // Wait 2 seconds for DB connection to be stable
+                    (0, StartupProfiler_1.completePhase)('Database Event Listener');
+                }
+                catch (error) {
+                    logger_1.Logger.error('❌ Database event listener initialization failed:', { error });
+                    (0, StartupProfiler_1.failPhase)('Database Event Listener', error);
                 }
                 // Complete startup profiling after all immediate tasks
                 setTimeout(() => {
@@ -239,5 +262,4 @@ process.on('SIGINT', () => {
         });
     }
 });
-// Export the app for Vercel serverless functions
 exports.default = app_1.default;

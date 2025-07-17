@@ -1,9 +1,9 @@
 import { Redis } from 'ioredis';
-import { redisServiceManager } from '../redis/RedisServiceManager';
-import { ApiCacheService } from '../redis/ApiCacheService';
-import { QueryCacheService } from '../redis/QueryCacheService';
-import { CacheInvalidationService } from '../redis/CacheInvalidationService';
 import { jobQueueManager } from '../jobs/JobQueueManager';
+import { ApiCacheService } from '../redis/ApiCacheService';
+import { CacheInvalidationService } from '../redis/CacheInvalidationService';
+import { QueryCacheService } from '../redis/QueryCacheService';
+import { redisServiceManager } from '../redis/RedisServiceManager';
 
 export interface PerformanceMetrics {
   timestamp: string;
@@ -55,18 +55,24 @@ export interface PerformanceMetrics {
     };
   };
   jobs: {
-    queues: Record<string, {
-      waiting: number;
-      active: number;
-      completed: number;
-      failed: number;
-      delayed: number;
-    }>;
-    workers: Record<string, {
-      isRunning: boolean;
-      processed: number;
-      failed: number;
-    }>;
+    queues: Record<
+      string,
+      {
+        waiting: number;
+        active: number;
+        completed: number;
+        failed: number;
+        delayed: number;
+      }
+    >;
+    workers: Record<
+      string,
+      {
+        isRunning: boolean;
+        processed: number;
+        failed: number;
+      }
+    >;
     performance: {
       averageProcessingTime: number;
       throughputPerMinute: number;
@@ -123,9 +129,18 @@ export class PerformanceDashboard {
 
   constructor() {
     this.redis = redisServiceManager.primaryClient;
-    this.apiCache = new ApiCacheService(redisServiceManager.cacheClient, redisServiceManager.monitoring);
-    this.queryCache = new QueryCacheService(redisServiceManager.cacheClient, redisServiceManager.monitoring);
-    this.invalidationService = new CacheInvalidationService(redisServiceManager.cacheClient, redisServiceManager.monitoring);
+    this.apiCache = new ApiCacheService(
+      redisServiceManager.cacheClient,
+      redisServiceManager.monitoring,
+    );
+    this.queryCache = new QueryCacheService(
+      redisServiceManager.cacheClient,
+      redisServiceManager.monitoring,
+    );
+    this.invalidationService = new CacheInvalidationService(
+      redisServiceManager.cacheClient,
+      redisServiceManager.monitoring,
+    );
 
     // DISABLED: Excessive Redis operations causing 121K+ ops/min
     console.log('📵 PerformanceDashboard disabled to prevent Redis overload');
@@ -189,14 +204,16 @@ export class PerformanceDashboard {
       },
     ];
 
-    defaultRules.forEach(rule => {
+    defaultRules.forEach((rule) => {
       this.alertRules.set(rule.name, rule);
     });
   }
 
   private startMetricsCollection(): void {
     // DISABLED: Excessive Redis operations and storage consumption
-    console.log('📵 Performance metrics collection disabled to prevent Redis overload');
+    console.log(
+      '📵 Performance metrics collection disabled to prevent Redis overload',
+    );
 
     // Optional: Very basic metrics collection every 30 minutes (instead of every minute)
     // and store in memory only (not Redis)
@@ -208,8 +225,8 @@ export class PerformanceDashboard {
           system: {
             uptime: process.uptime(),
             memory: process.memoryUsage(),
-            cpu: process.cpuUsage()
-          }
+            cpu: process.cpuUsage(),
+          },
         };
 
         // Store only in memory, not Redis
@@ -221,13 +238,14 @@ export class PerformanceDashboard {
         }
 
         console.log('📊 Basic system metrics collected (memory only)');
-
       } catch (error) {
         console.error('Error collecting basic metrics:', error);
       }
     }, 1800000); // Every 30 minutes instead of 1 minute
 
-    console.log('📊 Minimal performance monitoring started (30min intervals, memory only)');
+    console.log(
+      '📊 Minimal performance monitoring started (30min intervals, memory only)',
+    );
   }
 
   async collectMetrics(): Promise<PerformanceMetrics> {
@@ -241,7 +259,8 @@ export class PerformanceDashboard {
     // Collect cache metrics
     const apiCacheStats = await this.apiCache.getApiCacheStats();
     const queryCacheStats = await this.queryCache.getCacheStats();
-    const invalidationMetrics = await this.invalidationService.getInvalidationMetrics();
+    const invalidationMetrics =
+      await this.invalidationService.getInvalidationMetrics();
 
     // Collect job metrics
     const jobStats = await jobQueueManager.getQueueStats();
@@ -258,9 +277,21 @@ export class PerformanceDashboard {
         health: redisHealth,
         memory: redisMemory,
         connections: {
-          active: (typeof redisHealth === 'object' && redisHealth !== null && (redisHealth as any).clients?.primary?.connections) || 0,
-          total: (typeof redisHealth === 'object' && redisHealth !== null && (redisHealth as any).clients?.primary?.totalConnections) || 0,
-          failed: (typeof redisHealth === 'object' && redisHealth !== null && (redisHealth as any).clients?.primary?.failedConnections) || 0,
+          active:
+            (typeof redisHealth === 'object' &&
+              redisHealth !== null &&
+              (redisHealth as any).clients?.primary?.connections) ||
+            0,
+          total:
+            (typeof redisHealth === 'object' &&
+              redisHealth !== null &&
+              (redisHealth as any).clients?.primary?.totalConnections) ||
+            0,
+          failed:
+            (typeof redisHealth === 'object' &&
+              redisHealth !== null &&
+              (redisHealth as any).clients?.primary?.failedConnections) ||
+            0,
         },
         operations: {
           totalCommands: redisPerformance.overall?.totalOperations || 0,
@@ -280,7 +311,7 @@ export class PerformanceDashboard {
         invalidation: {
           ...invalidationMetrics,
           topRules: Object.entries(invalidationMetrics.ruleMetrics)
-            .sort(([,a], [,b]) => b.count - a.count)
+            .sort(([, a], [, b]) => b.count - a.count)
             .slice(0, 5)
             .map(([name, metrics]) => ({ name, ...metrics })),
         },
@@ -293,7 +324,7 @@ export class PerformanceDashboard {
             completed: jobStats.completedJobs,
             failed: jobStats.failedJobs,
             delayed: jobStats.delayedJobs,
-          }
+          },
         },
         workers: {},
         performance: {
@@ -310,12 +341,13 @@ export class PerformanceDashboard {
   private async collectAuthMetrics(): Promise<any> {
     try {
       // Get auth-related metrics from Redis
-      const [activeSessions, totalLogins, failedLogins, blacklistedTokens] = await Promise.all([
-        this.redis.get('auth:stats:active_sessions'),
-        this.redis.get('auth:stats:total_logins'),
-        this.redis.get('auth:stats:failed_logins'),
-        this.redis.get('auth:stats:blacklisted_tokens'),
-      ]);
+      const [activeSessions, totalLogins, failedLogins, blacklistedTokens] =
+        await Promise.all([
+          this.redis.get('auth:stats:active_sessions'),
+          this.redis.get('auth:stats:total_logins'),
+          this.redis.get('auth:stats:failed_logins'),
+          this.redis.get('auth:stats:blacklisted_tokens'),
+        ]);
 
       return {
         activeSessions: parseInt(activeSessions || '0'),
@@ -353,16 +385,22 @@ export class PerformanceDashboard {
 
   private async calculateAverageResponseTime(): Promise<number> {
     try {
-      const keys = await this.redis.keys('metrics:api:*:response_times');
+      const keys = await this.scanKeysWithPattern(
+        'metrics:api:*:response_times',
+        10,
+      );
       if (keys.length === 0) return 0;
 
       let totalTime = 0;
       let totalRequests = 0;
 
-      for (const key of keys.slice(0, 10)) { // Sample first 10 endpoints
+      for (const key of keys) {
+        // Use scanned keys (already limited to 10)
         const times = await this.redis.lrange(key, 0, -1);
-        const numericTimes = times.map(t => parseInt(t)).filter(t => !isNaN(t));
-        
+        const numericTimes = times
+          .map((t) => parseInt(t))
+          .filter((t) => !isNaN(t));
+
         if (numericTimes.length > 0) {
           totalTime += numericTimes.reduce((sum, time) => sum + time, 0);
           totalRequests += numericTimes.length;
@@ -374,6 +412,41 @@ export class PerformanceDashboard {
       console.error('Error calculating average response time:', error);
       return 0;
     }
+  }
+
+  /**
+   * Scan keys with pattern using SCAN instead of KEYS for better performance
+   */
+  private async scanKeysWithPattern(
+    pattern: string,
+    limit: number = 100,
+  ): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      try {
+        const result = await this.redis.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          50,
+        );
+        cursor = result[0];
+        keys.push(...result[1]);
+
+        // Stop when we have enough keys or hit the limit
+        if (keys.length >= limit) {
+          break;
+        }
+      } catch (error) {
+        console.error(`Error scanning pattern ${pattern}:`, error);
+        break;
+      }
+    } while (cursor !== '0' && keys.length < limit);
+
+    return keys.slice(0, limit);
   }
 
   private async calculateJobProcessingTime(): Promise<number> {
@@ -420,7 +493,11 @@ export class PerformanceDashboard {
         }
 
         const value = this.getMetricValue(metrics, rule.metric);
-        const shouldAlert = this.evaluateCondition(value, rule.threshold, rule.operator);
+        const shouldAlert = this.evaluateCondition(
+          value,
+          rule.threshold,
+          rule.operator,
+        );
 
         if (shouldAlert) {
           await this.triggerAlert(rule, value);
@@ -437,34 +514,48 @@ export class PerformanceDashboard {
     }
   }
 
-  private getMetricValue(metrics: PerformanceMetrics, metricPath: string): number {
+  private getMetricValue(
+    metrics: PerformanceMetrics,
+    metricPath: string,
+  ): number {
     const parts = metricPath.split('.');
     let value: any = metrics;
-    
+
     for (const part of parts) {
       value = value?.[part];
     }
-    
+
     return typeof value === 'number' ? value : 0;
   }
 
-  private evaluateCondition(value: number, threshold: number, operator: string): boolean {
+  private evaluateCondition(
+    value: number,
+    threshold: number,
+    operator: string,
+  ): boolean {
     switch (operator) {
-      case 'gt': return value > threshold;
-      case 'gte': return value >= threshold;
-      case 'lt': return value < threshold;
-      case 'lte': return value <= threshold;
-      case 'eq': return value === threshold;
-      default: return false;
+      case 'gt':
+        return value > threshold;
+      case 'gte':
+        return value >= threshold;
+      case 'lt':
+        return value < threshold;
+      case 'lte':
+        return value <= threshold;
+      case 'eq':
+        return value === threshold;
+      default:
+        return false;
     }
   }
 
   private async triggerAlert(rule: AlertRule, value: number): Promise<void> {
     const existingAlert = this.activeAlerts.get(rule.name);
-    
+
     // Check cooldown period
     if (existingAlert && !existingAlert.resolvedAt) {
-      const timeSinceAlert = Date.now() - new Date(existingAlert.timestamp).getTime();
+      const timeSinceAlert =
+        Date.now() - new Date(existingAlert.timestamp).getTime();
       if (timeSinceAlert < rule.cooldown * 60 * 1000) {
         return; // Still in cooldown
       }
@@ -482,13 +573,13 @@ export class PerformanceDashboard {
     };
 
     this.activeAlerts.set(rule.name, alert);
-    
+
     // Store alert in Redis
     await this.redis.lpush('alerts:active', JSON.stringify(alert));
     await this.redis.ltrim('alerts:active', 0, 99); // Keep last 100 alerts
-    
+
     console.log(`🚨 ALERT [${alert.severity.toUpperCase()}]: ${alert.message}`);
-    
+
     // Here you could integrate with external alerting systems
     // await this.sendToSlack(alert);
     // await this.sendEmail(alert);
@@ -498,11 +589,11 @@ export class PerformanceDashboard {
     const alert = this.activeAlerts.get(ruleName);
     if (alert) {
       alert.resolvedAt = new Date().toISOString();
-      
+
       // Store resolved alert
       await this.redis.lpush('alerts:resolved', JSON.stringify(alert));
       await this.redis.ltrim('alerts:resolved', 0, 99);
-      
+
       console.log(`✅ RESOLVED: ${alert.message}`);
     }
   }
@@ -514,17 +605,17 @@ export class PerformanceDashboard {
 
   async getMetricsHistory(hours: number = 24): Promise<PerformanceMetrics[]> {
     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
-    return this.metricsHistory.filter(m => new Date(m.timestamp) >= cutoff);
+    return this.metricsHistory.filter((m) => new Date(m.timestamp) >= cutoff);
   }
 
   async getActiveAlerts(): Promise<Alert[]> {
-    return Array.from(this.activeAlerts.values()).filter(a => !a.resolvedAt);
+    return Array.from(this.activeAlerts.values()).filter((a) => !a.resolvedAt);
   }
 
   async getResolvedAlerts(limit: number = 50): Promise<Alert[]> {
     try {
       const alerts = await this.redis.lrange('alerts:resolved', 0, limit - 1);
-      return alerts.map(a => JSON.parse(a));
+      return alerts.map((a) => JSON.parse(a));
     } catch (error) {
       console.error('Error getting resolved alerts:', error);
       return [];
@@ -563,23 +654,23 @@ export class PerformanceDashboard {
     recommendations: string[];
   }> {
     const metrics = await this.getCurrentMetrics();
-    
+
     // Calculate performance scores (0-100)
     const redisScore = this.calculateRedisScore(metrics.redis);
     const cacheScore = this.calculateCacheScore(metrics.cache);
     const jobsScore = this.calculateJobsScore(metrics.jobs);
     const authScore = this.calculateAuthScore(metrics.auth);
-    
+
     const overallScore = (redisScore + cacheScore + jobsScore + authScore) / 4;
-    
+
     let overall: 'excellent' | 'good' | 'fair' | 'poor';
     if (overallScore >= 90) overall = 'excellent';
     else if (overallScore >= 75) overall = 'good';
     else if (overallScore >= 60) overall = 'fair';
     else overall = 'poor';
-    
+
     const recommendations = this.generateRecommendations(metrics);
-    
+
     return {
       overall,
       scores: {
@@ -594,83 +685,95 @@ export class PerformanceDashboard {
 
   private calculateRedisScore(redis: any): number {
     let score = 100;
-    
+
     // Deduct points for high memory usage
     if (redis.memory.percentage > 90) score -= 30;
     else if (redis.memory.percentage > 80) score -= 15;
     else if (redis.memory.percentage > 70) score -= 5;
-    
+
     // Deduct points for connection issues
     if (redis.connections.failed > 0) score -= 20;
-    
+
     // Deduct points for high latency
     if (redis.operations.averageLatency > 100) score -= 15;
     else if (redis.operations.averageLatency > 50) score -= 5;
-    
+
     return Math.max(0, score);
   }
 
   private calculateCacheScore(cache: any): number {
     let score = 100;
-    
+
     // Deduct points for low hit rates
     if (cache.api.hitRate < 50) score -= 30;
     else if (cache.api.hitRate < 70) score -= 15;
     else if (cache.api.hitRate < 85) score -= 5;
-    
+
     if (cache.query.hitRate < 60) score -= 20;
     else if (cache.query.hitRate < 80) score -= 10;
-    
+
     return Math.max(0, score);
   }
 
   private calculateJobsScore(jobs: any): number {
     let score = 100;
-    
+
     // Deduct points for high error rates
     if (jobs.performance.errorRate > 10) score -= 40;
     else if (jobs.performance.errorRate > 5) score -= 20;
     else if (jobs.performance.errorRate > 1) score -= 10;
-    
+
     // Deduct points for queue backlogs
-    const totalWaiting = Object.values(jobs.queues).reduce((sum: number, queue: any) => sum + queue.waiting, 0);
+    const totalWaiting = Object.values(jobs.queues).reduce(
+      (sum: number, queue: any) => sum + queue.waiting,
+      0,
+    );
     if (totalWaiting > 100) score -= 20;
     else if (totalWaiting > 50) score -= 10;
-    
+
     return Math.max(0, score);
   }
 
   private calculateAuthScore(auth: any): number {
     let score = 100;
-    
+
     // Deduct points for high failure rates
-    const failureRate = auth.totalLogins > 0 ? (auth.failedLogins / auth.totalLogins) * 100 : 0;
+    const failureRate =
+      auth.totalLogins > 0 ? (auth.failedLogins / auth.totalLogins) * 100 : 0;
     if (failureRate > 20) score -= 30;
     else if (failureRate > 10) score -= 15;
     else if (failureRate > 5) score -= 5;
-    
+
     return Math.max(0, score);
   }
 
   private generateRecommendations(metrics: PerformanceMetrics): string[] {
     const recommendations: string[] = [];
-    
+
     if (metrics.redis.memory.percentage > 80) {
-      recommendations.push('Consider increasing Redis memory or implementing more aggressive cache eviction policies');
+      recommendations.push(
+        'Consider increasing Redis memory or implementing more aggressive cache eviction policies',
+      );
     }
-    
+
     if (metrics.cache.api.hitRate < 70) {
-      recommendations.push('Review API caching strategies and consider increasing cache TTL for stable endpoints');
+      recommendations.push(
+        'Review API caching strategies and consider increasing cache TTL for stable endpoints',
+      );
     }
-    
+
     if (metrics.jobs.performance.errorRate > 5) {
-      recommendations.push('Investigate job failures and consider implementing better error handling and retry mechanisms');
+      recommendations.push(
+        'Investigate job failures and consider implementing better error handling and retry mechanisms',
+      );
     }
-    
+
     if (metrics.auth.failedLogins > metrics.auth.totalLogins * 0.1) {
-      recommendations.push('High authentication failure rate detected - consider implementing additional security measures');
+      recommendations.push(
+        'High authentication failure rate detected - consider implementing additional security measures',
+      );
     }
-    
+
     return recommendations;
   }
 }

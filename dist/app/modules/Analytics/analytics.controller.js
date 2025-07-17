@@ -14,11 +14,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AnalyticsController = void 0;
 const http_status_1 = __importDefault(require("http-status"));
+const AppError_1 = __importDefault(require("../../errors/AppError"));
+const ActivityTrackingService_1 = __importDefault(require("../../services/activity/ActivityTrackingService"));
+const AnalyticsService_1 = __importDefault(require("../../services/analytics/AnalyticsService"));
 const catchAsync_1 = __importDefault(require("../../utils/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../utils/sendResponse"));
-const AppError_1 = __importDefault(require("../../errors/AppError"));
-const AnalyticsService_1 = __importDefault(require("../../services/analytics/AnalyticsService"));
-const ActivityTrackingService_1 = __importDefault(require("../../services/activity/ActivityTrackingService"));
 const teacher_model_1 = require("../Teacher/teacher.model");
 // Removed unused imports
 const analyticsService = new AnalyticsService_1.default();
@@ -28,7 +28,11 @@ const activityTrackingService = new ActivityTrackingService_1.default();
  * Handles cases where frontend passes user._id instead of teacher._id
  */
 const validateAndResolveTeacherId = (teacherId, authenticatedUser) => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('🔍 validateAndResolveTeacherId called with:', { teacherId, userRole: authenticatedUser.role, userId: authenticatedUser._id });
+    console.log('🔍 validateAndResolveTeacherId called with:', {
+        teacherId,
+        userRole: authenticatedUser.role,
+        userId: authenticatedUser._id,
+    });
     if (authenticatedUser.role !== 'teacher') {
         console.log('✅ Non-teacher user, returning original teacherId');
         return teacherId; // For non-teacher users, return as-is
@@ -48,9 +52,15 @@ const validateAndResolveTeacherId = (teacherId, authenticatedUser) => __awaiter(
         console.log('❌ No teacher found for ID:', teacherId);
         throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'Teacher not found');
     }
-    console.log('🔍 Teacher found:', { teacherId: teacher._id, userId: teacher.user });
+    console.log('🔍 Teacher found:', {
+        teacherId: teacher._id,
+        userId: teacher.user,
+    });
     if (teacher.user.toString() !== authenticatedUser._id) {
-        console.log('❌ Teacher user mismatch:', { teacherUserId: teacher.user.toString(), authenticatedUserId: authenticatedUser._id });
+        console.log('❌ Teacher user mismatch:', {
+            teacherUserId: teacher.user.toString(),
+            authenticatedUserId: authenticatedUser._id,
+        });
         throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'You can only access your own data');
     }
     console.log('✅ Teacher validation successful, returning teacher ID:', teacher._id.toString());
@@ -61,7 +71,7 @@ const validateAndResolveTeacherId = (teacherId, authenticatedUser) => __awaiter(
  */
 const getTeacherAnalytics = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
-    const { period = 'monthly', courseId, startDate, endDate, compareWithPrevious = false } = req.query;
+    const { period = 'monthly', courseId, startDate, endDate, compareWithPrevious = false, } = req.query;
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
@@ -90,10 +100,12 @@ const getCourseAnalytics = (0, catchAsync_1.default)((req, res) => __awaiter(voi
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
-    const dateRange = startDate && endDate ? {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-    } : undefined;
+    const dateRange = startDate && endDate
+        ? {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+        }
+        : undefined;
     // Use period parameter for analytics (currently passed but not used in service)
     const analytics = yield analyticsService.getCourseAnalytics(teacherId, courseId, dateRange);
     (0, sendResponse_1.default)(res, {
@@ -112,10 +124,12 @@ const getRevenueAnalytics = (0, catchAsync_1.default)((req, res) => __awaiter(vo
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
-    const dateRange = startDate && endDate ? {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-    } : undefined;
+    const dateRange = startDate && endDate
+        ? {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+        }
+        : undefined;
     // Note: period parameter available for future use
     const analytics = yield analyticsService.getRevenueAnalytics(teacherId, courseId, dateRange);
     (0, sendResponse_1.default)(res, {
@@ -134,10 +148,12 @@ const getPerformanceMetrics = (0, catchAsync_1.default)((req, res) => __awaiter(
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
-    const dateRange = startDate && endDate ? {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-    } : undefined;
+    const dateRange = startDate && endDate
+        ? {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+        }
+        : undefined;
     // Note: period parameter available for future use
     const metrics = yield analyticsService.getPerformanceMetrics(teacherId, courseId, dateRange);
     (0, sendResponse_1.default)(res, {
@@ -156,10 +172,12 @@ const getStudentEngagement = (0, catchAsync_1.default)((req, res) => __awaiter(v
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
-    const dateRange = startDate && endDate ? {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-    } : undefined;
+    const dateRange = startDate && endDate
+        ? {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+        }
+        : undefined;
     // Note: period parameter available for future use
     const engagement = yield analyticsService.getStudentEngagementSummary(teacherId, courseId, dateRange);
     (0, sendResponse_1.default)(res, {
@@ -174,7 +192,7 @@ const getStudentEngagement = (0, catchAsync_1.default)((req, res) => __awaiter(v
  */
 const getActivityFeed = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
-    const { limit = 20, offset = 0, type, priority, isRead, courseId, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const { limit = 20, offset = 0, type, priority, isRead, courseId, sortBy = 'createdAt', sortOrder = 'desc', } = req.query;
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
@@ -187,7 +205,7 @@ const getActivityFeed = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
         isRead: isRead === 'true' ? true : isRead === 'false' ? false : undefined,
         courseId: courseId,
         sortBy: sortBy,
-        sortOrder: sortOrder
+        sortOrder: sortOrder,
     };
     const activitiesResult = yield activityTrackingService.getActivitiesWithFilters(actualTeacherId, filters);
     (0, sendResponse_1.default)(res, {
@@ -229,6 +247,13 @@ const markActivityAsRead = (0, catchAsync_1.default)((req, res) => __awaiter(voi
  */
 const getDashboardSummary = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
+    // Set no-cache headers for real-time analytics data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    res.setHeader('X-Analytics-Timestamp', Date.now().toString());
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
@@ -293,6 +318,13 @@ const exportAnalytics = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
 const getEnrollmentStatistics = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
     const { period = 'monthly', courseId } = req.query;
+    // Set no-cache headers for real-time enrollment data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    res.setHeader('X-Analytics-Timestamp', Date.now().toString());
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
@@ -310,6 +342,13 @@ const getEnrollmentStatistics = (0, catchAsync_1.default)((req, res) => __awaite
 const getStudentEngagementMetrics = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { teacherId } = req.params;
     const { period = 'monthly', courseId } = req.query;
+    // Set no-cache headers for real-time engagement data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    res.setHeader('X-Analytics-Timestamp', Date.now().toString());
     // Validate teacher ID matches authenticated user
     const user = req.user;
     const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
@@ -319,6 +358,39 @@ const getStudentEngagementMetrics = (0, catchAsync_1.default)((req, res) => __aw
         success: true,
         message: 'Student engagement metrics retrieved successfully',
         data: metrics,
+    });
+}));
+/**
+ * Get detailed student engagement data with pagination
+ */
+const getStudentEngagementDetails = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { teacherId } = req.params;
+    const { page = 1, limit = 20, sortBy = 'engagementScore', sortOrder = 'desc', period = 'monthly', courseId, startDate, endDate, } = req.query;
+    // Set no-cache headers for real-time data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    res.setHeader('X-Analytics-Timestamp', Date.now().toString());
+    // Validate teacher ID matches authenticated user
+    const user = req.user;
+    const actualTeacherId = yield validateAndResolveTeacherId(teacherId, user);
+    const result = yield analyticsService.getStudentEngagementDetails(teacherId, {
+        page: Number(page),
+        limit: Number(limit),
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+        period: period,
+        courseId: courseId,
+        startDate: startDate,
+        endDate: endDate,
+    });
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Student engagement details retrieved successfully',
+        data: result,
     });
 }));
 /**
@@ -367,7 +439,7 @@ const bulkMarkActivitiesAsRead = (0, catchAsync_1.default)((req, res) => __await
     if (!Array.isArray(activityIds) || activityIds.length === 0) {
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, 'Activity IDs array is required');
     }
-    yield Promise.all(activityIds.map(activityId => activityTrackingService.markActivityAsRead(activityId, actualTeacherId)));
+    yield Promise.all(activityIds.map((activityId) => activityTrackingService.markActivityAsRead(activityId, actualTeacherId)));
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -392,9 +464,9 @@ const getRealTimeData = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
             studentsOnline: 0,
             coursesViewed: 0,
             lessonsCompleted: 0,
-            questionsAsked: 0
+            questionsAsked: 0,
         },
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
     };
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
@@ -423,9 +495,9 @@ const getInsights = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, vo
             actionable: true,
             action: {
                 text: 'Create Your First Course',
-                url: '/teacher/courses/create'
+                url: '/teacher/courses/create',
             },
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
         },
         {
             id: 'setup-profile',
@@ -436,9 +508,9 @@ const getInsights = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, vo
             actionable: true,
             action: {
                 text: 'Edit Profile',
-                url: '/teacher/profile/edit'
+                url: '/teacher/profile/edit',
             },
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
         },
         {
             id: 'stripe-setup',
@@ -449,16 +521,91 @@ const getInsights = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, vo
             actionable: true,
             action: {
                 text: 'Connect Stripe',
-                url: '/teacher/earnings'
+                url: '/teacher/earnings',
             },
-            createdAt: new Date().toISOString()
-        }
+            createdAt: new Date().toISOString(),
+        },
     ];
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
         message: 'Analytics insights retrieved successfully',
         data: newTeacherInsights.slice(0, parseInt(limit)),
+    });
+}));
+/**
+ * Get student dashboard analytics
+ */
+const getStudentDashboard = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { studentId } = req.params;
+    // Validate student ID matches authenticated user
+    const user = req.user;
+    if (user.role !== 'student' || user.userId !== studentId) {
+        throw new AppError_1.default(http_status_1.default.FORBIDDEN, 'Access denied');
+    }
+    // Mock student dashboard data - replace with actual service calls
+    const studentDashboard = {
+        overview: {
+            totalCoursesEnrolled: 5,
+            coursesCompleted: 2,
+            coursesInProgress: 3,
+            totalLearningHours: 45.5,
+            averageProgress: 68,
+        },
+        recentActivity: [
+            {
+                id: '1',
+                type: 'course_progress',
+                courseTitle: 'React Fundamentals',
+                action: 'Completed Module 3',
+                timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+            },
+            {
+                id: '2',
+                type: 'assignment_submitted',
+                courseTitle: 'JavaScript Basics',
+                action: 'Submitted Assignment 2',
+                timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+            },
+        ],
+        currentCourses: [
+            {
+                id: 'course1',
+                title: 'React Fundamentals',
+                instructor: 'John Doe',
+                progress: 75,
+                nextLesson: 'State Management',
+                estimatedTimeToComplete: '2 hours',
+            },
+            {
+                id: 'course2',
+                title: 'JavaScript Basics',
+                instructor: 'Jane Smith',
+                progress: 45,
+                nextLesson: 'Async Programming',
+                estimatedTimeToComplete: '4 hours',
+            },
+        ],
+        achievements: [
+            {
+                id: 'achievement1',
+                title: 'First Course Completed',
+                description: 'Completed your first course',
+                earnedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
+                icon: 'trophy',
+            },
+        ],
+        learningStreak: {
+            currentStreak: 7,
+            longestStreak: 15,
+            lastActivityDate: new Date(),
+        },
+    };
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Student dashboard analytics retrieved successfully',
+        data: studentDashboard,
     });
 }));
 exports.AnalyticsController = {
@@ -474,10 +621,13 @@ exports.AnalyticsController = {
     // New enhanced endpoints
     getEnrollmentStatistics,
     getStudentEngagementMetrics,
+    getStudentEngagementDetails,
     getRevenueAnalyticsDetailed,
     getPerformanceMetricsDetailed,
     bulkMarkActivitiesAsRead,
     // Missing endpoints
     getRealTimeData,
     getInsights,
+    // Student endpoints
+    getStudentDashboard,
 };

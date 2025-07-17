@@ -5,7 +5,6 @@
 
 import Redis from 'ioredis';
 import config from './index';
-import { Logger } from './logger';
 
 interface RedisConnectionPool {
   primary: Redis | null;
@@ -81,7 +80,10 @@ export class OptimizedRedisConfig {
       const baseConfig = this.createBaseConfig();
 
       // Initialize primary connection first (most important)
-      this.connectionPool.primary = await this.createConnection('primary', baseConfig);
+      this.connectionPool.primary = await this.createConnection(
+        'primary',
+        baseConfig,
+      );
 
       // Initialize other connections only if needed
       if (process.env.ENABLE_REDIS_CACHE !== 'false') {
@@ -99,7 +101,10 @@ export class OptimizedRedisConfig {
       }
 
       // Jobs connection only in production or when explicitly enabled
-      if (process.env.NODE_ENV === 'production' || process.env.ENABLE_REDIS_JOBS === 'true') {
+      if (
+        process.env.NODE_ENV === 'production' ||
+        process.env.ENABLE_REDIS_JOBS === 'true'
+      ) {
         this.connectionPool.jobs = await this.createConnection('jobs', {
           ...baseConfig,
           maxRetriesPerRequest: null, // Required for BullMQ
@@ -108,8 +113,9 @@ export class OptimizedRedisConfig {
       }
 
       this.isInitialized = true;
-      console.log(`✅ Redis initialized with ${this.getActiveConnectionCount()} connections`);
-
+      console.log(
+        `✅ Redis initialized with ${this.getActiveConnectionCount()} connections`,
+      );
     } catch (error) {
       console.error('❌ Redis initialization failed:', error);
       throw error;
@@ -125,21 +131,32 @@ export class OptimizedRedisConfig {
       port: config.redis.port || 6379,
       password: config.redis.password || '',
       family: 4,
-      connectTimeout: 5000, // Reduced from 10000
-      commandTimeout: 3000, // Reduced from 5000
-      retryDelayOnFailover: 100,
+      connectTimeout: 30000, // Increased from 5000 to 30000 for better reliability
+      commandTimeout: 30000, // Increased from 3000 to 30000 for better reliability
+      retryDelayOnFailover: 1000, // Increased from 100 to 1000 for exponential backoff
       enableOfflineQueue: true, // Enable offline queue to prevent errors
-      maxRetriesPerRequest: 2, // Reduced from 3
+      maxRetriesPerRequest: 5, // Increased from 2 to 5 for better resilience
       lazyConnect: true,
       keepAlive: 30000,
-      tls: config.redis.host && config.redis.host.includes('upstash.io') ? {} : undefined,
+      // Enhanced retry strategy with exponential backoff
+      retryDelayOnClusterDown: 300,
+      // Circuit breaker configuration
+      enableReadyCheck: true,
+      maxLoadingTimeout: 30000,
+      tls:
+        config.redis.host && config.redis.host.includes('upstash.io')
+          ? {}
+          : undefined,
     };
   }
 
   /**
    * Create a Redis connection with error handling
    */
-  private async createConnection(name: string, connectionConfig: any): Promise<Redis> {
+  private async createConnection(
+    name: string,
+    connectionConfig: any,
+  ): Promise<Redis> {
     const redis = new Redis(connectionConfig);
 
     // Set up event handlers
@@ -162,11 +179,11 @@ export class OptimizedRedisConfig {
     try {
       await Promise.race([
         redis.ping(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Connection timeout')), 3000)
-        )
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timeout')), 3000),
+        ),
       ]);
-      
+
       console.log(`✅ Redis ${name} connection tested successfully`);
       return redis;
     } catch (error) {
@@ -179,7 +196,9 @@ export class OptimizedRedisConfig {
   /**
    * Get Redis connection by type
    */
-  public async getConnection(type: 'primary' | 'cache' | 'sessions' | 'jobs'): Promise<Redis | null> {
+  public async getConnection(
+    type: 'primary' | 'cache' | 'sessions' | 'jobs',
+  ): Promise<Redis | null> {
     if (!this.isInitialized) {
       await this.initialize();
     }
@@ -210,9 +229,9 @@ export class OptimizedRedisConfig {
 
       await Promise.race([
         primary.ping(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Health check timeout')), 1000)
-        )
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Health check timeout')), 1000),
+        ),
       ]);
 
       return true;
@@ -232,7 +251,8 @@ export class OptimizedRedisConfig {
    * Get active connection count
    */
   public getActiveConnectionCount(): number {
-    return Object.values(this.connectionPool).filter(conn => conn !== null).length;
+    return Object.values(this.connectionPool).filter((conn) => conn !== null)
+      .length;
   }
 
   /**
@@ -241,11 +261,11 @@ export class OptimizedRedisConfig {
   public async cleanup(): Promise<void> {
     console.log('🧹 Cleaning up Redis connections...');
 
-    const connections = Object.values(this.connectionPool).filter(conn => conn !== null);
-    
-    await Promise.allSettled(
-      connections.map(conn => conn?.disconnect())
+    const connections = Object.values(this.connectionPool).filter(
+      (conn) => conn !== null,
     );
+
+    await Promise.allSettled(connections.map((conn) => conn?.disconnect()));
 
     this.connectionPool = {
       primary: null,
@@ -285,9 +305,11 @@ export class OptimizedRedisConfig {
 export const optimizedRedisConfig = OptimizedRedisConfig.getInstance();
 
 // Convenience functions
-export const getRedisConnection = (type: 'primary' | 'cache' | 'sessions' | 'jobs') => 
-  optimizedRedisConfig.getConnection(type);
+export const getRedisConnection = (
+  type: 'primary' | 'cache' | 'sessions' | 'jobs',
+) => optimizedRedisConfig.getConnection(type);
 
-export const getPrimaryRedis = () => optimizedRedisConfig.getPrimaryConnection();
+export const getPrimaryRedis = () =>
+  optimizedRedisConfig.getPrimaryConnection();
 
 export const isRedisHealthy = () => optimizedRedisConfig.isHealthy();

@@ -10,10 +10,17 @@ const user_constant_1 = require("../User/user.constant");
 const validateRequest_1 = __importDefault(require("../../middlewares/validateRequest"));
 const lecture_validation_1 = require("./lecture.validation");
 const lecture_controller_1 = require("./lecture.controller");
+const enterpriseCacheMiddleware_1 = require("../../middlewares/enterpriseCacheMiddleware");
+// Removed Redis caching imports to eliminate backend caching conflicts
+// Only Redux will handle frontend caching for real-time UI updates
+// Added enterprise cache middleware for advanced invalidation patterns
 const router = (0, express_1.Router)({ mergeParams: true });
 router.get('/:id', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher, user_constant_1.USER_ROLE.student), lecture_controller_1.LectureController.getLectureById);
 router.post('/:courseId/create-lecture', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(lecture_validation_1.LectureValidation.createLectureZodSchema), lecture_controller_1.LectureController.createLecture);
-router.get('/:courseId/get-lectures', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher, user_constant_1.USER_ROLE.student), lecture_controller_1.LectureController.getLecturesByCourseId);
+router.get('/:courseId/get-lectures', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher, user_constant_1.USER_ROLE.student), 
+// Removed Redis caching - only Redux will handle frontend caching
+lecture_controller_1.LectureController.getLecturesByCourseId);
 router.patch('/:courseId/update-order', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(lecture_validation_1.LectureValidation.updateLectureOrderZodSchema), lecture_controller_1.LectureController.updateLectureOrder);
-router.patch('/:courseId/update-lecture/:lectureId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(lecture_validation_1.LectureValidation.updateLectureZodSchema), lecture_controller_1.LectureController.updateLecture);
+router.patch('/:courseId/update-lecture/:lectureId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(lecture_validation_1.LectureValidation.updateLectureZodSchema), enterpriseCacheMiddleware_1.enterpriseCacheMiddleware.enterpriseLectureInvalidation(), lecture_controller_1.LectureController.updateLecture);
+router.delete('/:courseId/delete-lecture/:lectureId', (0, auth_1.default)(user_constant_1.USER_ROLE.teacher), (0, validateRequest_1.default)(lecture_validation_1.LectureValidation.deleteLectureZodSchema), lecture_controller_1.LectureController.deleteLecture);
 exports.LectureRoutes = router;

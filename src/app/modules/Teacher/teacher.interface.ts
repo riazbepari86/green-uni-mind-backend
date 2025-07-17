@@ -25,6 +25,9 @@ export interface IStripeConnectInfo {
   connectedAt?: Date;
   disconnectedAt?: Date;
   lastWebhookReceived?: Date;
+  // New properties for enhanced verification tracking
+  verificationStage?: 'not_started' | 'account_created' | 'onboarding_started' | 'processing_capabilities' | 'under_review' | 'completed' | 'action_required' | 'error';
+  estimatedCompletionTime?: Date;
 }
 
 export interface IStripeAuditLog {

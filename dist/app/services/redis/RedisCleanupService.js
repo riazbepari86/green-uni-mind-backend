@@ -42,7 +42,7 @@ class RedisCleanupService {
                     'health:*',
                     'optimization:*',
                     'dashboard:*',
-                    'analytics:*'
+                    'analytics:*',
                 ];
                 let totalDeleted = 0;
                 for (const pattern of patterns) {
@@ -67,7 +67,7 @@ class RedisCleanupService {
                                     console.log(`   Deleted batch of ${deleted} keys`);
                                 }
                                 // Small delay between batches
-                                yield new Promise(resolve => setTimeout(resolve, 200));
+                                yield new Promise((resolve) => setTimeout(resolve, 200));
                             }
                         }
                     }
@@ -136,12 +136,18 @@ class RedisCleanupService {
                 const info = yield redis_1.redis.info('memory');
                 console.log('📊 Redis Memory Statistics:');
                 console.log(info);
-                // Get key count by pattern
-                const patterns = ['cache:*', 'auth:*', 'otp:*', 'sessions:*', 'metrics:*'];
+                // Get key count by pattern using SCAN instead of KEYS
+                const patterns = [
+                    'cache:*',
+                    'auth:*',
+                    'otp:*',
+                    'sessions:*',
+                    'metrics:*',
+                ];
                 for (const pattern of patterns) {
                     try {
-                        const keys = yield redis_1.redis.keys(pattern);
-                        console.log(`   ${pattern}: ${keys.length} keys`);
+                        const keyCount = yield this.countKeysWithScan(pattern);
+                        console.log(`   ${pattern}: ${keyCount} keys`);
                     }
                     catch (error) {
                         console.log(`   ${pattern}: Error counting keys`);
@@ -151,6 +157,32 @@ class RedisCleanupService {
             catch (error) {
                 console.error('❌ Error getting memory stats:', error);
             }
+        });
+    }
+    /**
+     * Count keys using SCAN instead of KEYS for better performance
+     */
+    countKeysWithScan(pattern) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let count = 0;
+            let cursor = '0';
+            do {
+                try {
+                    const result = yield redis_1.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+                    cursor = result[0];
+                    count += result[1].length;
+                    // Prevent infinite loops and limit scan operations
+                    if (count > 10000) {
+                        console.log(`   ${pattern}: Scan limit reached (10k+), stopping count`);
+                        break;
+                    }
+                }
+                catch (error) {
+                    console.error(`Error scanning pattern ${pattern}:`, error);
+                    break;
+                }
+            } while (cursor !== '0');
+            return count;
         });
     }
     /**
@@ -166,7 +198,7 @@ class RedisCleanupService {
                     'otp:*',
                     'sessions:*',
                     'user:*',
-                    'jwt:*'
+                    'jwt:*',
                 ];
                 // Use SCAN to get all keys instead of KEYS
                 const allKeys = [];
@@ -202,7 +234,7 @@ class RedisCleanupService {
                         totalDeleted += deleted;
                         console.log(`   Deleted batch: ${deleted} keys`);
                         // Small delay between batches
-                        yield new Promise(resolve => setTimeout(resolve, 100));
+                        yield new Promise((resolve) => setTimeout(resolve, 100));
                     }
                     console.log(`✅ Emergency cleanup completed. Deleted ${totalDeleted} keys`);
                 }

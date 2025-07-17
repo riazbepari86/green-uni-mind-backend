@@ -13,9 +13,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApiCacheService = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const BaseRedisService_1 = require("./BaseRedisService");
 const interfaces_1 = require("./interfaces");
-const crypto_1 = __importDefault(require("crypto"));
 class ApiCacheService extends BaseRedisService_1.BaseRedisService {
     constructor(client, monitoring) {
         super(client, monitoring);
@@ -33,7 +33,7 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
         // Include vary-by headers in key generation
         const varyHeaders = {};
         if (options.varyBy) {
-            options.varyBy.forEach(header => {
+            options.varyBy.forEach((header) => {
                 const value = req.get(header);
                 if (value) {
                     varyHeaders[header.toLowerCase()] = value;
@@ -74,7 +74,7 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
                     statusCode: res.statusCode,
                     headers: {
                         'content-type': res.get('content-type') || 'application/json',
-                        'etag': etag,
+                        etag: etag,
                     },
                     body: data,
                     cachedAt: new Date().toISOString(),
@@ -94,7 +94,7 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
                 // Store the cached response
                 pipeline.setex(cacheKey, ttl, JSON.stringify(cachedResponse));
                 // Add to tag sets for invalidation
-                tags.forEach(tag => {
+                tags.forEach((tag) => {
                     const tagKey = `api:cache:tag:${tag}`;
                     pipeline.sadd(tagKey, cacheKey);
                     pipeline.expire(tagKey, ttl + 300);
@@ -177,7 +177,9 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
                     res.set(cachedResponse.headers);
                     res.set('X-Cache', 'HIT');
                     res.set('X-Cache-Key', this.generateCacheKey(req, options).slice(-16));
-                    return res.status(cachedResponse.statusCode).json(cachedResponse.body);
+                    return res
+                        .status(cachedResponse.statusCode)
+                        .json(cachedResponse.body);
                 }
                 // Cache miss - intercept response
                 const originalJson = res.json;
@@ -232,7 +234,7 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
                     if (cacheKeys.length > 0) {
                         const pipeline = this.client.pipeline();
                         // Delete all cached responses with this tag
-                        cacheKeys.forEach(key => pipeline.del(key));
+                        cacheKeys.forEach((key) => pipeline.del(key));
                         // Delete the tag set
                         pipeline.del(tagKey);
                         yield pipeline.exec();
@@ -246,19 +248,28 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
             }));
         });
     }
-    // Invalidate cache by pattern
+    // Invalidate cache by pattern using SCAN instead of KEYS
     invalidateByPattern(pattern) {
         return __awaiter(this, void 0, void 0, function* () {
             return this.executeWithMonitoring('invalidate_api_cache_by_pattern', () => __awaiter(this, void 0, void 0, function* () {
-                const keys = yield this.client.keys(pattern);
+                const keys = yield this.scanKeysWithPattern(pattern, 1000);
                 if (keys.length === 0) {
                     return 0;
                 }
-                yield this.client.del(...keys);
+                // Delete in batches to avoid overwhelming Redis
+                const batchSize = 50;
+                let totalDeleted = 0;
+                for (let i = 0; i < keys.length; i += batchSize) {
+                    const batch = keys.slice(i, i + batchSize);
+                    if (batch.length > 0) {
+                        const deleted = yield this.client.del(...batch);
+                        totalDeleted += deleted;
+                    }
+                }
                 // Track invalidation stats
-                yield this.client.incrby('api:cache:stats:responses:invalidated', keys.length);
-                console.log(`🗑️ Invalidated ${keys.length} API responses matching pattern: ${pattern}`);
-                return keys.length;
+                yield this.client.incrby('api:cache:stats:responses:invalidated', totalDeleted);
+                console.log(`🗑️ Invalidated ${totalDeleted} API responses matching pattern: ${pattern}`);
+                return totalDeleted;
             }));
         });
     }
@@ -313,9 +324,7 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
                         continue;
                     }
                 }
-                return endpoints
-                    .sort((a, b) => b.hitCount - a.hitCount)
-                    .slice(0, limit);
+                return endpoints.sort((a, b) => b.hitCount - a.hitCount).slice(0, limit);
             }));
         });
     }
@@ -324,7 +333,7 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
         return __awaiter(this, void 0, void 0, function* () {
             return this.executeWithMonitoring('warm_api_cache', () => __awaiter(this, void 0, void 0, function* () {
                 let warmedCount = 0;
-                for (const { method, path, headers, query, fetchFn, options } of endpoints) {
+                for (const { method, path, headers, query, fetchFn, options, } of endpoints) {
                     try {
                         // Create mock request object
                         const mockReq = {
@@ -357,18 +366,27 @@ class ApiCacheService extends BaseRedisService_1.BaseRedisService {
             }));
         });
     }
-    // Clear all API cache
+    // Clear all API cache using SCAN instead of KEYS
     clearApiCache() {
         return __awaiter(this, void 0, void 0, function* () {
             return this.executeWithMonitoring('clear_api_cache', () => __awaiter(this, void 0, void 0, function* () {
                 const pattern = 'cache:api:*';
-                const keys = yield this.client.keys(pattern);
+                const keys = yield this.scanKeysWithPattern(pattern, 2000);
                 if (keys.length === 0) {
                     return 0;
                 }
-                yield this.client.del(...keys);
-                console.log(`🗑️ Cleared ${keys.length} API cache entries`);
-                return keys.length;
+                // Delete in batches to avoid overwhelming Redis
+                const batchSize = 50;
+                let totalDeleted = 0;
+                for (let i = 0; i < keys.length; i += batchSize) {
+                    const batch = keys.slice(i, i + batchSize);
+                    if (batch.length > 0) {
+                        const deleted = yield this.client.del(...batch);
+                        totalDeleted += deleted;
+                    }
+                }
+                console.log(`🗑️ Cleared ${totalDeleted} API cache entries`);
+                return totalDeleted;
             }));
         });
     }

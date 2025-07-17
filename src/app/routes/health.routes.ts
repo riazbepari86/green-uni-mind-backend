@@ -13,17 +13,36 @@ const router = Router();
  * Ultra-fast health check for uptime monitoring
  * No middleware, no database checks, minimal processing
  */
-router.get('/health', (_req: Request, res: Response) => {
+// Note: The main /health endpoint is handled directly in app.ts
+// This route is kept for potential future use or alternative health checks
+router.get('/health-detailed', (_req: Request, res: Response) => {
   // Set headers immediately for fastest response
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
-  // Send minimal response as fast as possible
+  // Send detailed health response
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    source: 'health-router',
+    details: {
+      environment: process.env.NODE_ENV || 'development',
+      version: '1.0.0',
+      memory: process.memoryUsage()
+    }
   });
+});
+
+/**
+ * OPTIONS handler for health endpoint preflight requests
+ */
+router.options('/health', (_req: Request, res: Response) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+  res.status(200).end();
 });
 
 /**
@@ -31,10 +50,23 @@ router.get('/health', (_req: Request, res: Response) => {
  */
 router.get('/ping', (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/json');
+
+  // Let the main CORS middleware handle CORS headers
+  // No need to set explicit CORS headers here
+
   res.status(200).json({
     message: 'pong',
     timestamp: new Date().toISOString()
   });
+});
+
+/**
+ * OPTIONS handler for ping endpoint preflight requests
+ * The main CORS middleware will handle the CORS headers
+ */
+router.options('/ping', (_req: Request, res: Response) => {
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+  res.status(200).end();
 });
 
 /**

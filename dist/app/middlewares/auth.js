@@ -32,17 +32,23 @@ const auth = (...requiredRoles) => {
         let decoded;
         try {
             if (!config_1.default.jwt_access_secret) {
+                // Log configuration error - this should always be logged as it's a critical issue
                 console.error('JWT access secret is not configured');
                 throw new AppError_1.default(http_status_1.default.INTERNAL_SERVER_ERROR, 'JWT configuration error');
             }
             decoded = jsonwebtoken_1.default.verify(token, config_1.default.jwt_access_secret);
-            console.log('Token verified successfully for user:', decoded.email);
+            // Token verified successfully - no need to log in production
         }
         catch (err) {
-            console.error('JWT verification error:', err);
+            // Only log errors, not successful verifications
+            if (process.env.NODE_ENV === 'development') {
+                console.error('JWT verification error:', err);
+            }
             // Check if it's a token expiration error
             if (err instanceof Error && err.name === 'TokenExpiredError') {
-                console.log('Token expired at:', err.expiredAt);
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('Token expired at:', err.expiredAt);
+                }
                 throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, `Token expired: Please refresh your authentication`);
             }
             if (err instanceof Error) {

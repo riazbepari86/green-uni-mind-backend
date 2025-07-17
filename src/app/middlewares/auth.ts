@@ -24,6 +24,7 @@ const auth = (...requiredRoles: IUserRole[]): RequestHandler => {
     let decoded: JwtUserPayload;
     try {
       if (!config.jwt_access_secret) {
+        // Log configuration error - this should always be logged as it's a critical issue
         console.error('JWT access secret is not configured');
         throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'JWT configuration error');
       }
@@ -33,13 +34,18 @@ const auth = (...requiredRoles: IUserRole[]): RequestHandler => {
         config.jwt_access_secret as string,
       ) as JwtUserPayload;
 
-      console.log('Token verified successfully for user:', decoded.email);
+      // Token verified successfully - no need to log in production
     } catch (err) {
-      console.error('JWT verification error:', err);
+      // Only log errors, not successful verifications
+      if (process.env.NODE_ENV === 'development') {
+        console.error('JWT verification error:', err);
+      }
 
       // Check if it's a token expiration error
       if (err instanceof Error && err.name === 'TokenExpiredError') {
-        console.log('Token expired at:', (err as any).expiredAt);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Token expired at:', (err as any).expiredAt);
+        }
         throw new AppError(
           httpStatus.UNAUTHORIZED,
           `Token expired: Please refresh your authentication`

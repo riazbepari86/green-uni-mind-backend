@@ -11,7 +11,7 @@ const router = Router();
 router.post(
   '/create-checkout-session',
   auth(USER_ROLE.student),
-  PaymentControllers.createCheckoutSession
+  PaymentControllers.createCheckoutSession,
 );
 
 // Legacy webhook route - maintained for backward compatibility
@@ -26,143 +26,150 @@ router.use('/webhook', WebhookEventRoutes);
 router.post(
   '/connect-stripe/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.connectStripeAccount
+  PaymentControllers.connectStripeAccount,
 );
 
 router.post(
   '/create-onboarding-link/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.createOnboardingLink
+  PaymentControllers.createOnboardingLink,
 );
 
 router.get(
   '/stripe-account-status/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.checkStripeAccountStatus
+  PaymentControllers.checkStripeAccountStatus,
 );
 
 router.post(
   '/save-stripe-details/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.saveStripeAccountDetails
+  PaymentControllers.saveStripeAccountDetails,
 );
 
 // Earnings and transactions
 router.get(
   '/earnings/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getEarnings
+  PaymentControllers.getEarnings,
 );
 
 router.get(
   '/payout-info/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getTeacherPayoutInfo
+  PaymentControllers.getTeacherPayoutInfo,
 );
 
 router.get(
   '/upcoming-payout/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getTeacherUpcomingPayout
+  PaymentControllers.getTeacherUpcomingPayout,
 );
 
 router.get(
   '/transactions/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getTeacherTransactionSummary
+  PaymentControllers.getTeacherTransactionSummary,
 );
 
 router.get(
   '/analytics/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getTransactionAnalytics
+  PaymentControllers.getTransactionAnalytics,
 );
 
 router.get(
   '/transaction/:transactionId',
   auth(USER_ROLE.teacher, USER_ROLE.student),
-  PaymentControllers.getTransactionById
+  PaymentControllers.getTransactionById,
 );
 
 router.get(
   '/session/:sessionId',
   auth(USER_ROLE.teacher, USER_ROLE.student),
-  PaymentControllers.getTransactionBySessionId
+  PaymentControllers.getTransactionBySessionId,
 );
 
 router.get(
   '/student-transactions/:studentId',
   auth(USER_ROLE.student),
-  PaymentControllers.getStudentTransactions
+  PaymentControllers.getStudentTransactions,
 );
 
 // Payout routes
 router.post(
   '/payouts/:teacherId',
   auth(USER_ROLE.teacher),
-  PayoutController.createPayoutRequest
+  PayoutController.createPayoutRequest,
 );
 
 router.get(
   '/payouts/:teacherId',
   auth(USER_ROLE.teacher),
-  PayoutController.getPayoutHistory
+  PayoutController.getPayoutHistory,
+);
+
+// Alias route for payment history (backward compatibility)
+router.get(
+  '/history/:teacherId',
+  auth(USER_ROLE.teacher),
+  PayoutController.getPayoutHistory,
 );
 
 router.get(
   '/payouts/details/:payoutId',
   auth(USER_ROLE.teacher),
-  PayoutController.getPayoutById
+  PayoutController.getPayoutById,
 );
 
 router.put(
   '/payouts/preferences/:teacherId',
   auth(USER_ROLE.teacher),
-  PayoutController.updatePayoutPreferences
+  PayoutController.updatePayoutPreferences,
 );
 
 router.get(
   '/payouts/preferences/:teacherId',
   auth(USER_ROLE.teacher),
-  PayoutController.getPayoutPreferences
+  PayoutController.getPayoutPreferences,
 );
 
 // Enhanced financial analytics routes
 router.get(
   '/financial-summary/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getFinancialSummary
+  PaymentControllers.getFinancialSummary,
 );
 
 router.get(
   '/earnings-growth/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getEarningsGrowth
+  PaymentControllers.getEarningsGrowth,
 );
 
 router.get(
   '/top-courses/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getTopPerformingCourses
+  PaymentControllers.getTopPerformingCourses,
 );
 
 router.get(
   '/revenue-chart/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.getRevenueChart
+  PaymentControllers.getRevenueChart,
 );
 
 router.post(
   '/export-financial-data/:teacherId',
   auth(USER_ROLE.teacher),
-  PaymentControllers.exportFinancialData
+  PaymentControllers.exportFinancialData,
 );
 
 // Payout request route
 router.post(
   '/payout-request/:teacherId',
   auth(USER_ROLE.teacher),
-  PayoutController.createPayoutRequest
+  PayoutController.createPayoutRequest,
 );
 
 export const PaymentRoutes = router;

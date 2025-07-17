@@ -37,6 +37,12 @@ const getAllCategories = (0, catchAsync_1.default)((req, res) => __awaiter(void 
 }));
 const getAllCategoriesWithSubcategories = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield category_service_1.CategoryService.getAllCategoriesWithSubcategories();
+    // Set Cache-Control headers to prevent disk caching and ensure fresh data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,

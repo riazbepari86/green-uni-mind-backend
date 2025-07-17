@@ -42,14 +42,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const date_fns_1 = require("date-fns");
 const mongoose_1 = require("mongoose");
-const analytics_model_1 = require("../../modules/Analytics/analytics.model");
-const course_model_1 = require("../../modules/Course/course.model");
-const student_model_1 = require("../../modules/Student/student.model");
-const payment_model_1 = require("../../modules/Payment/payment.model");
 const logger_1 = require("../../config/logger");
 const redis_1 = require("../../config/redis");
-const date_fns_1 = require("date-fns");
+const analytics_model_1 = require("../../modules/Analytics/analytics.model");
+const course_model_1 = require("../../modules/Course/course.model");
+const payment_model_1 = require("../../modules/Payment/payment.model");
+const student_model_1 = require("../../modules/Student/student.model");
 class AnalyticsService {
     // WebSocket service removed - real-time analytics will be handled by SSE/Polling
     constructor() {
@@ -124,7 +124,7 @@ class AnalyticsService {
                 }
                 const dateRange = this.getDateRange(filters.period, filters.startDate, filters.endDate);
                 // Fetch all analytics data in parallel with error handling for new teachers
-                const [courseAnalytics, revenueAnalytics, performanceMetrics, studentEngagement] = yield Promise.allSettled([
+                const [courseAnalytics, revenueAnalytics, performanceMetrics, studentEngagement,] = yield Promise.allSettled([
                     this.getCourseAnalytics(filters.teacherId, filters.courseId, dateRange),
                     this.getRevenueAnalytics(filters.teacherId, filters.courseId, dateRange),
                     this.getPerformanceMetrics(filters.teacherId, filters.courseId, dateRange),
@@ -133,22 +133,26 @@ class AnalyticsService {
                 // Extract results with fallbacks for new teachers
                 const courseAnalyticsData = courseAnalytics.status === 'fulfilled' ? courseAnalytics.value : [];
                 const revenueAnalyticsData = revenueAnalytics.status === 'fulfilled' ? revenueAnalytics.value : null;
-                const performanceMetricsData = performanceMetrics.status === 'fulfilled' ? performanceMetrics.value : null;
-                const studentEngagementData = studentEngagement.status === 'fulfilled' ? studentEngagement.value : {
-                    totalActiveStudents: 0,
-                    averageEngagementScore: 0,
-                    topPerformingCourses: [],
-                    retentionRate: 0,
-                };
+                const performanceMetricsData = performanceMetrics.status === 'fulfilled'
+                    ? performanceMetrics.value
+                    : null;
+                const studentEngagementData = studentEngagement.status === 'fulfilled'
+                    ? studentEngagement.value
+                    : {
+                        totalActiveStudents: 0,
+                        averageEngagementScore: 0,
+                        topPerformingCourses: [],
+                        retentionRate: 0,
+                    };
                 // Generate insights and recommendations (with fallback for new teachers)
                 const insights = yield this.generateInsights(courseAnalyticsData, revenueAnalyticsData, performanceMetricsData).catch(() => ({
                     topInsight: 'Welcome! Start by creating your first course to see analytics.',
                     recommendations: [
                         'Create your first course to start tracking analytics',
                         'Add engaging content to attract students',
-                        'Set up your Stripe account to receive payments'
+                        'Set up your Stripe account to receive payments',
                     ],
-                    alerts: []
+                    alerts: [],
                 }));
                 // Get total students count with fallback
                 const totalStudents = yield this.getTotalStudentsCount(filters.teacherId, filters.courseId).catch(() => 0);
@@ -159,7 +163,7 @@ class AnalyticsService {
                         startDate: dateRange.startDate,
                         endDate: dateRange.endDate,
                     },
-                    courseAnalytics: courseAnalyticsData.map(ca => ({
+                    courseAnalytics: courseAnalyticsData.map((ca) => ({
                         courseId: ca.courseId,
                         courseName: ca.courseName || 'Unknown Course',
                         enrollments: ca.totalEnrollments || 0,
@@ -170,7 +174,8 @@ class AnalyticsService {
                     revenueAnalytics: {
                         totalRevenue: (revenueAnalyticsData === null || revenueAnalyticsData === void 0 ? void 0 : revenueAnalyticsData.totalRevenue) || 0,
                         growth: 0, // Will be calculated if comparing with previous period
-                        topCourse: ((_b = (_a = revenueAnalyticsData === null || revenueAnalyticsData === void 0 ? void 0 : revenueAnalyticsData.topPerformingCourses) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.courseId) || new mongoose_1.Types.ObjectId(),
+                        topCourse: ((_b = (_a = revenueAnalyticsData === null || revenueAnalyticsData === void 0 ? void 0 : revenueAnalyticsData.topPerformingCourses) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.courseId) ||
+                            new mongoose_1.Types.ObjectId(),
                         averageOrderValue: (revenueAnalyticsData === null || revenueAnalyticsData === void 0 ? void 0 : revenueAnalyticsData.averageOrderValue) || 0,
                     },
                     performanceMetrics: {
@@ -185,9 +190,9 @@ class AnalyticsService {
                         recommendations: [
                             'Create your first course to start tracking analytics',
                             'Add engaging content to attract students',
-                            'Set up your Stripe account to receive payments'
+                            'Set up your Stripe account to receive payments',
                         ],
-                        alerts: []
+                        alerts: [],
                     },
                     generatedAt: new Date(),
                 };
@@ -240,9 +245,9 @@ class AnalyticsService {
                     'Create your first course to start tracking analytics',
                     'Add engaging content to attract students',
                     'Set up your Stripe account to receive payments',
-                    'Optimize your course title and description for better discoverability'
+                    'Optimize your course title and description for better discoverability',
                 ],
-                alerts: []
+                alerts: [],
             },
             generatedAt: new Date(),
         });
@@ -261,7 +266,7 @@ class AnalyticsService {
                 if (dateRange) {
                     query.lastUpdated = {
                         $gte: dateRange.startDate,
-                        $lte: dateRange.endDate
+                        $lte: dateRange.endDate,
                     };
                 }
                 let analytics = yield analytics_model_1.CourseAnalytics.find(query)
@@ -289,7 +294,9 @@ class AnalyticsService {
                 if (courseId) {
                     query.courseId = new mongoose_1.Types.ObjectId(courseId);
                 }
-                let analytics = yield analytics_model_1.RevenueAnalytics.findOne(query).sort({ lastUpdated: -1 });
+                let analytics = yield analytics_model_1.RevenueAnalytics.findOne(query).sort({
+                    lastUpdated: -1,
+                });
                 // If no analytics exist, generate them
                 if (!analytics) {
                     analytics = yield this.generateRevenueAnalytics(teacherId, courseId, dateRange);
@@ -315,10 +322,12 @@ class AnalyticsService {
                 if (dateRange) {
                     query.lastUpdated = {
                         $gte: dateRange.startDate,
-                        $lte: dateRange.endDate
+                        $lte: dateRange.endDate,
                     };
                 }
-                let metrics = yield analytics_model_1.PerformanceMetrics.findOne(query).sort({ lastUpdated: -1 });
+                let metrics = yield analytics_model_1.PerformanceMetrics.findOne(query).sort({
+                    lastUpdated: -1,
+                });
                 // If no metrics exist, generate them
                 if (!metrics) {
                     metrics = yield this.generatePerformanceMetrics(teacherId, courseId);
@@ -344,7 +353,7 @@ class AnalyticsService {
                 if (dateRange) {
                     query.lastActivity = {
                         $gte: dateRange.startDate,
-                        $lte: dateRange.endDate
+                        $lte: dateRange.endDate,
                     };
                 }
                 const engagementData = yield analytics_model_1.StudentEngagement.aggregate([
@@ -359,12 +368,12 @@ class AnalyticsService {
                                     $cond: [
                                         { $gte: ['$lastActivity', (0, date_fns_1.subDays)(new Date(), 7)] },
                                         1,
-                                        0
-                                    ]
-                                }
-                            }
-                        }
-                    }
+                                        0,
+                                    ],
+                                },
+                            },
+                        },
+                    },
                 ]);
                 const summary = engagementData[0] || {
                     totalStudents: 0,
@@ -378,17 +387,19 @@ class AnalyticsService {
                         $group: {
                             _id: '$courseId',
                             averageEngagement: { $avg: '$engagementScore' },
-                            studentCount: { $sum: 1 }
-                        }
+                            studentCount: { $sum: 1 },
+                        },
                     },
                     { $sort: { averageEngagement: -1 } },
-                    { $limit: 5 }
+                    { $limit: 5 },
                 ]);
                 return {
                     totalActiveStudents: summary.activeStudents,
                     averageEngagementScore: summary.averageEngagement,
-                    topPerformingCourses: topCourses.map(course => course._id),
-                    retentionRate: summary.totalStudents > 0 ? (summary.activeStudents / summary.totalStudents) * 100 : 0,
+                    topPerformingCourses: topCourses.map((course) => course._id),
+                    retentionRate: summary.totalStudents > 0
+                        ? (summary.activeStudents / summary.totalStudents) * 100
+                        : 0,
                 };
             }
             catch (error) {
@@ -462,7 +473,7 @@ class AnalyticsService {
                 if (dateRange) {
                     query.lastUpdated = {
                         $gte: dateRange.startDate,
-                        $lte: dateRange.endDate
+                        $lte: dateRange.endDate,
                     };
                 }
                 // Get payment data
@@ -545,18 +556,18 @@ class AnalyticsService {
                 const yearlyStart = (0, date_fns_1.startOfYear)(now);
                 // Get students enrolled in this course with enrollment dates
                 const students = yield student_model_1.Student.find({
-                    'enrolledCourses.courseId': courseId
+                    'enrolledCourses.courseId': courseId,
                 }, {
-                    'enrolledCourses.$': 1
+                    'enrolledCourses.$': 1,
                 });
                 const enrollmentDates = students
-                    .map(student => { var _a; return (_a = student.enrolledCourses[0]) === null || _a === void 0 ? void 0 : _a.enrolledAt; })
+                    .map((student) => { var _a; return (_a = student.enrolledCourses[0]) === null || _a === void 0 ? void 0 : _a.enrolledAt; })
                     .filter((date) => date !== undefined && date !== null);
                 return {
-                    daily: enrollmentDates.filter(date => date >= dailyStart).length,
-                    weekly: enrollmentDates.filter(date => date >= weeklyStart).length,
-                    monthly: enrollmentDates.filter(date => date >= monthlyStart).length,
-                    yearly: enrollmentDates.filter(date => date >= yearlyStart).length,
+                    daily: enrollmentDates.filter((date) => date >= dailyStart).length,
+                    weekly: enrollmentDates.filter((date) => date >= weeklyStart).length,
+                    monthly: enrollmentDates.filter((date) => date >= monthlyStart).length,
+                    yearly: enrollmentDates.filter((date) => date >= yearlyStart).length,
                 };
             }
             catch (error) {
@@ -576,9 +587,9 @@ class AnalyticsService {
                 const totalLectures = course.lectures.length;
                 // Get students enrolled in this course
                 const students = yield student_model_1.Student.find({
-                    'enrolledCourses.courseId': courseId
+                    'enrolledCourses.courseId': courseId,
                 }, {
-                    'enrolledCourses.$': 1
+                    'enrolledCourses.$': 1,
                 });
                 if (students.length === 0) {
                     return 0;
@@ -587,7 +598,8 @@ class AnalyticsService {
                 let totalCompletedStudents = 0;
                 for (const student of students) {
                     const enrollment = student.enrolledCourses[0];
-                    if (enrollment && enrollment.completedLectures.length === totalLectures) {
+                    if (enrollment &&
+                        enrollment.completedLectures.length === totalLectures) {
                         totalCompletedStudents++;
                     }
                 }
@@ -624,23 +636,26 @@ class AnalyticsService {
                 const weeklyStart = (0, date_fns_1.startOfWeek)(now);
                 const monthlyStart = (0, date_fns_1.startOfMonth)(now);
                 const yearlyStart = (0, date_fns_1.startOfYear)(now);
-                const query = { teacherId: new mongoose_1.Types.ObjectId(teacherId), status: 'completed' };
+                const query = {
+                    teacherId: new mongoose_1.Types.ObjectId(teacherId),
+                    status: 'completed',
+                };
                 if (courseId) {
                     query.courseId = new mongoose_1.Types.ObjectId(courseId);
                 }
                 const payments = yield payment_model_1.Payment.find(query);
                 return {
                     daily: payments
-                        .filter(p => p.createdAt && p.createdAt >= dailyStart)
+                        .filter((p) => p.createdAt && p.createdAt >= dailyStart)
                         .reduce((sum, p) => sum + p.teacherShare, 0),
                     weekly: payments
-                        .filter(p => p.createdAt && p.createdAt >= weeklyStart)
+                        .filter((p) => p.createdAt && p.createdAt >= weeklyStart)
                         .reduce((sum, p) => sum + p.teacherShare, 0),
                     monthly: payments
-                        .filter(p => p.createdAt && p.createdAt >= monthlyStart)
+                        .filter((p) => p.createdAt && p.createdAt >= monthlyStart)
                         .reduce((sum, p) => sum + p.teacherShare, 0),
                     yearly: payments
-                        .filter(p => p.createdAt && p.createdAt >= yearlyStart)
+                        .filter((p) => p.createdAt && p.createdAt >= yearlyStart)
                         .reduce((sum, p) => sum + p.teacherShare, 0),
                 };
             }
@@ -657,27 +672,27 @@ class AnalyticsService {
                     {
                         $match: {
                             teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                            status: 'completed'
-                        }
+                            status: 'completed',
+                        },
                     },
                     {
                         $group: {
                             _id: '$courseId',
                             totalRevenue: { $sum: '$teacherShare' },
-                            enrollmentCount: { $sum: 1 }
-                        }
+                            enrollmentCount: { $sum: 1 },
+                        },
                     },
                     {
-                        $sort: { totalRevenue: -1 }
+                        $sort: { totalRevenue: -1 },
                     },
                     {
-                        $limit: 10
-                    }
+                        $limit: 10,
+                    },
                 ]);
-                return revenueData.map(item => ({
+                return revenueData.map((item) => ({
                     courseId: item._id,
                     revenue: item.totalRevenue,
-                    enrollments: item.enrollmentCount
+                    enrollments: item.enrollmentCount,
                 }));
             }
             catch (error) {
@@ -759,22 +774,24 @@ class AnalyticsService {
                 const topCourses = courses
                     .sort((a, b) => (b.totalEnrollment || 0) - (a.totalEnrollment || 0))
                     .slice(0, 5)
-                    .map(course => ({
+                    .map((course) => ({
                     courseId: course._id.toString(),
                     courseName: course.title,
-                    enrollments: course.totalEnrollment || 0
+                    enrollments: course.totalEnrollment || 0,
                 }));
                 // Calculate growth rate (compare with previous period)
                 const previousPeriodEnrollments = yield this.getPreviousPeriodEnrollments(teacherId, period, courseId);
                 const growthRate = previousPeriodEnrollments > 0
-                    ? ((newEnrollments - previousPeriodEnrollments) / previousPeriodEnrollments) * 100
+                    ? ((newEnrollments - previousPeriodEnrollments) /
+                        previousPeriodEnrollments) *
+                        100
                     : 0;
                 const result = {
                     totalEnrollments,
                     newEnrollments,
                     enrollmentTrend,
                     topCourses,
-                    growthRate
+                    growthRate,
                 };
                 // Cache for 1 hour
                 yield redis_1.redisOperations.setex(cacheKey, this.CACHE_TTL.hourly, JSON.stringify(result));
@@ -788,7 +805,113 @@ class AnalyticsService {
                     newEnrollments: 0,
                     enrollmentTrend: [],
                     topCourses: [],
-                    growthRate: 0
+                    growthRate: 0,
+                };
+            }
+        });
+    }
+    /**
+     * Get detailed student engagement data with pagination and sorting
+     */
+    getStudentEngagementDetails(teacherId_1) {
+        return __awaiter(this, arguments, void 0, function* (teacherId, options = {}) {
+            try {
+                const { page = 1, limit = 20, sortBy = 'engagementScore', sortOrder = 'desc', period = 'monthly', courseId, startDate, endDate, } = options;
+                const cacheKey = `student_engagement_details:${teacherId}:${page}:${limit}:${sortBy}:${sortOrder}:${period}:${courseId || 'all'}`;
+                const cached = yield redis_1.redisOperations.get(cacheKey);
+                if (cached) {
+                    return JSON.parse(cached);
+                }
+                // Build query
+                const query = { teacherId: new mongoose_1.Types.ObjectId(teacherId) };
+                if (courseId) {
+                    query.courseId = new mongoose_1.Types.ObjectId(courseId);
+                }
+                // Add date range filter
+                if (startDate && endDate) {
+                    query.lastActivity = {
+                        $gte: new Date(startDate),
+                        $lte: new Date(endDate),
+                    };
+                }
+                else {
+                    // Default to period-based filtering
+                    const dateRange = this.getDateRange(period);
+                    query.lastActivity = {
+                        $gte: dateRange.startDate,
+                        $lte: dateRange.endDate,
+                    };
+                }
+                // Get total count for pagination
+                const total = yield analytics_model_1.StudentEngagement.countDocuments(query);
+                const totalPages = Math.ceil(total / limit);
+                const skip = (page - 1) * limit;
+                // Build sort object
+                const sortObj = {};
+                sortObj[sortBy] = sortOrder === 'desc' ? -1 : 1;
+                // Get paginated student engagement data
+                const engagementData = yield analytics_model_1.StudentEngagement.find(query)
+                    .populate('studentId', 'name email avatar')
+                    .populate('courseId', 'title')
+                    .sort(sortObj)
+                    .skip(skip)
+                    .limit(limit)
+                    .lean();
+                // Transform data to match frontend expectations
+                const students = engagementData.map((engagement) => {
+                    var _a, _b, _c, _d, _e;
+                    return ({
+                        studentId: ((_a = engagement.studentId) === null || _a === void 0 ? void 0 : _a._id) || engagement.studentId,
+                        studentName: ((_b = engagement.studentId) === null || _b === void 0 ? void 0 : _b.name) || 'Unknown Student',
+                        studentEmail: ((_c = engagement.studentId) === null || _c === void 0 ? void 0 : _c.email) || '',
+                        studentAvatar: ((_d = engagement.studentId) === null || _d === void 0 ? void 0 : _d.avatar) || '',
+                        enrollmentDate: engagement.createdAt,
+                        lastActiveDate: engagement.lastActivity,
+                        totalTimeSpent: engagement.totalTimeSpent || 0,
+                        coursesEnrolled: 1, // This would need to be calculated separately
+                        coursesCompleted: engagement.lecturesCompleted === engagement.totalLectures ? 1 : 0,
+                        averageProgress: engagement.totalLectures > 0
+                            ? Math.round((engagement.lecturesCompleted / engagement.totalLectures) * 100)
+                            : 0,
+                        engagementScore: engagement.engagementScore || 0,
+                        activityPattern: {
+                            preferredTimeSlots: ['Morning'], // Mock data - would need real calculation
+                            averageSessionDuration: Math.round(engagement.totalTimeSpent /
+                                Math.max(engagement.lecturesCompleted, 1)),
+                            weeklyActivity: [0, 0, 0, 0, 0, 0, 0], // Mock data - would need real calculation
+                        },
+                        performanceMetrics: {
+                            averageQuizScore: 0, // Would need to be calculated from quiz results
+                            assignmentsCompleted: 0, // Would need to be calculated from assignments
+                            certificatesEarned: 0, // Would need to be calculated from certificates
+                        },
+                        courseTitle: ((_e = engagement.courseId) === null || _e === void 0 ? void 0 : _e.title) || 'Unknown Course',
+                    });
+                });
+                const result = {
+                    students,
+                    pagination: {
+                        page,
+                        limit,
+                        total,
+                        totalPages,
+                    },
+                };
+                // Cache for 10 minutes
+                yield redis_1.redisOperations.setex(cacheKey, 600, JSON.stringify(result));
+                return result;
+            }
+            catch (error) {
+                logger_1.Logger.error('❌ Failed to get student engagement details:', error);
+                // Return empty result on error
+                return {
+                    students: [],
+                    pagination: {
+                        page: 1,
+                        limit: 20,
+                        total: 0,
+                        totalPages: 0,
+                    },
                 };
             }
         });
@@ -807,7 +930,7 @@ class AnalyticsService {
                 const dateRange = this.getDateRange(period);
                 const query = {
                     teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                    createdAt: { $gte: dateRange.startDate, $lte: dateRange.endDate }
+                    createdAt: { $gte: dateRange.startDate, $lte: dateRange.endDate },
                 };
                 if (courseId) {
                     query.courseId = new mongoose_1.Types.ObjectId(courseId);
@@ -817,7 +940,7 @@ class AnalyticsService {
                     .populate('courseId', 'title')
                     .populate('studentId', 'name email');
                 // Calculate metrics
-                const totalActiveStudents = engagementData.filter(data => data.lastActivity >= (0, date_fns_1.subDays)(new Date(), 7)).length;
+                const totalActiveStudents = engagementData.filter((data) => data.lastActivity >= (0, date_fns_1.subDays)(new Date(), 7)).length;
                 const averageEngagementScore = engagementData.length > 0
                     ? engagementData.reduce((sum, data) => sum + data.engagementScore, 0) / engagementData.length
                     : 0;
@@ -835,7 +958,7 @@ class AnalyticsService {
                     completionRates,
                     timeSpentTrends,
                     activityPatterns,
-                    retentionRate
+                    retentionRate,
                 };
                 // Cache for 30 minutes
                 yield redis_1.redisOperations.setex(cacheKey, 1800, JSON.stringify(result));
@@ -850,7 +973,7 @@ class AnalyticsService {
                     completionRates: [],
                     timeSpentTrends: [],
                     activityPatterns: [],
-                    retentionRate: 0
+                    retentionRate: 0,
                 };
             }
         });
@@ -870,7 +993,7 @@ class AnalyticsService {
                 const query = {
                     teacherId: new mongoose_1.Types.ObjectId(teacherId),
                     status: 'completed',
-                    createdAt: { $gte: dateRange.startDate, $lte: dateRange.endDate }
+                    createdAt: { $gte: dateRange.startDate, $lte: dateRange.endDate },
                 };
                 if (courseId) {
                     query.courseId = new mongoose_1.Types.ObjectId(courseId);
@@ -881,7 +1004,8 @@ class AnalyticsService {
                 // Calculate revenue growth
                 const previousPeriodRevenue = yield this.getPreviousPeriodRevenue(teacherId, period, courseId);
                 const revenueGrowth = previousPeriodRevenue > 0
-                    ? ((totalRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100
+                    ? ((totalRevenue - previousPeriodRevenue) / previousPeriodRevenue) *
+                        100
                     : 0;
                 // Calculate average order value
                 const averageOrderValue = payments.length > 0 ? totalRevenue / payments.length : 0;
@@ -903,7 +1027,7 @@ class AnalyticsService {
                     topEarningCourses,
                     revenueByPeriod,
                     conversionRate,
-                    refundRate
+                    refundRate,
                 };
                 // Cache for 1 hour
                 yield redis_1.redisOperations.setex(cacheKey, this.CACHE_TTL.hourly, JSON.stringify(result));
@@ -920,7 +1044,7 @@ class AnalyticsService {
                     topEarningCourses: [],
                     revenueByPeriod: { daily: 0, weekly: 0, monthly: 0, yearly: 0 },
                     conversionRate: 0,
-                    refundRate: 0
+                    refundRate: 0,
                 };
             }
         });
@@ -967,7 +1091,7 @@ class AnalyticsService {
                     studentRetentionRate,
                     qualityMetrics,
                     competitiveMetrics,
-                    improvementSuggestions
+                    improvementSuggestions,
                 };
                 // Cache for 2 hours
                 yield redis_1.redisOperations.setex(cacheKey, this.CACHE_TTL.hourly * 2, JSON.stringify(result));
@@ -998,8 +1122,8 @@ class AnalyticsService {
                     improvementSuggestions: [
                         'Create your first course to start tracking performance metrics',
                         'Add engaging content to improve student satisfaction',
-                        'Set up your profile to build credibility'
-                    ]
+                        'Set up your profile to build credibility',
+                    ],
                 };
             }
         });
@@ -1021,8 +1145,8 @@ class AnalyticsService {
                         'enrolledCourses.courseId': course._id,
                         'enrolledCourses.enrolledAt': {
                             $gte: dateRange.startDate,
-                            $lte: dateRange.endDate
-                        }
+                            $lte: dateRange.endDate,
+                        },
                     });
                     totalNewEnrollments += students.length;
                 }
@@ -1044,7 +1168,7 @@ class AnalyticsService {
                     const count = yield this.calculateNewEnrollmentsInPeriod(teacherId, interval, courseId);
                     trend.push({
                         date: interval.startDate.toISOString().split('T')[0],
-                        count
+                        count,
                     });
                 }
                 return trend;
@@ -1062,7 +1186,7 @@ class AnalyticsService {
                 const periodLength = currentRange.endDate.getTime() - currentRange.startDate.getTime();
                 const previousRange = {
                     startDate: new Date(currentRange.startDate.getTime() - periodLength),
-                    endDate: new Date(currentRange.endDate.getTime() - periodLength)
+                    endDate: new Date(currentRange.endDate.getTime() - periodLength),
                 };
                 return yield this.calculateNewEnrollmentsInPeriod(teacherId, previousRange, courseId);
             }
@@ -1086,7 +1210,7 @@ class AnalyticsService {
                     completionRates.push({
                         courseId: course._id.toString(),
                         courseName: course.title,
-                        rate
+                        rate,
                     });
                 }
                 return completionRates;
@@ -1107,8 +1231,8 @@ class AnalyticsService {
                         teacherId: new mongoose_1.Types.ObjectId(teacherId),
                         lastActivity: {
                             $gte: interval.startDate,
-                            $lte: interval.endDate
-                        }
+                            $lte: interval.endDate,
+                        },
                     };
                     if (courseId) {
                         query.courseId = new mongoose_1.Types.ObjectId(courseId);
@@ -1118,7 +1242,7 @@ class AnalyticsService {
                     const averageMinutes = engagementData.length > 0 ? totalMinutes / engagementData.length : 0;
                     trends.push({
                         date: interval.startDate.toISOString().split('T')[0],
-                        minutes: averageMinutes
+                        minutes: averageMinutes,
                     });
                 }
                 return trends;
@@ -1143,14 +1267,14 @@ class AnalyticsService {
                     hourlyActivity[i] = 0;
                 }
                 // Count activity by hour (using peak hours from engagement data)
-                engagementData.forEach(data => {
-                    data.activityPattern.peakHours.forEach(hour => {
+                engagementData.forEach((data) => {
+                    data.activityPattern.peakHours.forEach((hour) => {
                         hourlyActivity[hour] = (hourlyActivity[hour] || 0) + 1;
                     });
                 });
                 return Object.entries(hourlyActivity).map(([hour, activity]) => ({
                     hour: parseInt(hour),
-                    activity
+                    activity,
                 }));
             }
             catch (error) {
@@ -1188,7 +1312,7 @@ class AnalyticsService {
                     const date = (0, date_fns_1.subDays)(now, i);
                     intervals.push({
                         startDate: (0, date_fns_1.startOfDay)(date),
-                        endDate: (0, date_fns_1.endOfDay)(date)
+                        endDate: (0, date_fns_1.endOfDay)(date),
                     });
                 }
                 break;
@@ -1198,7 +1322,7 @@ class AnalyticsService {
                     const date = (0, date_fns_1.subDays)(now, i * 7);
                     intervals.push({
                         startDate: (0, date_fns_1.startOfWeek)(date),
-                        endDate: (0, date_fns_1.endOfWeek)(date)
+                        endDate: (0, date_fns_1.endOfWeek)(date),
                     });
                 }
                 break;
@@ -1208,7 +1332,7 @@ class AnalyticsService {
                     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
                     intervals.push({
                         startDate: (0, date_fns_1.startOfMonth)(date),
-                        endDate: (0, date_fns_1.endOfMonth)(date)
+                        endDate: (0, date_fns_1.endOfMonth)(date),
                     });
                 }
                 break;
@@ -1218,7 +1342,7 @@ class AnalyticsService {
                     const date = new Date(now.getFullYear() - i, 0, 1);
                     intervals.push({
                         startDate: (0, date_fns_1.startOfYear)(date),
-                        endDate: (0, date_fns_1.endOfYear)(date)
+                        endDate: (0, date_fns_1.endOfYear)(date),
                     });
                 }
                 break;
@@ -1232,15 +1356,15 @@ class AnalyticsService {
                 const periodLength = currentRange.endDate.getTime() - currentRange.startDate.getTime();
                 const previousRange = {
                     startDate: new Date(currentRange.startDate.getTime() - periodLength),
-                    endDate: new Date(currentRange.endDate.getTime() - periodLength)
+                    endDate: new Date(currentRange.endDate.getTime() - periodLength),
                 };
                 const query = {
                     teacherId: new mongoose_1.Types.ObjectId(teacherId),
                     status: 'completed',
                     createdAt: {
                         $gte: previousRange.startDate,
-                        $lte: previousRange.endDate
-                    }
+                        $lte: previousRange.endDate,
+                    },
                 };
                 if (courseId) {
                     query.courseId = new mongoose_1.Types.ObjectId(courseId);
@@ -1265,8 +1389,8 @@ class AnalyticsService {
                         status: 'completed',
                         createdAt: {
                             $gte: interval.startDate,
-                            $lte: interval.endDate
-                        }
+                            $lte: interval.endDate,
+                        },
                     };
                     if (courseId) {
                         query.courseId = new mongoose_1.Types.ObjectId(courseId);
@@ -1276,7 +1400,7 @@ class AnalyticsService {
                     trends.push({
                         date: interval.startDate.toISOString().split('T')[0],
                         amount: totalAmount,
-                        count: payments.length
+                        count: payments.length,
                     });
                 }
                 return trends;
@@ -1294,38 +1418,38 @@ class AnalyticsService {
                     {
                         $match: {
                             teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                            status: 'completed'
-                        }
+                            status: 'completed',
+                        },
                     },
                     {
                         $group: {
                             _id: '$courseId',
                             totalRevenue: { $sum: '$teacherShare' },
-                            enrollmentCount: { $sum: 1 }
-                        }
+                            enrollmentCount: { $sum: 1 },
+                        },
                     },
                     {
-                        $sort: { totalRevenue: -1 }
+                        $sort: { totalRevenue: -1 },
                     },
                     {
-                        $limit: 10
+                        $limit: 10,
                     },
                     {
                         $lookup: {
                             from: 'courses',
                             localField: '_id',
                             foreignField: '_id',
-                            as: 'course'
-                        }
-                    }
+                            as: 'course',
+                        },
+                    },
                 ]);
-                return revenueData.map(item => {
+                return revenueData.map((item) => {
                     var _a;
                     return ({
                         courseId: item._id.toString(),
                         courseName: ((_a = item.course[0]) === null || _a === void 0 ? void 0 : _a.title) || 'Unknown Course',
                         revenue: item.totalRevenue,
-                        enrollments: item.enrollmentCount
+                        enrollments: item.enrollmentCount,
                     });
                 });
             }
@@ -1350,11 +1474,13 @@ class AnalyticsService {
                     const paidEnrollments = yield payment_model_1.Payment.countDocuments({
                         courseId: course._id,
                         teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                        status: 'completed'
+                        status: 'completed',
                     });
                     totalPaidEnrollments += paidEnrollments;
                 }
-                return totalEnrollments > 0 ? (totalPaidEnrollments / totalEnrollments) * 100 : 0;
+                return totalEnrollments > 0
+                    ? (totalPaidEnrollments / totalEnrollments) * 100
+                    : 0;
             }
             catch (error) {
                 logger_1.Logger.error('❌ Failed to calculate conversion rate:', error);
@@ -1386,7 +1512,7 @@ class AnalyticsService {
                 const dateRange = this.getDateRange(period);
                 const query = {
                     teacherId: new mongoose_1.Types.ObjectId(teacherId),
-                    createdAt: { $gte: dateRange.startDate, $lte: dateRange.endDate }
+                    createdAt: { $gte: dateRange.startDate, $lte: dateRange.endDate },
                 };
                 if (courseId) {
                     query.courseId = new mongoose_1.Types.ObjectId(courseId);
@@ -1394,9 +1520,9 @@ class AnalyticsService {
                 // TODO: Implement actual rating trends from reviews data
                 // This is a placeholder implementation
                 const intervals = this.generateDateIntervals(period);
-                return intervals.map(interval => ({
+                return intervals.map((interval) => ({
                     date: interval.startDate.toISOString().split('T')[0],
-                    rating: 4.5 // Placeholder
+                    rating: 4.5, // Placeholder
                 }));
             }
             catch (error) {
@@ -1455,7 +1581,8 @@ class AnalyticsService {
             let topInsight = 'Your courses are performing well overall.';
             // Analyze course performance
             if (courseAnalytics.length > 0) {
-                const avgCompletionRate = courseAnalytics.reduce((sum, ca) => sum + ca.completionRate, 0) / courseAnalytics.length;
+                const avgCompletionRate = courseAnalytics.reduce((sum, ca) => sum + ca.completionRate, 0) /
+                    courseAnalytics.length;
                 if (avgCompletionRate < 50) {
                     alerts.push('Low course completion rates detected');
                     recommendations.push('Consider reviewing course structure and content engagement');

@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import httpStatus from 'http-status';
+import AppError from '../../errors/AppError';
+import ActivityTrackingService from '../../services/activity/ActivityTrackingService';
+import AnalyticsService from '../../services/analytics/AnalyticsService';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
-import AppError from '../../errors/AppError';
-import AnalyticsService from '../../services/analytics/AnalyticsService';
-import ActivityTrackingService from '../../services/activity/ActivityTrackingService';
 import { Teacher } from '../Teacher/teacher.model';
 // Removed unused imports
 
@@ -15,8 +15,15 @@ const activityTrackingService = new ActivityTrackingService();
  * Helper function to validate and resolve teacher ID
  * Handles cases where frontend passes user._id instead of teacher._id
  */
-const validateAndResolveTeacherId = async (teacherId: string, authenticatedUser: any): Promise<string> => {
-  console.log('🔍 validateAndResolveTeacherId called with:', { teacherId, userRole: authenticatedUser.role, userId: authenticatedUser._id });
+const validateAndResolveTeacherId = async (
+  teacherId: string,
+  authenticatedUser: any,
+): Promise<string> => {
+  console.log('🔍 validateAndResolveTeacherId called with:', {
+    teacherId,
+    userRole: authenticatedUser.role,
+    userId: authenticatedUser._id,
+  });
 
   if (authenticatedUser.role !== 'teacher') {
     console.log('✅ Non-teacher user, returning original teacherId');
@@ -32,7 +39,10 @@ const validateAndResolveTeacherId = async (teacherId: string, authenticatedUser:
   if (!teacher) {
     console.log('🔍 Looking for teacher by user ID:', teacherId);
     teacher = await Teacher.findOne({ user: teacherId });
-    console.log('📊 Teacher.findOne({user}) result:', teacher ? 'Found' : 'Not found');
+    console.log(
+      '📊 Teacher.findOne({user}) result:',
+      teacher ? 'Found' : 'Not found',
+    );
   }
 
   // Validate that the teacher belongs to the authenticated user
@@ -41,14 +51,26 @@ const validateAndResolveTeacherId = async (teacherId: string, authenticatedUser:
     throw new AppError(httpStatus.FORBIDDEN, 'Teacher not found');
   }
 
-  console.log('🔍 Teacher found:', { teacherId: teacher._id, userId: teacher.user });
+  console.log('🔍 Teacher found:', {
+    teacherId: teacher._id,
+    userId: teacher.user,
+  });
 
   if (teacher.user.toString() !== authenticatedUser._id) {
-    console.log('❌ Teacher user mismatch:', { teacherUserId: teacher.user.toString(), authenticatedUserId: authenticatedUser._id });
-    throw new AppError(httpStatus.FORBIDDEN, 'You can only access your own data');
+    console.log('❌ Teacher user mismatch:', {
+      teacherUserId: teacher.user.toString(),
+      authenticatedUserId: authenticatedUser._id,
+    });
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You can only access your own data',
+    );
   }
 
-  console.log('✅ Teacher validation successful, returning teacher ID:', teacher._id.toString());
+  console.log(
+    '✅ Teacher validation successful, returning teacher ID:',
+    teacher._id.toString(),
+  );
   return teacher._id.toString();
 };
 
@@ -62,7 +84,7 @@ const getTeacherAnalytics = catchAsync(async (req: Request, res: Response) => {
     courseId,
     startDate,
     endDate,
-    compareWithPrevious = false
+    compareWithPrevious = false,
   } = req.query;
 
   // Validate teacher ID matches authenticated user
@@ -99,13 +121,20 @@ const getCourseAnalytics = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  const dateRange = startDate && endDate ? {
-    startDate: new Date(startDate as string),
-    endDate: new Date(endDate as string),
-  } : undefined;
+  const dateRange =
+    startDate && endDate
+      ? {
+          startDate: new Date(startDate as string),
+          endDate: new Date(endDate as string),
+        }
+      : undefined;
 
   // Use period parameter for analytics (currently passed but not used in service)
-  const analytics = await analyticsService.getCourseAnalytics(teacherId, courseId, dateRange);
+  const analytics = await analyticsService.getCourseAnalytics(
+    teacherId,
+    courseId,
+    dateRange,
+  );
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -126,16 +155,19 @@ const getRevenueAnalytics = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  const dateRange = startDate && endDate ? {
-    startDate: new Date(startDate as string),
-    endDate: new Date(endDate as string),
-  } : undefined;
+  const dateRange =
+    startDate && endDate
+      ? {
+          startDate: new Date(startDate as string),
+          endDate: new Date(endDate as string),
+        }
+      : undefined;
 
   // Note: period parameter available for future use
   const analytics = await analyticsService.getRevenueAnalytics(
     teacherId,
     courseId as string,
-    dateRange
+    dateRange,
   );
 
   sendResponse(res, {
@@ -149,33 +181,38 @@ const getRevenueAnalytics = catchAsync(async (req: Request, res: Response) => {
 /**
  * Get performance metrics
  */
-const getPerformanceMetrics = catchAsync(async (req: Request, res: Response) => {
-  const { teacherId } = req.params;
-  const { courseId, period = 'monthly', startDate, endDate } = req.query;
+const getPerformanceMetrics = catchAsync(
+  async (req: Request, res: Response) => {
+    const { teacherId } = req.params;
+    const { courseId, period = 'monthly', startDate, endDate } = req.query;
 
-  // Validate teacher ID matches authenticated user
-  const user = (req as any).user;
-  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
+    // Validate teacher ID matches authenticated user
+    const user = (req as any).user;
+    const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  const dateRange = startDate && endDate ? {
-    startDate: new Date(startDate as string),
-    endDate: new Date(endDate as string),
-  } : undefined;
+    const dateRange =
+      startDate && endDate
+        ? {
+            startDate: new Date(startDate as string),
+            endDate: new Date(endDate as string),
+          }
+        : undefined;
 
-  // Note: period parameter available for future use
-  const metrics = await analyticsService.getPerformanceMetrics(
-    teacherId,
-    courseId as string,
-    dateRange
-  );
+    // Note: period parameter available for future use
+    const metrics = await analyticsService.getPerformanceMetrics(
+      teacherId,
+      courseId as string,
+      dateRange,
+    );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Performance metrics retrieved successfully',
-    data: metrics,
-  });
-});
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'Performance metrics retrieved successfully',
+      data: metrics,
+    });
+  },
+);
 
 /**
  * Get student engagement analytics
@@ -188,16 +225,19 @@ const getStudentEngagement = catchAsync(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  const dateRange = startDate && endDate ? {
-    startDate: new Date(startDate as string),
-    endDate: new Date(endDate as string),
-  } : undefined;
+  const dateRange =
+    startDate && endDate
+      ? {
+          startDate: new Date(startDate as string),
+          endDate: new Date(endDate as string),
+        }
+      : undefined;
 
   // Note: period parameter available for future use
   const engagement = await analyticsService.getStudentEngagementSummary(
     teacherId,
     courseId as string,
-    dateRange
+    dateRange,
   );
 
   sendResponse(res, {
@@ -221,7 +261,7 @@ const getActivityFeed = catchAsync(async (req: Request, res: Response) => {
     isRead,
     courseId,
     sortBy = 'createdAt',
-    sortOrder = 'desc'
+    sortOrder = 'desc',
   } = req.query;
 
   // Validate teacher ID matches authenticated user
@@ -237,10 +277,14 @@ const getActivityFeed = catchAsync(async (req: Request, res: Response) => {
     isRead: isRead === 'true' ? true : isRead === 'false' ? false : undefined,
     courseId: courseId as string,
     sortBy: sortBy as any,
-    sortOrder: sortOrder as any
+    sortOrder: sortOrder as any,
   };
 
-  const activitiesResult = await activityTrackingService.getActivitiesWithFilters(actualTeacherId, filters);
+  const activitiesResult =
+    await activityTrackingService.getActivitiesWithFilters(
+      actualTeacherId,
+      filters,
+    );
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -286,6 +330,17 @@ const markActivityAsRead = catchAsync(async (req: Request, res: Response) => {
  */
 const getDashboardSummary = catchAsync(async (req: Request, res: Response) => {
   const { teacherId } = req.params;
+
+  // Set no-cache headers for real-time analytics data
+  res.setHeader(
+    'Cache-Control',
+    'no-cache, no-store, must-revalidate, private',
+  );
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Last-Modified', new Date().toUTCString());
+  res.setHeader('ETag', `"${Date.now()}"`);
+  res.setHeader('X-Analytics-Timestamp', Date.now().toString());
 
   // Validate teacher ID matches authenticated user
   const user = (req as any).user;
@@ -345,7 +400,10 @@ const exportAnalytics = catchAsync(async (req: Request, res: Response) => {
 
   if (format === 'csv') {
     // TODO: Implement CSV export
-    throw new AppError(httpStatus.NOT_IMPLEMENTED, 'CSV export not yet implemented');
+    throw new AppError(
+      httpStatus.NOT_IMPLEMENTED,
+      'CSV export not yet implemented',
+    );
   }
 
   sendResponse(res, {
@@ -359,131 +417,218 @@ const exportAnalytics = catchAsync(async (req: Request, res: Response) => {
 /**
  * Get detailed enrollment statistics
  */
-const getEnrollmentStatistics = catchAsync(async (req: Request, res: Response) => {
-  const { teacherId } = req.params;
-  const { period = 'monthly', courseId } = req.query;
+const getEnrollmentStatistics = catchAsync(
+  async (req: Request, res: Response) => {
+    const { teacherId } = req.params;
+    const { period = 'monthly', courseId } = req.query;
 
-  // Validate teacher ID matches authenticated user
-  const user = (req as any).user;
-  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
+    // Set no-cache headers for real-time enrollment data
+    res.setHeader(
+      'Cache-Control',
+      'no-cache, no-store, must-revalidate, private',
+    );
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    res.setHeader('X-Analytics-Timestamp', Date.now().toString());
 
-  const statistics = await analyticsService.getEnrollmentStatistics(
-    teacherId,
-    period as 'daily' | 'weekly' | 'monthly' | 'yearly',
-    courseId as string
-  );
+    // Validate teacher ID matches authenticated user
+    const user = (req as any).user;
+    const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Enrollment statistics retrieved successfully',
-    data: statistics,
-  });
-});
+    const statistics = await analyticsService.getEnrollmentStatistics(
+      teacherId,
+      period as 'daily' | 'weekly' | 'monthly' | 'yearly',
+      courseId as string,
+    );
+
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'Enrollment statistics retrieved successfully',
+      data: statistics,
+    });
+  },
+);
 
 /**
  * Get detailed student engagement metrics
  */
-const getStudentEngagementMetrics = catchAsync(async (req: Request, res: Response) => {
-  const { teacherId } = req.params;
-  const { period = 'monthly', courseId } = req.query;
+const getStudentEngagementMetrics = catchAsync(
+  async (req: Request, res: Response) => {
+    const { teacherId } = req.params;
+    const { period = 'monthly', courseId } = req.query;
 
-  // Validate teacher ID matches authenticated user
-  const user = (req as any).user;
-  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
+    // Set no-cache headers for real-time engagement data
+    res.setHeader(
+      'Cache-Control',
+      'no-cache, no-store, must-revalidate, private',
+    );
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    res.setHeader('X-Analytics-Timestamp', Date.now().toString());
 
-  const metrics = await analyticsService.getStudentEngagementMetrics(
-    teacherId,
-    period as 'daily' | 'weekly' | 'monthly' | 'yearly',
-    courseId as string
-  );
+    // Validate teacher ID matches authenticated user
+    const user = (req as any).user;
+    const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Student engagement metrics retrieved successfully',
-    data: metrics,
-  });
-});
+    const metrics = await analyticsService.getStudentEngagementMetrics(
+      teacherId,
+      period as 'daily' | 'weekly' | 'monthly' | 'yearly',
+      courseId as string,
+    );
+
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'Student engagement metrics retrieved successfully',
+      data: metrics,
+    });
+  },
+);
+
+/**
+ * Get detailed student engagement data with pagination
+ */
+const getStudentEngagementDetails = catchAsync(
+  async (req: Request, res: Response) => {
+    const { teacherId } = req.params;
+    const {
+      page = 1,
+      limit = 20,
+      sortBy = 'engagementScore',
+      sortOrder = 'desc',
+      period = 'monthly',
+      courseId,
+      startDate,
+      endDate,
+    } = req.query;
+
+    // Set no-cache headers for real-time data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Last-Modified', new Date().toUTCString());
+    res.setHeader('ETag', `"${Date.now()}"`);
+    res.setHeader('X-Analytics-Timestamp', Date.now().toString());
+
+    // Validate teacher ID matches authenticated user
+    const user = (req as any).user;
+    const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
+
+    const result = await analyticsService.getStudentEngagementDetails(
+      teacherId,
+      {
+        page: Number(page),
+        limit: Number(limit),
+        sortBy: sortBy as string,
+        sortOrder: sortOrder as 'asc' | 'desc',
+        period: period as string,
+        courseId: courseId as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
+      },
+    );
+
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'Student engagement details retrieved successfully',
+      data: result,
+    });
+  },
+);
 
 /**
  * Get detailed revenue analytics
  */
-const getRevenueAnalyticsDetailed = catchAsync(async (req: Request, res: Response) => {
-  const { teacherId } = req.params;
-  const { period = 'monthly', courseId } = req.query;
+const getRevenueAnalyticsDetailed = catchAsync(
+  async (req: Request, res: Response) => {
+    const { teacherId } = req.params;
+    const { period = 'monthly', courseId } = req.query;
 
-  // Validate teacher ID matches authenticated user
-  const user = (req as any).user;
-  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
+    // Validate teacher ID matches authenticated user
+    const user = (req as any).user;
+    const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  const analytics = await analyticsService.getRevenueAnalyticsDetailed(
-    teacherId,
-    period as 'daily' | 'weekly' | 'monthly' | 'yearly',
-    courseId as string
-  );
+    const analytics = await analyticsService.getRevenueAnalyticsDetailed(
+      teacherId,
+      period as 'daily' | 'weekly' | 'monthly' | 'yearly',
+      courseId as string,
+    );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Detailed revenue analytics retrieved successfully',
-    data: analytics,
-  });
-});
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'Detailed revenue analytics retrieved successfully',
+      data: analytics,
+    });
+  },
+);
 
 /**
  * Get detailed performance metrics
  */
-const getPerformanceMetricsDetailed = catchAsync(async (req: Request, res: Response) => {
-  const { teacherId } = req.params;
-  const { period = 'monthly', courseId } = req.query;
+const getPerformanceMetricsDetailed = catchAsync(
+  async (req: Request, res: Response) => {
+    const { teacherId } = req.params;
+    const { period = 'monthly', courseId } = req.query;
 
-  // Validate teacher ID matches authenticated user
-  const user = (req as any).user;
-  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
+    // Validate teacher ID matches authenticated user
+    const user = (req as any).user;
+    const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  const metrics = await analyticsService.getPerformanceMetricsDetailed(
-    actualTeacherId,
-    period as 'daily' | 'weekly' | 'monthly' | 'yearly',
-    courseId as string
-  );
+    const metrics = await analyticsService.getPerformanceMetricsDetailed(
+      actualTeacherId,
+      period as 'daily' | 'weekly' | 'monthly' | 'yearly',
+      courseId as string,
+    );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Detailed performance metrics retrieved successfully',
-    data: metrics,
-  });
-});
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'Detailed performance metrics retrieved successfully',
+      data: metrics,
+    });
+  },
+);
 
 /**
  * Bulk mark activities as read
  */
-const bulkMarkActivitiesAsRead = catchAsync(async (req: Request, res: Response) => {
-  const { teacherId } = req.params;
-  const { activityIds } = req.body;
+const bulkMarkActivitiesAsRead = catchAsync(
+  async (req: Request, res: Response) => {
+    const { teacherId } = req.params;
+    const { activityIds } = req.body;
 
-  // Validate teacher ID matches authenticated user
-  const user = (req as any).user;
-  const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
+    // Validate teacher ID matches authenticated user
+    const user = (req as any).user;
+    const actualTeacherId = await validateAndResolveTeacherId(teacherId, user);
 
-  if (!Array.isArray(activityIds) || activityIds.length === 0) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Activity IDs array is required');
-  }
+    if (!Array.isArray(activityIds) || activityIds.length === 0) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Activity IDs array is required',
+      );
+    }
 
-  await Promise.all(
-    activityIds.map(activityId =>
-      activityTrackingService.markActivityAsRead(activityId, actualTeacherId)
-    )
-  );
+    await Promise.all(
+      activityIds.map((activityId) =>
+        activityTrackingService.markActivityAsRead(activityId, actualTeacherId),
+      ),
+    );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Activities marked as read successfully',
-    data: null,
-  });
-});
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: 'Activities marked as read successfully',
+      data: null,
+    });
+  },
+);
 
 /**
  * Get real-time analytics data
@@ -504,9 +649,9 @@ const getRealTimeData = catchAsync(async (req: Request, res: Response) => {
       studentsOnline: 0,
       coursesViewed: 0,
       lessonsCompleted: 0,
-      questionsAsked: 0
+      questionsAsked: 0,
     },
-    lastUpdated: new Date().toISOString()
+    lastUpdated: new Date().toISOString(),
   };
 
   sendResponse(res, {
@@ -534,41 +679,44 @@ const getInsights = catchAsync(async (req: Request, res: Response) => {
       id: 'welcome',
       type: 'welcome',
       title: 'Welcome to Your Teaching Journey!',
-      description: 'Start by creating your first course to unlock powerful analytics and insights.',
+      description:
+        'Start by creating your first course to unlock powerful analytics and insights.',
       priority: 'high',
       actionable: true,
       action: {
         text: 'Create Your First Course',
-        url: '/teacher/courses/create'
+        url: '/teacher/courses/create',
       },
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     },
     {
       id: 'setup-profile',
       type: 'onboarding',
       title: 'Complete Your Teacher Profile',
-      description: 'A complete profile helps students trust and connect with you.',
+      description:
+        'A complete profile helps students trust and connect with you.',
       priority: 'medium',
       actionable: true,
       action: {
         text: 'Edit Profile',
-        url: '/teacher/profile/edit'
+        url: '/teacher/profile/edit',
       },
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     },
     {
       id: 'stripe-setup',
       type: 'financial',
       title: 'Set Up Payment Processing',
-      description: 'Connect your Stripe account to start earning from your courses.',
+      description:
+        'Connect your Stripe account to start earning from your courses.',
       priority: 'medium',
       actionable: true,
       action: {
         text: 'Connect Stripe',
-        url: '/teacher/earnings'
+        url: '/teacher/earnings',
       },
-      createdAt: new Date().toISOString()
-    }
+      createdAt: new Date().toISOString(),
+    },
   ];
 
   sendResponse(res, {
@@ -576,6 +724,85 @@ const getInsights = catchAsync(async (req: Request, res: Response) => {
     success: true,
     message: 'Analytics insights retrieved successfully',
     data: newTeacherInsights.slice(0, parseInt(limit as string)),
+  });
+});
+
+/**
+ * Get student dashboard analytics
+ */
+const getStudentDashboard = catchAsync(async (req: Request, res: Response) => {
+  const { studentId } = req.params;
+
+  // Validate student ID matches authenticated user
+  const user = (req as any).user;
+  if (user.role !== 'student' || user.userId !== studentId) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Access denied');
+  }
+
+  // Mock student dashboard data - replace with actual service calls
+  const studentDashboard = {
+    overview: {
+      totalCoursesEnrolled: 5,
+      coursesCompleted: 2,
+      coursesInProgress: 3,
+      totalLearningHours: 45.5,
+      averageProgress: 68,
+    },
+    recentActivity: [
+      {
+        id: '1',
+        type: 'course_progress',
+        courseTitle: 'React Fundamentals',
+        action: 'Completed Module 3',
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+      },
+      {
+        id: '2',
+        type: 'assignment_submitted',
+        courseTitle: 'JavaScript Basics',
+        action: 'Submitted Assignment 2',
+        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+      },
+    ],
+    currentCourses: [
+      {
+        id: 'course1',
+        title: 'React Fundamentals',
+        instructor: 'John Doe',
+        progress: 75,
+        nextLesson: 'State Management',
+        estimatedTimeToComplete: '2 hours',
+      },
+      {
+        id: 'course2',
+        title: 'JavaScript Basics',
+        instructor: 'Jane Smith',
+        progress: 45,
+        nextLesson: 'Async Programming',
+        estimatedTimeToComplete: '4 hours',
+      },
+    ],
+    achievements: [
+      {
+        id: 'achievement1',
+        title: 'First Course Completed',
+        description: 'Completed your first course',
+        earnedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
+        icon: 'trophy',
+      },
+    ],
+    learningStreak: {
+      currentStreak: 7,
+      longestStreak: 15,
+      lastActivityDate: new Date(),
+    },
+  };
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Student dashboard analytics retrieved successfully',
+    data: studentDashboard,
   });
 });
 
@@ -592,10 +819,13 @@ export const AnalyticsController = {
   // New enhanced endpoints
   getEnrollmentStatistics,
   getStudentEngagementMetrics,
+  getStudentEngagementDetails,
   getRevenueAnalyticsDetailed,
   getPerformanceMetricsDetailed,
   bulkMarkActivitiesAsRead,
   // Missing endpoints
   getRealTimeData,
   getInsights,
+  // Student endpoints
+  getStudentDashboard,
 };

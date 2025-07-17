@@ -46,16 +46,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StripeService = void 0;
-const stripe_1 = __importDefault(require("stripe"));
-const mongoose_1 = __importStar(require("mongoose"));
-const config_1 = __importDefault(require("../../config"));
-const teacher_model_1 = require("../Teacher/teacher.model");
-const student_model_1 = require("../Student/student.model");
-const course_model_1 = require("../Course/course.model");
-const transaction_model_1 = require("./transaction.model");
-const payoutSummary_model_1 = require("./payoutSummary.model");
-const AppError_1 = __importDefault(require("../../errors/AppError"));
 const http_status_1 = __importDefault(require("http-status"));
+const mongoose_1 = __importStar(require("mongoose"));
+const stripe_1 = __importDefault(require("stripe"));
+const config_1 = __importDefault(require("../../config"));
+const AppError_1 = __importDefault(require("../../errors/AppError"));
+const course_model_1 = require("../Course/course.model");
+const student_model_1 = require("../Student/student.model");
+const teacher_model_1 = require("../Teacher/teacher.model");
+const payoutSummary_model_1 = require("./payoutSummary.model");
+const transaction_model_1 = require("./transaction.model");
 // Initialize Stripe with the secret key
 const stripe = new stripe_1.default(config_1.default.stripe_secret_key, {
     apiVersion: '2025-04-30.basil',
@@ -134,7 +134,8 @@ const createStripeOnboardingLink = (teacherId) => __awaiter(void 0, void 0, void
         if (!teacher.stripeAccountId) {
             // Create a new account if one doesn't exist
             const accountResult = yield createStripeAccountForTeacher(teacherId);
-            if (accountResult.status !== 'pending' && accountResult.status !== 'complete') {
+            if (accountResult.status !== 'pending' &&
+                accountResult.status !== 'complete') {
                 throw new AppError_1.default(http_status_1.default.INTERNAL_SERVER_ERROR, 'Failed to create Stripe account');
             }
         }
@@ -171,7 +172,7 @@ const checkStripeAccountStatus = (teacherId) => __awaiter(void 0, void 0, void 0
             teacherId,
             stripeAccountId: teacher.stripeAccountId,
             stripeVerified: teacher.stripeVerified,
-            stripeOnboardingComplete: teacher.stripeOnboardingComplete
+            stripeOnboardingComplete: teacher.stripeOnboardingComplete,
         });
         // Check if teacher has a Stripe account
         if (!teacher.stripeAccountId) {
@@ -183,28 +184,33 @@ const checkStripeAccountStatus = (teacherId) => __awaiter(void 0, void 0, void 0
         // Retrieve the account to check its status
         const account = yield stripe.accounts.retrieve(teacher.stripeAccountId);
         // Check if the account is fully set up
-        const isComplete = account.details_submitted && account.charges_enabled && account.payouts_enabled;
+        const isComplete = account.details_submitted &&
+            account.charges_enabled &&
+            account.payouts_enabled;
         // Get any pending requirements
         const requirements = ((_a = account.requirements) === null || _a === void 0 ? void 0 : _a.currently_due) || [];
         // If the account is complete in Stripe but not marked as verified in our database, update it
-        if (isComplete && (!teacher.stripeVerified || !teacher.stripeOnboardingComplete)) {
+        if (isComplete &&
+            (!teacher.stripeVerified || !teacher.stripeOnboardingComplete)) {
             yield teacher_model_1.Teacher.findByIdAndUpdate(teacherId, {
                 stripeVerified: true,
                 stripeOnboardingComplete: true,
-                stripeRequirements: []
+                stripeRequirements: [],
             });
         }
         return {
             status: isComplete ? 'complete' : 'incomplete',
-            message: isComplete ? 'Stripe account is fully set up' : 'Stripe account setup is incomplete',
+            message: isComplete
+                ? 'Stripe account is fully set up'
+                : 'Stripe account setup is incomplete',
             detailsSubmitted: account.details_submitted,
             chargesEnabled: account.charges_enabled,
             payoutsEnabled: account.payouts_enabled,
             requirements,
             teacherStatus: {
                 stripeVerified: teacher.stripeVerified,
-                stripeOnboardingComplete: teacher.stripeOnboardingComplete
-            }
+                stripeOnboardingComplete: teacher.stripeOnboardingComplete,
+            },
         };
     }
     catch (error) {
@@ -298,11 +304,12 @@ const createCheckoutSession = (studentId, courseId, amount) => __awaiter(void 0,
                 teacherId: teacher._id.toString(),
                 teacherShare: (teacherShareInCents / 100).toString(),
                 platformFee: (platformFeeInCents / 100).toString(),
-            }
+            },
         };
         // Only add transfer data if the account is valid
         if (isValidStripeAccount) {
-            sessionParams.payment_intent_data.application_fee_amount = platformFeeInCents;
+            sessionParams.payment_intent_data.application_fee_amount =
+                platformFeeInCents;
             sessionParams.payment_intent_data.transfer_data = {
                 destination: teacher.stripeAccountId,
             };
@@ -377,14 +384,14 @@ const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void
         // 2. Create transaction record
         const amount = (session.amount_total || 0) / 100; // Convert from cents to dollars
         // Convert from cents to dollars and ensure we're using the teacher's 70% share
-        const teacherShareAmount = (parseFloat(teacherShare || '0') / 100) || (amount * 0.7);
-        const platformShareAmount = (parseFloat(platformFee || '0') / 100) || (amount * 0.3);
+        const teacherShareAmount = parseFloat(teacherShare || '0') / 100 || amount * 0.7;
+        const platformShareAmount = parseFloat(platformFee || '0') / 100 || amount * 0.3;
         console.log('Calculated amounts:', {
             amount,
             teacherShareAmount,
             platformShareAmount,
             originalTeacherShare: teacherShare,
-            originalPlatformFee: platformFee
+            originalPlatformFee: platformFee,
         });
         console.log('Creating transaction record with data:', {
             courseId,
@@ -393,7 +400,7 @@ const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void
             amount,
             teacherShareAmount,
             platformShareAmount,
-            paymentIntentId
+            paymentIntentId,
         });
         const transactionData = {
             courseId: new mongoose_1.Types.ObjectId(courseId),
@@ -408,7 +415,9 @@ const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void
             status: 'success',
         };
         // Create the transaction
-        const transaction = yield transaction_model_1.Transaction.create([transactionData], { session: mongoSession });
+        const transaction = yield transaction_model_1.Transaction.create([transactionData], {
+            session: mongoSession,
+        });
         // Get the transaction ID as a Types.ObjectId to avoid type issues
         const transactionId = transaction[0]._id;
         console.log('Transaction created:', transactionId.toString());
@@ -461,7 +470,8 @@ const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void
             if (existingCourseIndex >= 0) {
                 // Update existing course
                 payoutSummary.coursesSold[existingCourseIndex].count += 1;
-                payoutSummary.coursesSold[existingCourseIndex].earnings += teacherShareAmount;
+                payoutSummary.coursesSold[existingCourseIndex].earnings +=
+                    teacherShareAmount;
             }
             else {
                 // Add new course
@@ -475,7 +485,8 @@ const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void
         }
         else {
             // Create new summary
-            yield payoutSummary_model_1.PayoutSummary.create([{
+            yield payoutSummary_model_1.PayoutSummary.create([
+                {
                     teacherId: new mongoose_1.Types.ObjectId(teacherId),
                     totalEarned: teacherShareAmount,
                     month,
@@ -488,7 +499,8 @@ const handleCheckoutSessionCompleted = (event) => __awaiter(void 0, void 0, void
                             earnings: teacherShareAmount,
                         },
                     ],
-                }], { session: mongoSession });
+                },
+            ], { session: mongoSession });
         }
         // 7. Create transfer to teacher if they have a valid Stripe account
         const teacher = yield teacher_model_1.Teacher.findById(teacherId);
@@ -607,10 +619,10 @@ const getTeacherPayoutInfo = (teacherId, period) => __awaiter(void 0, void 0, vo
             const transactions = yield transaction_model_1.Transaction.find({
                 teacherId: new mongoose_1.Types.ObjectId(teacherId),
                 status: 'success',
-                createdAt: { $gte: startDate, $lte: endDate }
+                createdAt: { $gte: startDate, $lte: endDate },
             }).populate({
                 path: 'courseId',
-                select: 'title courseThumbnail'
+                select: 'title courseThumbnail',
             });
             console.log(`Found ${transactions.length} transactions for period ${monthToQuery}`);
             if (transactions.length > 0) {
@@ -618,13 +630,13 @@ const getTeacherPayoutInfo = (teacherId, period) => __awaiter(void 0, void 0, vo
                 const totalEarnings = transactions.reduce((sum, t) => sum + t.teacherEarning, 0);
                 // Group transactions by course
                 const courseMap = new Map();
-                transactions.forEach(transaction => {
+                transactions.forEach((transaction) => {
                     const courseId = transaction.courseId._id.toString();
                     if (!courseMap.has(courseId)) {
                         courseMap.set(courseId, {
                             courseId: transaction.courseId,
                             count: 1,
-                            earnings: transaction.teacherEarning
+                            earnings: transaction.teacherEarning,
                         });
                     }
                     else {
@@ -638,7 +650,7 @@ const getTeacherPayoutInfo = (teacherId, period) => __awaiter(void 0, void 0, vo
                     month: monthToQuery,
                     year: yearToQuery,
                     earnings: totalEarnings,
-                    coursesSold: Array.from(courseMap.values())
+                    coursesSold: Array.from(courseMap.values()),
                 };
             }
         }
@@ -661,13 +673,13 @@ const getTeacherPayoutInfo = (teacherId, period) => __awaiter(void 0, void 0, vo
             const yearTransactions = yield transaction_model_1.Transaction.find({
                 teacherId: new mongoose_1.Types.ObjectId(teacherId),
                 status: 'success',
-                createdAt: { $gte: yearStart, $lte: yearEnd }
+                createdAt: { $gte: yearStart, $lte: yearEnd },
             });
             console.log(`Found ${yearTransactions.length} transactions for year ${yearToQuery}`);
             if (yearTransactions.length > 0) {
                 // Group transactions by month
                 const monthMap = new Map();
-                yearTransactions.forEach(transaction => {
+                yearTransactions.forEach((transaction) => {
                     // Make sure createdAt is not undefined
                     if (transaction.createdAt) {
                         const date = new Date(transaction.createdAt);
@@ -676,7 +688,7 @@ const getTeacherPayoutInfo = (teacherId, period) => __awaiter(void 0, void 0, vo
                             monthMap.set(month, {
                                 month,
                                 earnings: transaction.teacherEarning,
-                                coursesSold: 1
+                                coursesSold: 1,
                             });
                         }
                         else {
@@ -718,7 +730,7 @@ const getTeacherTransactionSummary = (teacherId, period) => __awaiter(void 0, vo
         // Build query based on period
         const query = {
             teacherId: new mongoose_1.Types.ObjectId(teacherId),
-            status: 'success' // Only get successful transactions
+            status: 'success', // Only get successful transactions
         };
         if (period) {
             const [year, month] = period.split('-');
@@ -801,34 +813,93 @@ const getTransactionBySessionId = (sessionId) => __awaiter(void 0, void 0, void 
     }
 });
 /**
- * Get teacher's upcoming payout information from Stripe
+ * Get teacher's upcoming payout information from Stripe with Redis caching
  */
 const getTeacherUpcomingPayout = (teacherId) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
     try {
+        // Check Redis cache first (5-minute cache for payout data)
+        const cacheKey = `payout:upcoming:${teacherId}`;
+        const { redisOperations } = yield Promise.resolve().then(() => __importStar(require('../../config/redis')));
+        try {
+            const cachedData = yield redisOperations.get(cacheKey);
+            if (cachedData) {
+                console.log(`🎯 Cache hit for upcoming payout: ${teacherId}`);
+                return JSON.parse(cachedData);
+            }
+        }
+        catch (cacheError) {
+            console.warn('Redis cache read failed for upcoming payout:', cacheError);
+        }
         // Find the teacher
         const teacher = yield teacher_model_1.Teacher.findById(teacherId);
         if (!teacher) {
-            throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Teacher not found');
+            const notFoundResult = {
+                status: 'teacher_not_found',
+                message: 'Teacher not found',
+                upcomingPayout: null,
+                balance: null,
+            };
+            // Cache the not found status for 5 minutes
+            try {
+                yield redisOperations.setex(cacheKey, 300, JSON.stringify(notFoundResult));
+            }
+            catch (cacheError) {
+                console.warn('Redis cache write failed:', cacheError);
+            }
+            return notFoundResult;
         }
         // Check if teacher has a Stripe account
         if (!teacher.stripeAccountId) {
-            return {
+            const notConnectedResult = {
                 status: 'not_connected',
                 message: 'Teacher does not have a connected Stripe account',
                 upcomingPayout: null,
                 balance: null,
             };
+            // Cache the not connected status for 1 hour
+            try {
+                yield redisOperations.setex(cacheKey, 3600, JSON.stringify(notConnectedResult));
+            }
+            catch (cacheError) {
+                console.warn('Redis cache write failed:', cacheError);
+            }
+            return notConnectedResult;
         }
-        // Get the Stripe account balance
-        const balance = yield stripe.balance.retrieve({
-            stripeAccount: teacher.stripeAccountId,
-        });
-        // Get available and pending balances in dollars (convert from cents)
-        const availableBalance = balance.available.reduce((sum, balance) => sum + balance.amount / 100, 0);
-        const pendingBalance = balance.pending.reduce((sum, balance) => sum + balance.amount / 100, 0);
-        // Get payout schedule
-        const account = yield stripe.accounts.retrieve(teacher.stripeAccountId);
+        // Get the Stripe account balance with error handling
+        let balance, account, availableBalance = 0, pendingBalance = 0;
+        try {
+            balance = yield stripe.balance.retrieve({
+                stripeAccount: teacher.stripeAccountId,
+            });
+            // Get available and pending balances in dollars (convert from cents)
+            availableBalance = balance.available.reduce((sum, balance) => sum + balance.amount / 100, 0);
+            pendingBalance = balance.pending.reduce((sum, balance) => sum + balance.amount / 100, 0);
+            // Get payout schedule
+            account = yield stripe.accounts.retrieve(teacher.stripeAccountId);
+        }
+        catch (stripeError) {
+            console.error('Stripe API error for teacher:', teacherId, stripeError);
+            const stripeErrorResult = {
+                status: 'stripe_error',
+                message: 'Unable to retrieve Stripe account information',
+                upcomingPayout: null,
+                balance: {
+                    available: 0,
+                    pending: 0,
+                    currency: 'usd',
+                },
+                error: stripeError.message,
+            };
+            // Cache the error result for 1 minute to prevent repeated API calls
+            try {
+                yield redisOperations.setex(cacheKey, 60, JSON.stringify(stripeErrorResult));
+            }
+            catch (cacheError) {
+                console.warn('Redis cache write failed:', cacheError);
+            }
+            return stripeErrorResult;
+        }
         // Get upcoming payouts if any
         let upcomingPayout = null;
         try {
@@ -850,23 +921,13 @@ const getTeacherUpcomingPayout = (teacherId) => __awaiter(void 0, void 0, void 0
             // Continue without upcoming payout data
         }
         // Get payout schedule information
-        const payoutSchedule = ((_b = (_a = account.settings) === null || _a === void 0 ? void 0 : _a.payouts) === null || _b === void 0 ? void 0 : _b.schedule) || {};
-        // Update teacher's payout information
-        yield teacher_model_1.Teacher.findByIdAndUpdate(teacherId, {
-            $set: {
-                'payoutInfo.availableBalance': availableBalance,
-                'payoutInfo.pendingBalance': pendingBalance,
-                'payoutInfo.lastSyncedAt': new Date(),
-                'payoutInfo.nextPayoutDate': upcomingPayout ? new Date(upcomingPayout.arrivalDate) : undefined,
-                'payoutInfo.nextPayoutAmount': upcomingPayout ? upcomingPayout.amount : 0,
-            },
-        });
-        return {
+        const payoutSchedule = ((_b = (_a = account === null || account === void 0 ? void 0 : account.settings) === null || _a === void 0 ? void 0 : _a.payouts) === null || _b === void 0 ? void 0 : _b.schedule) || {};
+        const result = {
             status: 'success',
             balance: {
                 available: availableBalance,
                 pending: pendingBalance,
-                currency: ((_c = balance.available[0]) === null || _c === void 0 ? void 0 : _c.currency) || 'usd',
+                currency: ((_c = balance === null || balance === void 0 ? void 0 : balance.available[0]) === null || _c === void 0 ? void 0 : _c.currency) || 'usd',
             },
             upcomingPayout,
             payoutSchedule: {
@@ -876,6 +937,36 @@ const getTeacherUpcomingPayout = (teacherId) => __awaiter(void 0, void 0, void 0
                 delayDays: payoutSchedule.delay_days,
             },
         };
+        // Cache the result for 5 minutes (300 seconds)
+        try {
+            yield redisOperations.setex(cacheKey, 300, JSON.stringify(result));
+            console.log(`💾 Cached upcoming payout data for teacher: ${teacherId}`);
+        }
+        catch (cacheError) {
+            console.warn('Redis cache write failed for upcoming payout:', cacheError);
+        }
+        // Update teacher's payout information asynchronously (don't block response)
+        setImmediate(() => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                yield teacher_model_1.Teacher.findByIdAndUpdate(teacherId, {
+                    $set: {
+                        'payoutInfo.availableBalance': availableBalance,
+                        'payoutInfo.pendingBalance': pendingBalance,
+                        'payoutInfo.lastSyncedAt': new Date(),
+                        'payoutInfo.nextPayoutDate': upcomingPayout
+                            ? new Date(upcomingPayout.arrivalDate)
+                            : undefined,
+                        'payoutInfo.nextPayoutAmount': upcomingPayout
+                            ? upcomingPayout.amount
+                            : 0,
+                    },
+                });
+            }
+            catch (updateError) {
+                console.error('Failed to update teacher payout info:', updateError);
+            }
+        }));
+        return result;
     }
     catch (error) {
         console.error('Error getting teacher upcoming payout info:', error);
@@ -893,7 +984,9 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, 'Teacher not found');
         }
         // Parse dates
-        const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Default to last 30 days
+        const start = startDate
+            ? new Date(startDate)
+            : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Default to last 30 days
         const end = endDate ? new Date(endDate) : new Date();
         // Set end date to end of day
         end.setHours(23, 59, 59, 999);
@@ -901,13 +994,13 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
         const query = {
             teacherId: new mongoose_1.Types.ObjectId(teacherId),
             status: 'success',
-            createdAt: { $gte: start, $lte: end }
+            createdAt: { $gte: start, $lte: end },
         };
         // Get all transactions in the date range
         const transactions = yield transaction_model_1.Transaction.find(query)
             .populate({
             path: 'courseId',
-            select: 'title courseThumbnail'
+            select: 'title courseThumbnail',
         })
             .sort({ createdAt: 1 });
         // Calculate summary metrics
@@ -916,11 +1009,12 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
         const totalEarnings = transactions.reduce((sum, t) => sum + t.teacherEarning, 0);
         // Calculate growth metrics by comparing to previous period
         const previousPeriodStart = new Date(start);
-        previousPeriodStart.setDate(previousPeriodStart.getDate() - (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+        previousPeriodStart.setDate(previousPeriodStart.getDate() -
+            (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
         const previousPeriodQuery = {
             teacherId: new mongoose_1.Types.ObjectId(teacherId),
             status: 'success',
-            createdAt: { $gte: previousPeriodStart, $lt: start }
+            createdAt: { $gte: previousPeriodStart, $lt: start },
         };
         const previousTransactions = yield transaction_model_1.Transaction.find(previousPeriodQuery);
         const previousSales = previousTransactions.length;
@@ -938,7 +1032,7 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
             : null;
         // Group transactions by course
         const courseMap = new Map();
-        transactions.forEach(transaction => {
+        transactions.forEach((transaction) => {
             // Check if courseId is populated and has the expected properties
             if (transaction.courseId && typeof transaction.courseId === 'object') {
                 const courseIdObj = transaction.courseId;
@@ -952,7 +1046,7 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
                         courseThumbnail,
                         count: 1,
                         amount: transaction.totalAmount,
-                        teacherEarnings: transaction.teacherEarning
+                        teacherEarnings: transaction.teacherEarning,
                     });
                 }
                 else {
@@ -964,17 +1058,18 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
             }
         });
         // Convert course map to array and sort by earnings
-        const courseBreakdown = Array.from(courseMap.values())
-            .sort((a, b) => b.teacherEarnings - a.teacherEarnings);
+        const courseBreakdown = Array.from(courseMap.values()).sort((a, b) => b.teacherEarnings - a.teacherEarnings);
         // Group transactions by time period (day, week, month)
         const timeSeriesMap = new Map();
-        transactions.forEach(transaction => {
+        transactions.forEach((transaction) => {
             const date = new Date(transaction.createdAt || new Date());
             let period;
             switch (groupBy) {
                 case 'week':
                     // Get the week number and year
-                    const weekNumber = Math.ceil((date.getDate() + new Date(date.getFullYear(), date.getMonth(), 1).getDay()) / 7);
+                    const weekNumber = Math.ceil((date.getDate() +
+                        new Date(date.getFullYear(), date.getMonth(), 1).getDay()) /
+                        7);
                     period = `${date.getFullYear()}-W${weekNumber}`;
                     break;
                 case 'month':
@@ -991,7 +1086,7 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
                     period,
                     count: 1,
                     amount: transaction.totalAmount,
-                    teacherEarnings: transaction.teacherEarning
+                    teacherEarnings: transaction.teacherEarning,
                 });
             }
             else {
@@ -1002,8 +1097,7 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
             }
         });
         // Convert time series map to array and sort by period
-        const timeSeriesData = Array.from(timeSeriesMap.values())
-            .sort((a, b) => a.period.localeCompare(b.period));
+        const timeSeriesData = Array.from(timeSeriesMap.values()).sort((a, b) => a.period.localeCompare(b.period));
         return {
             summary: {
                 totalSales,
@@ -1014,11 +1108,11 @@ const getTransactionAnalytics = (teacherId_1, startDate_1, endDate_1, ...args_1)
                 earningsGrowth,
                 dateRange: {
                     start: start.toISOString(),
-                    end: end.toISOString()
-                }
+                    end: end.toISOString(),
+                },
             },
             courseBreakdown,
-            timeSeriesData
+            timeSeriesData,
         };
     }
     catch (error) {

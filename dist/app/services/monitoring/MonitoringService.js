@@ -43,9 +43,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.monitoringService = void 0;
+const events_1 = require("events");
 const logger_1 = require("../../config/logger");
 const redis_1 = require("../../config/redis");
-const events_1 = require("events");
 class MonitoringService extends events_1.EventEmitter {
     constructor() {
         super();
@@ -58,6 +58,8 @@ class MonitoringService extends events_1.EventEmitter {
         this.MONITORING_INTERVAL = 30000; // 30 seconds
         this.ALERTING_INTERVAL = 60000; // 1 minute
         this.MAX_METRICS_PER_NAME = 1000;
+        // Track last recorded system metrics for intelligent sampling
+        this.lastRecordedMetrics = null;
         this.startMonitoring();
         this.startAlerting();
         logger_1.Logger.info('📊 Monitoring Service initialized');
@@ -95,7 +97,7 @@ class MonitoringService extends events_1.EventEmitter {
             name,
             value,
             tags,
-            type: 'counter'
+            type: 'counter',
         });
     }
     /**
@@ -106,7 +108,7 @@ class MonitoringService extends events_1.EventEmitter {
             name,
             value,
             tags,
-            type: 'gauge'
+            type: 'gauge',
         });
     }
     /**
@@ -117,7 +119,7 @@ class MonitoringService extends events_1.EventEmitter {
             name,
             value: duration,
             tags,
-            type: 'timer'
+            type: 'timer',
         });
     }
     /**
@@ -132,7 +134,7 @@ class MonitoringService extends events_1.EventEmitter {
                 title: `Health Check Failed: ${healthCheck.name}`,
                 message: healthCheck.message,
                 source: 'health_check',
-                metadata: { healthCheck }
+                metadata: { healthCheck },
             });
         }
     }
@@ -141,8 +143,8 @@ class MonitoringService extends events_1.EventEmitter {
      */
     getHealthStatus() {
         const checks = Array.from(this.healthChecks.values());
-        const unhealthyChecks = checks.filter(check => check.status === 'unhealthy');
-        const degradedChecks = checks.filter(check => check.status === 'degraded');
+        const unhealthyChecks = checks.filter((check) => check.status === 'unhealthy');
+        const degradedChecks = checks.filter((check) => check.status === 'degraded');
         let overallStatus = 'healthy';
         if (unhealthyChecks.length > 0) {
             overallStatus = 'unhealthy';
@@ -196,24 +198,24 @@ class MonitoringService extends events_1.EventEmitter {
             return {
                 cpu: {
                     usage: (cpuUsage.user + cpuUsage.system) / 1000000, // Convert to seconds
-                    loadAverage: os.loadavg()
+                    loadAverage: os.loadavg(),
                 },
                 memory: {
                     used: memUsage.heapUsed,
                     total: memUsage.heapTotal,
-                    percentage: (memUsage.heapUsed / memUsage.heapTotal) * 100
+                    percentage: (memUsage.heapUsed / memUsage.heapTotal) * 100,
                 },
                 connections: {
                     sse: this.getMetricValue('sse_connections_active') || 0,
                     polling: this.getMetricValue('polling_subscriptions_active') || 0,
-                    database: this.getMetricValue('database_connections_active') || 0
+                    database: this.getMetricValue('database_connections_active') || 0,
                 },
                 performance: {
                     averageResponseTime: this.getAverageMetricValue('response_time') || 0,
                     requestsPerSecond: this.getMetricRate('requests_total') || 0,
-                    errorRate: this.getMetricRate('errors_total') || 0
+                    errorRate: this.getMetricRate('errors_total') || 0,
                 },
-                timestamp: new Date()
+                timestamp: new Date(),
             };
         });
     }
@@ -223,7 +225,7 @@ class MonitoringService extends events_1.EventEmitter {
     getMetrics(name, since) {
         const metrics = this.metrics.get(name) || [];
         if (since) {
-            return metrics.filter(metric => metric.timestamp >= since);
+            return metrics.filter((metric) => metric.timestamp >= since);
         }
         return [...metrics];
     }
@@ -231,23 +233,21 @@ class MonitoringService extends events_1.EventEmitter {
      * Get all active alerts
      */
     getActiveAlerts() {
-        return Array.from(this.alerts.values()).filter(alert => !alert.resolved);
+        return Array.from(this.alerts.values()).filter((alert) => !alert.resolved);
     }
     /**
      * Get monitoring statistics
      */
     getMonitoringStats() {
-        const totalMetrics = Array.from(this.metrics.values())
-            .reduce((sum, metrics) => sum + metrics.length, 0);
+        const totalMetrics = Array.from(this.metrics.values()).reduce((sum, metrics) => sum + metrics.length, 0);
         const activeAlerts = this.getActiveAlerts().length;
         const healthChecks = this.healthChecks.size;
-        const unhealthyServices = Array.from(this.healthChecks.values())
-            .filter(check => check.status === 'unhealthy').length;
+        const unhealthyServices = Array.from(this.healthChecks.values()).filter((check) => check.status === 'unhealthy').length;
         return {
             totalMetrics,
             activeAlerts,
             healthChecks,
-            unhealthyServices
+            unhealthyServices,
         };
     }
     /**
@@ -266,7 +266,7 @@ class MonitoringService extends events_1.EventEmitter {
             return null;
         }
         const cutoff = new Date(Date.now() - timeWindow);
-        const recentMetrics = metrics.filter(metric => metric.timestamp >= cutoff);
+        const recentMetrics = metrics.filter((metric) => metric.timestamp >= cutoff);
         if (recentMetrics.length === 0) {
             return null;
         }
@@ -279,7 +279,7 @@ class MonitoringService extends events_1.EventEmitter {
             return null;
         }
         const cutoff = new Date(Date.now() - timeWindow);
-        const recentMetrics = metrics.filter(metric => metric.timestamp >= cutoff);
+        const recentMetrics = metrics.filter((metric) => metric.timestamp >= cutoff);
         if (recentMetrics.length < 2) {
             return null;
         }
@@ -301,38 +301,85 @@ class MonitoringService extends events_1.EventEmitter {
         });
     }
     startMonitoring() {
+        // Reduce monitoring frequency to every 30 seconds to reduce Redis load
+        const OPTIMIZED_MONITORING_INTERVAL = 30000; // 30 seconds instead of default
         this.monitoringInterval = setInterval(() => __awaiter(this, void 0, void 0, function* () {
             try {
-                // Collect system metrics
+                // Collect system metrics with intelligent sampling
                 const systemMetrics = yield this.getSystemMetrics();
-                // Record system metrics
-                this.setGauge('system_cpu_usage', systemMetrics.cpu.usage);
-                this.setGauge('system_memory_usage', systemMetrics.memory.percentage);
-                this.setGauge('system_memory_used', systemMetrics.memory.used);
-                // Clean up old metrics
-                this.cleanupOldMetrics();
+                // Only record system metrics if they've changed significantly or it's been a while
+                const shouldRecordMetrics = this.shouldRecordSystemMetrics(systemMetrics);
+                if (shouldRecordMetrics) {
+                    this.setGauge('system_cpu_usage', systemMetrics.cpu.usage);
+                    this.setGauge('system_memory_usage', systemMetrics.memory.percentage);
+                    this.setGauge('system_memory_used', systemMetrics.memory.used);
+                }
+                // Clean up old metrics less frequently
+                if (Date.now() % 300000 === 0) {
+                    // Every 5 minutes
+                    this.cleanupOldMetrics();
+                }
                 this.emit('monitoring:cycle_complete', systemMetrics);
             }
             catch (error) {
                 logger_1.Logger.error('Monitoring cycle failed:', error);
             }
-        }), this.MONITORING_INTERVAL);
+        }), OPTIMIZED_MONITORING_INTERVAL);
     }
     startAlerting() {
         this.alertingInterval = setInterval(() => {
             this.checkAlertConditions();
         }, this.ALERTING_INTERVAL);
     }
+    /**
+     * Determine if system metrics should be recorded based on change threshold and time
+     */
+    shouldRecordSystemMetrics(systemMetrics) {
+        const now = Date.now();
+        const FORCE_RECORD_INTERVAL = 120000; // Force record every 2 minutes
+        const CHANGE_THRESHOLD = 5; // Record if metrics change by more than 5%
+        // Always record if we haven't recorded anything yet
+        if (!this.lastRecordedMetrics) {
+            this.lastRecordedMetrics = {
+                cpu: systemMetrics.cpu.usage,
+                memory: systemMetrics.memory.percentage,
+                timestamp: now,
+            };
+            return true;
+        }
+        // Force record if it's been too long
+        if (now - this.lastRecordedMetrics.timestamp > FORCE_RECORD_INTERVAL) {
+            this.lastRecordedMetrics = {
+                cpu: systemMetrics.cpu.usage,
+                memory: systemMetrics.memory.percentage,
+                timestamp: now,
+            };
+            return true;
+        }
+        // Record if metrics have changed significantly
+        const cpuChange = Math.abs(systemMetrics.cpu.usage - this.lastRecordedMetrics.cpu);
+        const memoryChange = Math.abs(systemMetrics.memory.percentage - this.lastRecordedMetrics.memory);
+        if (cpuChange > CHANGE_THRESHOLD || memoryChange > CHANGE_THRESHOLD) {
+            this.lastRecordedMetrics = {
+                cpu: systemMetrics.cpu.usage,
+                memory: systemMetrics.memory.percentage,
+                timestamp: now,
+            };
+            return true;
+        }
+        return false;
+    }
     checkAlertConditions() {
         // Check for high error rates
         const errorRate = this.getMetricRate('errors_total');
-        if (errorRate && errorRate > 10) { // More than 10 errors per second
+        if (errorRate && errorRate > 10) {
+            // More than 10 errors per second
             this.createAlert({
                 level: 'error',
                 title: 'High Error Rate',
                 message: `Error rate is ${errorRate.toFixed(2)} errors/second`,
                 source: 'monitoring',
-                metadata: { errorRate }
+                metadata: { errorRate },
             });
         }
         // Check for high memory usage
@@ -343,14 +390,14 @@ class MonitoringService extends events_1.EventEmitter {
                 title: 'High Memory Usage',
                 message: `Memory usage is ${memoryUsage.toFixed(1)}%`,
                 source: 'monitoring',
-                metadata: { memoryUsage }
+                metadata: { memoryUsage },
             });
         }
     }
     cleanupOldMetrics() {
         const cutoff = new Date(Date.now() - this.METRIC_RETENTION_TIME);
         for (const [name, metrics] of this.metrics.entries()) {
-            const filteredMetrics = metrics.filter(metric => metric.timestamp >= cutoff);
+            const filteredMetrics = metrics.filter((metric) => metric.timestamp >= cutoff);
             this.metrics.set(name, filteredMetrics);
         }
     }
