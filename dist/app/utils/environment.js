@@ -208,6 +208,7 @@ exports.EnvironmentConfig = {
                         'https://green-uni-mind-frontend.vercel.app',
                         // Additional production domains for redundancy
                         'https://green-uni-mind.vercel.app',
+                        'https://tan-stork-651174.hostingersite.com',
                     ],
                     credentials: true,
                     optionsSuccessStatus: 200,
