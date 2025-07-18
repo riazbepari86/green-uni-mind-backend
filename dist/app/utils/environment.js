@@ -202,15 +202,12 @@ exports.EnvironmentConfig = {
                 return {
                     origin: [
                         config_1.default.frontend_url,
-                        'https://green-uni-mind.pages.dev',
-                        'https://green-uni-mind-frontend.vercel.app',
                         'https://www.greenunimind.com',
                         'https://greenunimind.com',
-                        // Additional production domains for redundancy
+                        'https://green-uni-mind.pages.dev',
                         'https://green-uni-mind-frontend.vercel.app',
+                        // Additional production domains for redundancy
                         'https://green-uni-mind.vercel.app',
-                        // Hostinger domain
-                        'https://tan-stork-651174.hostingersite.com',
                     ],
                     credentials: true,
                     optionsSuccessStatus: 200,
