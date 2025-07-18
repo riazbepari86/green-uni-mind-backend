@@ -24,11 +24,24 @@ export default {
   stripe_webhook_endpoint_url: process.env.STRIPE_WEBHOOK_ENDPOINT_URL!,
   stripe_mother_account_id: process.env.MOTHER_STRIPE_ACCOUNT_ID!,
   frontend_url: process.env.FRONTEND_URL || 'http://localhost:8080',
+  frontend_urls: process.env.FRONTEND_URLS?.split(',') || [
+    process.env.FRONTEND_URL || 'http://localhost:8080',
+  ],
   gemini_api_key: process.env.GEMINI_API_KEY,
   redis: {
-    host: process.env.REDIS_HOST || process.env.REDIS_URL?.split('@')[1]?.split(':')[0] || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || process.env.REDIS_URL?.split(':').pop()?.split('/')[0] || '6379'),
-    password: process.env.REDIS_PASSWORD || process.env.REDIS_URL?.split('://')[1]?.split('@')[0]?.split(':')[1] || '',
+    host:
+      process.env.REDIS_HOST ||
+      process.env.REDIS_URL?.split('@')[1]?.split(':')[0] ||
+      'localhost',
+    port: parseInt(
+      process.env.REDIS_PORT ||
+        process.env.REDIS_URL?.split(':').pop()?.split('/')[0] ||
+        '6379',
+    ),
+    password:
+      process.env.REDIS_PASSWORD ||
+      process.env.REDIS_URL?.split('://')[1]?.split('@')[0]?.split(':')[1] ||
+      '',
     url: process.env.REDIS_URL, // Support for full Redis URL (common in cloud deployments)
   },
   email: {
@@ -44,7 +57,9 @@ export default {
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       // Use frontend callback URL instead of backend
-      redirectUri: process.env.GOOGLE_REDIRECT_URI || `${process.env.FRONTEND_URL || 'http://localhost:8080'}/oauth/callback/google`,
+      redirectUri:
+        process.env.GOOGLE_REDIRECT_URI ||
+        `${process.env.FRONTEND_URL || 'http://localhost:8080'}/oauth/callback/google`,
       // Keep the backend callback for backward compatibility
       backendRedirectUri: '/api/v1/oauth/google/callback',
     },
@@ -52,7 +67,9 @@ export default {
       clientId: process.env.FACEBOOK_CLIENT_ID,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
       // Use frontend callback URL instead of backend
-      redirectUri: process.env.FACEBOOK_REDIRECT_URI || `${process.env.FRONTEND_URL || 'http://localhost:8080'}/oauth/callback/facebook`,
+      redirectUri:
+        process.env.FACEBOOK_REDIRECT_URI ||
+        `${process.env.FRONTEND_URL || 'http://localhost:8080'}/oauth/callback/facebook`,
       // Keep the backend callback for backward compatibility
       backendRedirectUri: '/api/v1/oauth/facebook/callback',
     },
@@ -63,7 +80,9 @@ export default {
       privateKeyLocation: process.env.APPLE_PRIVATE_KEY_LOCATION,
       privateKeyContent: process.env.APPLE_PRIVATE_KEY_CONTENT,
       // Use frontend callback URL instead of backend
-      redirectUri: process.env.APPLE_REDIRECT_URI || `${process.env.FRONTEND_URL || 'http://localhost:8080'}/oauth/callback/apple`,
+      redirectUri:
+        process.env.APPLE_REDIRECT_URI ||
+        `${process.env.FRONTEND_URL || 'http://localhost:8080'}/oauth/callback/apple`,
       // Keep the backend callback for backward compatibility
       backendRedirectUri: '/api/v1/oauth/apple/callback',
     },

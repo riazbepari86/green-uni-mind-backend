@@ -1,16 +1,16 @@
-import { Request, Response, NextFunction } from 'express';
-import passport from 'passport';
-import jwt from 'jsonwebtoken';
-import config from '../../config';
-import catchAsync from '../../utils/catchAsync';
-import sendResponse from '../../utils/sendResponse';
+import { NextFunction, Request, Response } from 'express';
 import httpStatus from 'http-status';
-import { User } from '../User/user.model';
-import { IUser } from '../User/user.interface';
-import { Student } from '../Student/student.model';
-import { Teacher } from '../Teacher/teacher.model';
+import jwt from 'jsonwebtoken';
+import passport from 'passport';
+import config from '../../config';
 import AppError from '../../errors/AppError';
 import { jwtService } from '../../services/auth/JWTService';
+import catchAsync from '../../utils/catchAsync';
+import sendResponse from '../../utils/sendResponse';
+import { Student } from '../Student/student.model';
+import { Teacher } from '../Teacher/teacher.model';
+import { IUser } from '../User/user.interface';
+import { User } from '../User/user.model';
 
 // Helper function to generate tokens
 const generateTokens = async (user: any) => {
@@ -27,9 +27,12 @@ const generateTokens = async (user: any) => {
     console.error('❌ Missing required user fields for token generation:', {
       hasId: !!user._id,
       hasEmail: !!user.email,
-      hasRole: !!user.role
+      hasRole: !!user.role,
     });
-    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid user data for token generation');
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Invalid user data for token generation',
+    );
   }
 
   // Make sure we include the user's ID and role in the token
@@ -40,7 +43,10 @@ const generateTokens = async (user: any) => {
   };
 
   // Log the payload for debugging
-  console.log('🎫 JWT payload for token generation:', JSON.stringify(jwtPayload, null, 2));
+  console.log(
+    '🎫 JWT payload for token generation:',
+    JSON.stringify(jwtPayload, null, 2),
+  );
 
   try {
     const tokenPair = await jwtService.createTokenPair(jwtPayload);
@@ -49,15 +55,21 @@ const generateTokens = async (user: any) => {
     // Decode the access token to verify its contents
     const jwt = require('jsonwebtoken');
     const decoded = jwt.decode(tokenPair.accessToken);
-    console.log('🔍 Decoded access token payload:', JSON.stringify(decoded, null, 2));
+    console.log(
+      '🔍 Decoded access token payload:',
+      JSON.stringify(decoded, null, 2),
+    );
 
     return {
       accessToken: tokenPair.accessToken,
-      refreshToken: tokenPair.refreshToken
+      refreshToken: tokenPair.refreshToken,
     };
   } catch (error) {
     console.error('❌ Error creating token pair with JWT service:', error);
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Token creation failed');
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Token creation failed',
+    );
   }
 };
 
@@ -93,7 +105,10 @@ const getRoleDetails = async (user: any) => {
 const generateOAuthUrl = catchAsync(async (req: Request, res: Response) => {
   const { provider, role = 'student', linking = 'false' } = req.query;
 
-  if (!provider || !['google', 'facebook', 'apple'].includes(provider as string)) {
+  if (
+    !provider ||
+    !['google', 'facebook', 'apple'].includes(provider as string)
+  ) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Invalid provider');
   }
 
@@ -115,7 +130,10 @@ const generateOAuthUrl = catchAsync(async (req: Request, res: Response) => {
       };
 
       // Log the exact redirect URI being used
-      console.log('Google OAuth redirect URI:', config.oauth.google.redirectUri);
+      console.log(
+        'Google OAuth redirect URI:',
+        config.oauth.google.redirectUri,
+      );
 
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams(googleParams as any).toString()}`;
       break;
@@ -164,7 +182,10 @@ const googleAuth = (req: Request, res: Response, _next: NextFunction) => {
 
   // Log detailed information for debugging
   console.log('Google Auth - Request URL:', req.originalUrl);
-  console.log('Google Auth - Redirect URI from config:', config.oauth.google.redirectUri);
+  console.log(
+    'Google Auth - Redirect URI from config:',
+    config.oauth.google.redirectUri,
+  );
   console.log('Google Auth - Client ID:', config.oauth.google.clientId);
   console.log('Google Auth - Backend URL:', process.env.BACKEND_URL);
   console.log('Google Auth - Frontend URL:', config.frontend_url);
@@ -188,203 +209,231 @@ const googleAuth = (req: Request, res: Response, _next: NextFunction) => {
 const googleCallback = catchAsync(async (req: Request, res: Response) => {
   console.log('Google Callback - Request URL:', req.originalUrl);
   console.log('Google Callback - Query params:', req.query);
-  console.log('Google Callback - Expected callback path:', config.oauth.google.backendRedirectUri);
+  console.log(
+    'Google Callback - Expected callback path:',
+    config.oauth.google.backendRedirectUri,
+  );
 
-  passport.authenticate('google', { session: false }, async (err: any, user: any) => {
-    if (err) {
-      console.error('Google OAuth error:', err);
-      return res.redirect(`${config.frontend_url}/login?error=oauth_error`);
-    }
+  passport.authenticate(
+    'google',
+    { session: false },
+    async (err: any, user: any) => {
+      if (err) {
+        console.error('Google OAuth error:', err);
+        return res.redirect(`${config.frontend_url}/login?error=oauth_error`);
+      }
 
-    if (!user) {
-      console.log('Google Callback - No user returned from passport');
-      return res.redirect(`${config.frontend_url}/login?error=user_not_found`);
-    }
-
-    try {
-      // Check if this is an account linking flow
-      const stateParam = req.query.state;
-      let isLinking = false;
-
-      // IMPORTANT: Always preserve the user's existing role from the database
-      // This ensures we don't override the role when logging in with OAuth
-      let role = user.role || 'student'; // Default to user's existing role if available
-
-      console.log('PRESERVING EXISTING USER ROLE IN OAUTH CALLBACK:', role);
-
-      // Ensure the user object has the role property set
-      if (user && !user.role) {
-        user.role = role;
-        console.log('Setting missing role property on user object:', role);
+      if (!user) {
+        console.log('Google Callback - No user returned from passport');
+        return res.redirect(
+          `${config.frontend_url}/login?error=user_not_found`,
+        );
       }
 
       try {
-        if (stateParam) {
-          const stateObj = JSON.parse(stateParam as string);
-          isLinking = stateObj.linking === 'true';
+        // Check if this is an account linking flow
+        const stateParam = req.query.state;
+        let isLinking = false;
 
-          // Only use the role from state for new users (when user.role is not set)
-          // For existing users, ALWAYS use their database role
-          if (!user.role && stateObj.role) {
-            role = stateObj.role;
-            console.log('Using role from state for new user:', role);
-          }
+        // IMPORTANT: Always preserve the user's existing role from the database
+        // This ensures we don't override the role when logging in with OAuth
+        let role = user.role || 'student'; // Default to user's existing role if available
 
-          console.log('Parsed state:', { isLinking, stateFromRole: stateObj.role });
-          console.log('User role from database:', user.role);
-          console.log('Final role to use:', role);
+        console.log('PRESERVING EXISTING USER ROLE IN OAUTH CALLBACK:', role);
+
+        // Ensure the user object has the role property set
+        if (user && !user.role) {
+          user.role = role;
+          console.log('Setting missing role property on user object:', role);
         }
-      } catch (error) {
-        console.error('Error parsing state:', error);
-      }
 
-      // Log the user object before updates
-      console.log('User before OAuth updates:', {
-        _id: user._id,
-        email: user.email,
-        role: user.role,
-        isOAuthUser: user.isOAuthUser,
-        googleId: user.googleId,
-        connectedAccounts: user.connectedAccounts
-      });
-
-      // Mark as OAuth user to bypass password requirement
-      user.isOAuthUser = true;
-
-      // Ensure connectedAccounts.google is set to true
-      if (!user.connectedAccounts) {
-        user.connectedAccounts = {
-          google: true,
-          facebook: false,
-          apple: false,
-        };
-      } else {
-        user.connectedAccounts.google = true;
-      }
-
-      // Save the changes with markModified to ensure they're persisted
-      user.markModified('connectedAccounts');
-
-      try {
-        // Ensure we're not trying to validate the password for OAuth users
-        const userDoc = await User.findById(user._id);
-        if (userDoc) {
-          userDoc.isOAuthUser = true;
-          userDoc.googleId = user.googleId;
-
-          if (!userDoc.connectedAccounts) {
-            userDoc.connectedAccounts = {
-              google: true,
-              facebook: false,
-              apple: false
-            };
-          } else {
-            userDoc.connectedAccounts.google = true;
-          }
-
-          userDoc.markModified('connectedAccounts');
-          await userDoc.save();
-
-          // Update our user object to match the saved document
-          user = userDoc;
-          console.log('User saved successfully after OAuth updates');
-        } else {
-          console.error('Could not find user by ID:', user._id);
-          return res.redirect(`${config.frontend_url}/login?error=user_not_found`);
-        }
-      } catch (saveError) {
-        console.error('Error saving user during OAuth callback:', saveError);
-        return res.redirect(`${config.frontend_url}/login?error=account_linking_failed`);
-      }
-
-      console.log('Updated user connectedAccounts:', user.connectedAccounts);
-
-      if (isLinking) {
-        console.log('Google OAuth account linking flow detected');
-        console.log('User data:', {
-          googleId: user.googleId,
-          email: user.email,
-          role: user.role,
-          connectedAccounts: user.connectedAccounts
-        });
-
-        // Get the auth token from cookies, headers, or query parameters
-        // Check for token in multiple places to ensure we find it
-        const authToken = req.cookies.authToken ||
-                         req.cookies.refreshToken ||
-                         (req.headers.authorization && req.headers.authorization.startsWith('Bearer')
-                          ? req.headers.authorization.split(' ')[1]
-                          : null) ||
-                         (req.query.token as string); // Also check query parameters
-
-        console.log('Auth token available:', !!authToken);
-        console.log('Cookies available:', Object.keys(req.cookies));
-        console.log('Headers available:', Object.keys(req.headers));
-        console.log('Query params for token:', req.query.token ? 'Present' : 'Not present');
-
-        // For account linking, directly redirect to the frontend link callback with all necessary information
-        // This avoids the error page and ensures a seamless experience
-        // Include the role in the redirect to ensure it's preserved
-        const redirectUrl = new URL(`${config.frontend_url}/oauth/link/callback`);
-        redirectUrl.searchParams.append('provider', 'google');
-        redirectUrl.searchParams.append('providerId', user.googleId);
-        redirectUrl.searchParams.append('email', user.email);
-        redirectUrl.searchParams.append('isLinking', 'true');
-        redirectUrl.searchParams.append('role', role);
-
-        console.log('Redirecting to frontend with URL:', redirectUrl.toString());
-        return res.redirect(redirectUrl.toString());
-      }
-
-      // For regular login flow (not linking)
-      // Generate tokens
-      const { accessToken, refreshToken } = await generateTokens(user);
-
-      // Get role details
-      const roleDetails = await getRoleDetails(user);
-      const { email: _email } = roleDetails;
-
-      // Get domain from request origin or use default
-      const origin = req.get('origin');
-      let domain;
-
-      if (origin && config.NODE_ENV === 'production') {
         try {
-          // Extract domain from origin (e.g., https://example.com -> example.com)
-          domain = new URL(origin).hostname;
-          // If it's not localhost, ensure we have the root domain for cookies
-          if (!domain.includes('localhost')) {
-            // Handle subdomains by getting the root domain
-            const parts = domain.split('.');
-            if (parts.length > 2) {
-              domain = parts.slice(-2).join('.');
+          if (stateParam) {
+            const stateObj = JSON.parse(stateParam as string);
+            isLinking = stateObj.linking === 'true';
+
+            // Only use the role from state for new users (when user.role is not set)
+            // For existing users, ALWAYS use their database role
+            if (!user.role && stateObj.role) {
+              role = stateObj.role;
+              console.log('Using role from state for new user:', role);
             }
+
+            console.log('Parsed state:', {
+              isLinking,
+              stateFromRole: stateObj.role,
+            });
+            console.log('User role from database:', user.role);
+            console.log('Final role to use:', role);
           }
         } catch (error) {
-          console.error('Error parsing origin for cookie domain:', error);
+          console.error('Error parsing state:', error);
         }
+
+        // Log the user object before updates
+        console.log('User before OAuth updates:', {
+          _id: user._id,
+          email: user.email,
+          role: user.role,
+          isOAuthUser: user.isOAuthUser,
+          googleId: user.googleId,
+          connectedAccounts: user.connectedAccounts,
+        });
+
+        // Mark as OAuth user to bypass password requirement
+        user.isOAuthUser = true;
+
+        // Ensure connectedAccounts.google is set to true
+        if (!user.connectedAccounts) {
+          user.connectedAccounts = {
+            google: true,
+            facebook: false,
+            apple: false,
+          };
+        } else {
+          user.connectedAccounts.google = true;
+        }
+
+        // Save the changes with markModified to ensure they're persisted
+        user.markModified('connectedAccounts');
+
+        try {
+          // Ensure we're not trying to validate the password for OAuth users
+          const userDoc = await User.findById(user._id);
+          if (userDoc) {
+            userDoc.isOAuthUser = true;
+            userDoc.googleId = user.googleId;
+
+            if (!userDoc.connectedAccounts) {
+              userDoc.connectedAccounts = {
+                google: true,
+                facebook: false,
+                apple: false,
+              };
+            } else {
+              userDoc.connectedAccounts.google = true;
+            }
+
+            userDoc.markModified('connectedAccounts');
+            await userDoc.save();
+
+            // Update our user object to match the saved document
+            user = userDoc;
+            console.log('User saved successfully after OAuth updates');
+          } else {
+            console.error('Could not find user by ID:', user._id);
+            return res.redirect(
+              `${config.frontend_url}/login?error=user_not_found`,
+            );
+          }
+        } catch (saveError) {
+          console.error('Error saving user during OAuth callback:', saveError);
+          return res.redirect(
+            `${config.frontend_url}/login?error=account_linking_failed`,
+          );
+        }
+
+        console.log('Updated user connectedAccounts:', user.connectedAccounts);
+
+        if (isLinking) {
+          console.log('Google OAuth account linking flow detected');
+          console.log('User data:', {
+            googleId: user.googleId,
+            email: user.email,
+            role: user.role,
+            connectedAccounts: user.connectedAccounts,
+          });
+
+          // Get the auth token from cookies, headers, or query parameters
+          // Check for token in multiple places to ensure we find it
+          const authToken =
+            req.cookies.authToken ||
+            req.cookies.refreshToken ||
+            (req.headers.authorization &&
+            req.headers.authorization.startsWith('Bearer')
+              ? req.headers.authorization.split(' ')[1]
+              : null) ||
+            (req.query.token as string); // Also check query parameters
+
+          console.log('Auth token available:', !!authToken);
+          console.log('Cookies available:', Object.keys(req.cookies));
+          console.log('Headers available:', Object.keys(req.headers));
+          console.log(
+            'Query params for token:',
+            req.query.token ? 'Present' : 'Not present',
+          );
+
+          // For account linking, directly redirect to the frontend link callback with all necessary information
+          // This avoids the error page and ensures a seamless experience
+          // Include the role in the redirect to ensure it's preserved
+          const redirectUrl = new URL(
+            `${config.frontend_url}/oauth/link/callback`,
+          );
+          redirectUrl.searchParams.append('provider', 'google');
+          redirectUrl.searchParams.append('providerId', user.googleId);
+          redirectUrl.searchParams.append('email', user.email);
+          redirectUrl.searchParams.append('isLinking', 'true');
+          redirectUrl.searchParams.append('role', role);
+
+          console.log(
+            'Redirecting to frontend with URL:',
+            redirectUrl.toString(),
+          );
+          return res.redirect(redirectUrl.toString());
+        }
+
+        // For regular login flow (not linking)
+        // Generate tokens
+        const { accessToken, refreshToken } = await generateTokens(user);
+
+        // Get role details
+        const roleDetails = await getRoleDetails(user);
+        const { email: _email } = roleDetails;
+
+        // Get domain from request origin or use default
+        const origin = req.get('origin');
+        let domain;
+
+        if (origin && config.NODE_ENV === 'production') {
+          try {
+            // Extract domain from origin (e.g., https://example.com -> example.com)
+            domain = new URL(origin).hostname;
+            // If it's not localhost, ensure we have the root domain for cookies
+            if (!domain.includes('localhost')) {
+              // Handle subdomains by getting the root domain
+              const parts = domain.split('.');
+              if (parts.length > 2) {
+                domain = parts.slice(-2).join('.');
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing origin for cookie domain:', error);
+          }
+        }
+
+        console.log(
+          `Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`,
+        );
+
+        // Set refresh token in cookie
+        res.cookie('refreshToken', refreshToken, {
+          secure: true, // Always use secure in modern browsers
+          httpOnly: true,
+          sameSite: config.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for cross-site in production
+          domain: domain || undefined, // Set domain in production
+          maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
+        });
+
+        // For regular login, redirect to success page with the token and refresh token
+        return res.redirect(
+          `${config.frontend_url}/oauth/success?token=${accessToken}&refreshToken=${refreshToken}&provider=google`,
+        );
+      } catch (error) {
+        console.error('Error in Google callback:', error);
+        return res.redirect(`${config.frontend_url}/login?error=server_error`);
       }
-
-      console.log(`Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`);
-
-      // Set refresh token in cookie
-      res.cookie('refreshToken', refreshToken, {
-        secure: true, // Always use secure in modern browsers
-        httpOnly: true,
-        sameSite: config.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for cross-site in production
-        domain: domain || undefined, // Set domain in production
-        maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
-      });
-
-      // For regular login, redirect to success page with the token and refresh token
-      return res.redirect(
-        `${config.frontend_url}/oauth/success?token=${accessToken}&refreshToken=${refreshToken}&provider=google`
-      );
-    } catch (error) {
-      console.error('Error in Google callback:', error);
-      return res.redirect(`${config.frontend_url}/login?error=server_error`);
-    }
-  })(req, res);
+    },
+  )(req, res);
 });
 
 // Facebook OAuth routes
@@ -410,167 +459,202 @@ const facebookAuth = (req: Request, res: Response, _next: NextFunction) => {
 };
 
 const facebookCallback = catchAsync(async (req: Request, res: Response) => {
-  passport.authenticate('facebook', { session: false }, async (err: any, user: any) => {
-    if (err) {
-      console.error('Facebook OAuth error:', err);
-      return res.redirect(`${config.frontend_url}/login?error=oauth_error`);
-    }
-
-    if (!user) {
-      return res.redirect(`${config.frontend_url}/login?error=user_not_found`);
-    }
-
-    try {
-      // Check if this is an account linking flow
-      const stateParam = req.query.state;
-      let isLinking = false;
-
-      // IMPORTANT: Always preserve the user's existing role from the database
-      // This ensures we don't override the role when logging in with OAuth
-      let userRole = user.role || 'student'; // Default to user's existing role if available
-
-      console.log('PRESERVING EXISTING USER ROLE IN FACEBOOK OAUTH CALLBACK:', userRole);
-
-      // Ensure the user object has the role property set
-      if (user && !user.role) {
-        user.role = userRole;
-        console.log('Setting missing role property on user object:', userRole);
+  passport.authenticate(
+    'facebook',
+    { session: false },
+    async (err: any, user: any) => {
+      if (err) {
+        console.error('Facebook OAuth error:', err);
+        return res.redirect(`${config.frontend_url}/login?error=oauth_error`);
       }
 
-      try {
-        if (stateParam) {
-          const stateObj = JSON.parse(stateParam as string);
-          isLinking = stateObj.linking === 'true';
-
-          // Only use the role from state for new users (when user.role is not set)
-          // For existing users, ALWAYS use their database role
-          if (!user.role && stateObj.role) {
-            userRole = stateObj.role;
-            console.log('Using role from state for new user:', userRole);
-          }
-
-          console.log('Parsed state:', { isLinking, stateFromRole: stateObj.role });
-          console.log('User role from database:', user.role);
-          console.log('Final role to use:', userRole);
-        }
-      } catch (error) {
-        console.error('Error parsing state:', error);
-      }
-
-      if (isLinking) {
-        console.log('Facebook OAuth account linking flow detected');
-        console.log('User data:', {
-          facebookId: user.facebookId,
-          email: user.email
-        });
-
-        // Get the auth token from cookies, headers, or query parameters
-        // Check for token in multiple places to ensure we find it
-        const authToken = req.cookies.authToken ||
-                         req.cookies.refreshToken ||
-                         (req.headers.authorization && req.headers.authorization.startsWith('Bearer')
-                          ? req.headers.authorization.split(' ')[1]
-                          : null) ||
-                         (req.query.token as string); // Also check query parameters
-
-        console.log('Auth token available:', !!authToken);
-        console.log('Cookies available:', Object.keys(req.cookies));
-        console.log('Headers available:', Object.keys(req.headers));
-        console.log('Query params for token:', req.query.token ? 'Present' : 'Not present');
-
-        if (authToken) {
-          // If we have an auth token, try to link the account directly
-          try {
-            // Verify the token and get the user ID
-            const jwt = await import('jsonwebtoken');
-            const decoded = jwt.verify(authToken, config.jwt_access_secret) as any;
-
-            if (decoded && decoded.email) {
-              // Find the user by email
-              const existingUser = await User.findOne({ email: decoded.email });
-
-              if (existingUser) {
-                // Link the Facebook account to the existing user
-                existingUser.facebookId = user.facebookId;
-
-                // Update connected accounts
-                if (!existingUser.connectedAccounts) {
-                  existingUser.connectedAccounts = {
-                    google: false,
-                    facebook: false,
-                    apple: false,
-                  };
-                }
-                existingUser.connectedAccounts.facebook = true;
-
-                await existingUser.save();
-
-                console.log('Successfully linked Facebook account to user:', existingUser._id);
-
-                // Redirect to profile with success message
-                return res.redirect(`${config.frontend_url}/user/edit-profile?provider=facebook&linked=true`);
-              }
-            }
-          } catch (tokenError) {
-            console.error('Error verifying token for account linking:', tokenError);
-          }
-        }
-
-        // If direct linking failed or no auth token, redirect to the link callback page with provider info
+      if (!user) {
         return res.redirect(
-          `${config.frontend_url}/oauth/link/callback?provider=facebook&providerId=${user.facebookId}&email=${user.email}&isLinking=true`
+          `${config.frontend_url}/login?error=user_not_found`,
         );
       }
 
-      // For regular login flow (not linking)
-      // Generate tokens
-      const { accessToken, refreshToken } = await generateTokens(user);
+      try {
+        // Check if this is an account linking flow
+        const stateParam = req.query.state;
+        let isLinking = false;
 
-      // Get role details
-      const roleDetails = await getRoleDetails(user);
-      const { email: _email } = roleDetails;
+        // IMPORTANT: Always preserve the user's existing role from the database
+        // This ensures we don't override the role when logging in with OAuth
+        let userRole = user.role || 'student'; // Default to user's existing role if available
 
-      // Get domain from request origin or use default
-      const origin = req.get('origin');
-      let domain;
+        console.log(
+          'PRESERVING EXISTING USER ROLE IN FACEBOOK OAUTH CALLBACK:',
+          userRole,
+        );
 
-      if (origin && config.NODE_ENV === 'production') {
+        // Ensure the user object has the role property set
+        if (user && !user.role) {
+          user.role = userRole;
+          console.log(
+            'Setting missing role property on user object:',
+            userRole,
+          );
+        }
+
         try {
-          // Extract domain from origin (e.g., https://example.com -> example.com)
-          domain = new URL(origin).hostname;
-          // If it's not localhost, ensure we have the root domain for cookies
-          if (!domain.includes('localhost')) {
-            // Handle subdomains by getting the root domain
-            const parts = domain.split('.');
-            if (parts.length > 2) {
-              domain = parts.slice(-2).join('.');
+          if (stateParam) {
+            const stateObj = JSON.parse(stateParam as string);
+            isLinking = stateObj.linking === 'true';
+
+            // Only use the role from state for new users (when user.role is not set)
+            // For existing users, ALWAYS use their database role
+            if (!user.role && stateObj.role) {
+              userRole = stateObj.role;
+              console.log('Using role from state for new user:', userRole);
             }
+
+            console.log('Parsed state:', {
+              isLinking,
+              stateFromRole: stateObj.role,
+            });
+            console.log('User role from database:', user.role);
+            console.log('Final role to use:', userRole);
           }
         } catch (error) {
-          console.error('Error parsing origin for cookie domain:', error);
+          console.error('Error parsing state:', error);
         }
+
+        if (isLinking) {
+          console.log('Facebook OAuth account linking flow detected');
+          console.log('User data:', {
+            facebookId: user.facebookId,
+            email: user.email,
+          });
+
+          // Get the auth token from cookies, headers, or query parameters
+          // Check for token in multiple places to ensure we find it
+          const authToken =
+            req.cookies.authToken ||
+            req.cookies.refreshToken ||
+            (req.headers.authorization &&
+            req.headers.authorization.startsWith('Bearer')
+              ? req.headers.authorization.split(' ')[1]
+              : null) ||
+            (req.query.token as string); // Also check query parameters
+
+          console.log('Auth token available:', !!authToken);
+          console.log('Cookies available:', Object.keys(req.cookies));
+          console.log('Headers available:', Object.keys(req.headers));
+          console.log(
+            'Query params for token:',
+            req.query.token ? 'Present' : 'Not present',
+          );
+
+          if (authToken) {
+            // If we have an auth token, try to link the account directly
+            try {
+              // Verify the token and get the user ID
+              const jwt = await import('jsonwebtoken');
+              const decoded = jwt.verify(
+                authToken,
+                config.jwt_access_secret,
+              ) as any;
+
+              if (decoded && decoded.email) {
+                // Find the user by email
+                const existingUser = await User.findOne({
+                  email: decoded.email,
+                });
+
+                if (existingUser) {
+                  // Link the Facebook account to the existing user
+                  existingUser.facebookId = user.facebookId;
+
+                  // Update connected accounts
+                  if (!existingUser.connectedAccounts) {
+                    existingUser.connectedAccounts = {
+                      google: false,
+                      facebook: false,
+                      apple: false,
+                    };
+                  }
+                  existingUser.connectedAccounts.facebook = true;
+
+                  await existingUser.save();
+
+                  console.log(
+                    'Successfully linked Facebook account to user:',
+                    existingUser._id,
+                  );
+
+                  // Redirect to profile with success message
+                  return res.redirect(
+                    `${config.frontend_url}/user/edit-profile?provider=facebook&linked=true`,
+                  );
+                }
+              }
+            } catch (tokenError) {
+              console.error(
+                'Error verifying token for account linking:',
+                tokenError,
+              );
+            }
+          }
+
+          // If direct linking failed or no auth token, redirect to the link callback page with provider info
+          return res.redirect(
+            `${config.frontend_url}/oauth/link/callback?provider=facebook&providerId=${user.facebookId}&email=${user.email}&isLinking=true`,
+          );
+        }
+
+        // For regular login flow (not linking)
+        // Generate tokens
+        const { accessToken, refreshToken } = await generateTokens(user);
+
+        // Get role details
+        const roleDetails = await getRoleDetails(user);
+        const { email: _email } = roleDetails;
+
+        // Get domain from request origin or use default
+        const origin = req.get('origin');
+        let domain;
+
+        if (origin && config.NODE_ENV === 'production') {
+          try {
+            // Extract domain from origin (e.g., https://example.com -> example.com)
+            domain = new URL(origin).hostname;
+            // If it's not localhost, ensure we have the root domain for cookies
+            if (!domain.includes('localhost')) {
+              // Handle subdomains by getting the root domain
+              const parts = domain.split('.');
+              if (parts.length > 2) {
+                domain = parts.slice(-2).join('.');
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing origin for cookie domain:', error);
+          }
+        }
+
+        console.log(
+          `Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`,
+        );
+
+        // Set refresh token in cookie
+        res.cookie('refreshToken', refreshToken, {
+          secure: true, // Always use secure in modern browsers
+          httpOnly: true,
+          sameSite: config.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for cross-site in production
+          domain: domain || undefined, // Set domain in production
+          maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
+        });
+
+        // For regular login, redirect to success page with the token and refresh token
+        return res.redirect(
+          `${config.frontend_url}/oauth/success?token=${accessToken}&refreshToken=${refreshToken}&provider=facebook`,
+        );
+      } catch (error) {
+        console.error('Error in Facebook callback:', error);
+        return res.redirect(`${config.frontend_url}/login?error=server_error`);
       }
-
-      console.log(`Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`);
-
-      // Set refresh token in cookie
-      res.cookie('refreshToken', refreshToken, {
-        secure: true, // Always use secure in modern browsers
-        httpOnly: true,
-        sameSite: config.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for cross-site in production
-        domain: domain || undefined, // Set domain in production
-        maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
-      });
-
-      // For regular login, redirect to success page with the token and refresh token
-      return res.redirect(
-        `${config.frontend_url}/oauth/success?token=${accessToken}&refreshToken=${refreshToken}&provider=facebook`
-      );
-    } catch (error) {
-      console.error('Error in Facebook callback:', error);
-      return res.redirect(`${config.frontend_url}/login?error=server_error`);
-    }
-  })(req, res);
+    },
+  )(req, res);
 });
 
 // Apple OAuth routes
@@ -597,280 +681,323 @@ const appleAuth = (req: Request, res: Response, _next: NextFunction) => {
 };
 
 const appleCallback = catchAsync(async (req: Request, res: Response) => {
-  passport.authenticate('apple', { session: false }, async (err: any, user: any) => {
-    if (err) {
-      console.error('Apple OAuth error:', err);
-      return res.redirect(`${config.frontend_url}/login?error=oauth_error`);
-    }
-
-    if (!user) {
-      return res.redirect(`${config.frontend_url}/login?error=user_not_found`);
-    }
-
-    try {
-      // Check if this is an account linking flow
-      const stateParam = req.query.state;
-      let isLinking = false;
-
-      // IMPORTANT: Always preserve the user's existing role from the database
-      // This ensures we don't override the role when logging in with OAuth
-      let userRole = user.role || 'student'; // Default to user's existing role if available
-
-      console.log('PRESERVING EXISTING USER ROLE IN APPLE OAUTH CALLBACK:', userRole);
-
-      // Ensure the user object has the role property set
-      if (user && !user.role) {
-        user.role = userRole;
-        console.log('Setting missing role property on user object:', userRole);
+  passport.authenticate(
+    'apple',
+    { session: false },
+    async (err: any, user: any) => {
+      if (err) {
+        console.error('Apple OAuth error:', err);
+        return res.redirect(`${config.frontend_url}/login?error=oauth_error`);
       }
 
-      try {
-        if (stateParam) {
-          const stateObj = JSON.parse(stateParam as string);
-          isLinking = stateObj.linking === 'true';
-
-          // Only use the role from state for new users (when user.role is not set)
-          // For existing users, ALWAYS use their database role
-          if (!user.role && stateObj.role) {
-            userRole = stateObj.role;
-            console.log('Using role from state for new user:', userRole);
-          }
-
-          console.log('Parsed state:', { isLinking, stateFromRole: stateObj.role });
-          console.log('User role from database:', user.role);
-          console.log('Final role to use:', userRole);
-        }
-      } catch (error) {
-        console.error('Error parsing state:', error);
-      }
-
-      if (isLinking) {
-        console.log('Apple OAuth account linking flow detected');
-        console.log('User data:', {
-          appleId: user.appleId,
-          email: user.email
-        });
-
-        // Get the auth token from cookies, headers, or query parameters
-        // Check for token in multiple places to ensure we find it
-        const authToken = req.cookies.authToken ||
-                         req.cookies.refreshToken ||
-                         (req.headers.authorization && req.headers.authorization.startsWith('Bearer')
-                          ? req.headers.authorization.split(' ')[1]
-                          : null) ||
-                         (req.query.token as string); // Also check query parameters
-
-        console.log('Auth token available:', !!authToken);
-        console.log('Cookies available:', Object.keys(req.cookies));
-        console.log('Headers available:', Object.keys(req.headers));
-        console.log('Query params for token:', req.query.token ? 'Present' : 'Not present');
-
-        if (authToken) {
-          // If we have an auth token, try to link the account directly
-          try {
-            // Verify the token and get the user ID
-            const jwt = await import('jsonwebtoken');
-            const decoded = jwt.verify(authToken, config.jwt_access_secret) as any;
-
-            if (decoded && decoded.email) {
-              // Find the user by email
-              const existingUser = await User.findOne({ email: decoded.email });
-
-              if (existingUser) {
-                // Link the Apple account to the existing user
-                existingUser.appleId = user.appleId;
-
-                // Update connected accounts
-                if (!existingUser.connectedAccounts) {
-                  existingUser.connectedAccounts = {
-                    google: false,
-                    facebook: false,
-                    apple: false,
-                  };
-                }
-                existingUser.connectedAccounts.apple = true;
-
-                await existingUser.save();
-
-                console.log('Successfully linked Apple account to user:', existingUser._id);
-
-                // Redirect to profile with success message
-                return res.redirect(`${config.frontend_url}/user/edit-profile?provider=apple&linked=true`);
-              }
-            }
-          } catch (tokenError) {
-            console.error('Error verifying token for account linking:', tokenError);
-          }
-        }
-
-        // If direct linking failed or no auth token, redirect to the link callback page with provider info
+      if (!user) {
         return res.redirect(
-          `${config.frontend_url}/oauth/link/callback?provider=apple&providerId=${user.appleId}&email=${user.email}&isLinking=true`
+          `${config.frontend_url}/login?error=user_not_found`,
         );
       }
 
-      // For regular login flow (not linking)
-      // Generate tokens
-      const { accessToken, refreshToken } = await generateTokens(user);
+      try {
+        // Check if this is an account linking flow
+        const stateParam = req.query.state;
+        let isLinking = false;
 
-      // Get role details
-      const roleDetails = await getRoleDetails(user);
-      const { email: _email } = roleDetails;
+        // IMPORTANT: Always preserve the user's existing role from the database
+        // This ensures we don't override the role when logging in with OAuth
+        let userRole = user.role || 'student'; // Default to user's existing role if available
 
-      // Get domain from request origin or use default
-      const origin = req.get('origin');
-      let domain;
+        console.log(
+          'PRESERVING EXISTING USER ROLE IN APPLE OAUTH CALLBACK:',
+          userRole,
+        );
 
-      if (origin && config.NODE_ENV === 'production') {
+        // Ensure the user object has the role property set
+        if (user && !user.role) {
+          user.role = userRole;
+          console.log(
+            'Setting missing role property on user object:',
+            userRole,
+          );
+        }
+
         try {
-          // Extract domain from origin (e.g., https://example.com -> example.com)
-          domain = new URL(origin).hostname;
-          // If it's not localhost, ensure we have the root domain for cookies
-          if (!domain.includes('localhost')) {
-            // Handle subdomains by getting the root domain
-            const parts = domain.split('.');
-            if (parts.length > 2) {
-              domain = parts.slice(-2).join('.');
+          if (stateParam) {
+            const stateObj = JSON.parse(stateParam as string);
+            isLinking = stateObj.linking === 'true';
+
+            // Only use the role from state for new users (when user.role is not set)
+            // For existing users, ALWAYS use their database role
+            if (!user.role && stateObj.role) {
+              userRole = stateObj.role;
+              console.log('Using role from state for new user:', userRole);
             }
+
+            console.log('Parsed state:', {
+              isLinking,
+              stateFromRole: stateObj.role,
+            });
+            console.log('User role from database:', user.role);
+            console.log('Final role to use:', userRole);
           }
         } catch (error) {
-          console.error('Error parsing origin for cookie domain:', error);
+          console.error('Error parsing state:', error);
         }
+
+        if (isLinking) {
+          console.log('Apple OAuth account linking flow detected');
+          console.log('User data:', {
+            appleId: user.appleId,
+            email: user.email,
+          });
+
+          // Get the auth token from cookies, headers, or query parameters
+          // Check for token in multiple places to ensure we find it
+          const authToken =
+            req.cookies.authToken ||
+            req.cookies.refreshToken ||
+            (req.headers.authorization &&
+            req.headers.authorization.startsWith('Bearer')
+              ? req.headers.authorization.split(' ')[1]
+              : null) ||
+            (req.query.token as string); // Also check query parameters
+
+          console.log('Auth token available:', !!authToken);
+          console.log('Cookies available:', Object.keys(req.cookies));
+          console.log('Headers available:', Object.keys(req.headers));
+          console.log(
+            'Query params for token:',
+            req.query.token ? 'Present' : 'Not present',
+          );
+
+          if (authToken) {
+            // If we have an auth token, try to link the account directly
+            try {
+              // Verify the token and get the user ID
+              const jwt = await import('jsonwebtoken');
+              const decoded = jwt.verify(
+                authToken,
+                config.jwt_access_secret,
+              ) as any;
+
+              if (decoded && decoded.email) {
+                // Find the user by email
+                const existingUser = await User.findOne({
+                  email: decoded.email,
+                });
+
+                if (existingUser) {
+                  // Link the Apple account to the existing user
+                  existingUser.appleId = user.appleId;
+
+                  // Update connected accounts
+                  if (!existingUser.connectedAccounts) {
+                    existingUser.connectedAccounts = {
+                      google: false,
+                      facebook: false,
+                      apple: false,
+                    };
+                  }
+                  existingUser.connectedAccounts.apple = true;
+
+                  await existingUser.save();
+
+                  console.log(
+                    'Successfully linked Apple account to user:',
+                    existingUser._id,
+                  );
+
+                  // Redirect to profile with success message
+                  return res.redirect(
+                    `${config.frontend_url}/user/edit-profile?provider=apple&linked=true`,
+                  );
+                }
+              }
+            } catch (tokenError) {
+              console.error(
+                'Error verifying token for account linking:',
+                tokenError,
+              );
+            }
+          }
+
+          // If direct linking failed or no auth token, redirect to the link callback page with provider info
+          return res.redirect(
+            `${config.frontend_url}/oauth/link/callback?provider=apple&providerId=${user.appleId}&email=${user.email}&isLinking=true`,
+          );
+        }
+
+        // For regular login flow (not linking)
+        // Generate tokens
+        const { accessToken, refreshToken } = await generateTokens(user);
+
+        // Get role details
+        const roleDetails = await getRoleDetails(user);
+        const { email: _email } = roleDetails;
+
+        // Get domain from request origin or use default
+        const origin = req.get('origin');
+        let domain;
+
+        if (origin && config.NODE_ENV === 'production') {
+          try {
+            // Extract domain from origin (e.g., https://example.com -> example.com)
+            domain = new URL(origin).hostname;
+            // If it's not localhost, ensure we have the root domain for cookies
+            if (!domain.includes('localhost')) {
+              // Handle subdomains by getting the root domain
+              const parts = domain.split('.');
+              if (parts.length > 2) {
+                domain = parts.slice(-2).join('.');
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing origin for cookie domain:', error);
+          }
+        }
+
+        console.log(
+          `Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`,
+        );
+
+        // Set refresh token in cookie
+        res.cookie('refreshToken', refreshToken, {
+          secure: true, // Always use secure in modern browsers
+          httpOnly: true,
+          sameSite: config.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for cross-site in production
+          domain: domain || undefined, // Set domain in production
+          maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
+        });
+
+        // For regular login, redirect to success page with the token and refresh token
+        return res.redirect(
+          `${config.frontend_url}/oauth/success?token=${accessToken}&refreshToken=${refreshToken}&provider=apple`,
+        );
+      } catch (error) {
+        console.error('Error in Apple callback:', error);
+        return res.redirect(`${config.frontend_url}/login?error=server_error`);
       }
-
-      console.log(`Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`);
-
-      // Set refresh token in cookie
-      res.cookie('refreshToken', refreshToken, {
-        secure: true, // Always use secure in modern browsers
-        httpOnly: true,
-        sameSite: config.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for cross-site in production
-        domain: domain || undefined, // Set domain in production
-        maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
-      });
-
-      // For regular login, redirect to success page with the token and refresh token
-      return res.redirect(
-        `${config.frontend_url}/oauth/success?token=${accessToken}&refreshToken=${refreshToken}&provider=apple`
-      );
-    } catch (error) {
-      console.error('Error in Apple callback:', error);
-      return res.redirect(`${config.frontend_url}/login?error=server_error`);
-    }
-  })(req, res);
+    },
+  )(req, res);
 });
 
 // Exchange OAuth code for tokens and link account
-const exchangeCodeAndLinkAccount = catchAsync(async (req: Request, res: Response) => {
-  const { provider, code, userId } = req.body;
+const exchangeCodeAndLinkAccount = catchAsync(
+  async (req: Request, res: Response) => {
+    const { provider, code, userId } = req.body;
 
-  if (!provider || !code || !userId) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Missing required fields');
-  }
-
-  console.log('Exchanging OAuth code for tokens:', { provider, userId });
-
-  // Verify the user exists
-  const user = await User.findById(userId);
-  if (!user) {
-    console.error('User not found with ID:', userId);
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
-  }
-
-  try {
-    // Exchange the code for tokens and user info based on the provider
-    let providerData: any = null;
-
-    switch (provider) {
-      case 'google':
-        providerData = await exchangeGoogleCode(code);
-        break;
-      case 'facebook':
-        providerData = await exchangeFacebookCode(code);
-        break;
-      case 'apple':
-        providerData = await exchangeAppleCode(code);
-        break;
-      default:
-        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid provider');
+    if (!provider || !code || !userId) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Missing required fields');
     }
 
-    if (!providerData || !providerData.id) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Failed to get provider data');
+    console.log('Exchanging OAuth code for tokens:', { provider, userId });
+
+    // Verify the user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error('User not found with ID:', userId);
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    // Check if another user already has this provider ID
-    const providerField = `${provider}Id`;
-    const query: any = {};
-    query[providerField] = providerData.id;
+    try {
+      // Exchange the code for tokens and user info based on the provider
+      let providerData: any = null;
 
-    const existingUser = await User.findOne(query);
-    if (existingUser && existingUser._id.toString() !== userId) {
-      console.error('Provider ID already linked to another user:', {
-        providerId: providerData.id,
-        existingUserId: existingUser._id.toString(),
-        requestedUserId: userId
+      switch (provider) {
+        case 'google':
+          providerData = await exchangeGoogleCode(code);
+          break;
+        case 'facebook':
+          providerData = await exchangeFacebookCode(code);
+          break;
+        case 'apple':
+          providerData = await exchangeAppleCode(code);
+          break;
+        default:
+          throw new AppError(httpStatus.BAD_REQUEST, 'Invalid provider');
+      }
+
+      if (!providerData || !providerData.id) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Failed to get provider data',
+        );
+      }
+
+      // Check if another user already has this provider ID
+      const providerField = `${provider}Id`;
+      const query: any = {};
+      query[providerField] = providerData.id;
+
+      const existingUser = await User.findOne(query);
+      if (existingUser && existingUser._id.toString() !== userId) {
+        console.error('Provider ID already linked to another user:', {
+          providerId: providerData.id,
+          existingUserId: existingUser._id.toString(),
+          requestedUserId: userId,
+        });
+        throw new AppError(
+          httpStatus.CONFLICT,
+          `This ${provider} account is already linked to another user`,
+        );
+      }
+
+      // Update the user with the provider ID
+      if (provider === 'google') {
+        user.googleId = providerData.id;
+      } else if (provider === 'facebook') {
+        user.facebookId = providerData.id;
+      } else if (provider === 'apple') {
+        user.appleId = providerData.id;
+      }
+
+      // Update the connectedAccounts field
+      if (!user.connectedAccounts) {
+        user.connectedAccounts = {
+          google: false,
+          facebook: false,
+          apple: false,
+        };
+      }
+
+      // Set the specific provider to true
+      if (provider === 'google') {
+        user.connectedAccounts.google = true;
+      } else if (provider === 'facebook') {
+        user.connectedAccounts.facebook = true;
+      } else if (provider === 'apple') {
+        user.connectedAccounts.apple = true;
+      }
+
+      // If the user's email isn't verified, verify it now
+      if (!user.isVerified) {
+        user.isVerified = true;
+      }
+
+      console.log('Saving user with updated OAuth connection:', {
+        userId: user._id,
+        provider,
+        connectedAccounts: user.connectedAccounts,
       });
+
+      await user.save();
+
+      sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: `${provider.charAt(0).toUpperCase() + provider.slice(1)} account linked successfully`,
+        data: null,
+      });
+    } catch (error) {
+      console.error('Error exchanging code and linking account:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(
-        httpStatus.CONFLICT,
-        `This ${provider} account is already linked to another user`
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to link account',
       );
     }
-
-    // Update the user with the provider ID
-    if (provider === 'google') {
-      user.googleId = providerData.id;
-    } else if (provider === 'facebook') {
-      user.facebookId = providerData.id;
-    } else if (provider === 'apple') {
-      user.appleId = providerData.id;
-    }
-
-    // Update the connectedAccounts field
-    if (!user.connectedAccounts) {
-      user.connectedAccounts = {
-        google: false,
-        facebook: false,
-        apple: false,
-      };
-    }
-
-    // Set the specific provider to true
-    if (provider === 'google') {
-      user.connectedAccounts.google = true;
-    } else if (provider === 'facebook') {
-      user.connectedAccounts.facebook = true;
-    } else if (provider === 'apple') {
-      user.connectedAccounts.apple = true;
-    }
-
-    // If the user's email isn't verified, verify it now
-    if (!user.isVerified) {
-      user.isVerified = true;
-    }
-
-    console.log('Saving user with updated OAuth connection:', {
-      userId: user._id,
-      provider,
-      connectedAccounts: user.connectedAccounts
-    });
-
-    await user.save();
-
-    sendResponse(res, {
-      statusCode: httpStatus.OK,
-      success: true,
-      message: `${provider.charAt(0).toUpperCase() + provider.slice(1)} account linked successfully`,
-      data: null,
-    });
-  } catch (error) {
-    console.error('Error exchanging code and linking account:', error);
-    if (error instanceof AppError) {
-      throw error;
-    }
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to link account');
-  }
-});
+  },
+);
 
 // Helper functions to exchange OAuth codes for tokens and user info
 const exchangeGoogleCode = async (code: string) => {
@@ -898,11 +1025,14 @@ const exchangeGoogleCode = async (code: string) => {
     }
 
     // Get user info with the access token
-    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
+    const userInfoResponse = await fetch(
+      'https://www.googleapis.com/oauth2/v2/userinfo',
+      {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
       },
-    });
+    );
 
     const userData = await userInfoResponse.json();
 
@@ -927,10 +1057,10 @@ const exchangeFacebookCode = async (code: string) => {
     // Exchange the code for tokens
     const tokenResponse = await fetch(
       `https://graph.facebook.com/v12.0/oauth/access_token?` +
-      `client_id=${config.oauth.facebook.clientId}` +
-      `&redirect_uri=${encodeURIComponent(config.oauth.facebook.redirectUri as string)}` +
-      `&client_secret=${config.oauth.facebook.clientSecret}` +
-      `&code=${code}`
+        `client_id=${config.oauth.facebook.clientId}` +
+        `&redirect_uri=${encodeURIComponent(config.oauth.facebook.redirectUri as string)}` +
+        `&client_secret=${config.oauth.facebook.clientSecret}` +
+        `&code=${code}`,
     );
 
     const tokenData = await tokenResponse.json();
@@ -942,7 +1072,7 @@ const exchangeFacebookCode = async (code: string) => {
 
     // Get user info with the access token
     const userInfoResponse = await fetch(
-      `https://graph.facebook.com/me?fields=id,name,email&access_token=${tokenData.access_token}`
+      `https://graph.facebook.com/me?fields=id,name,email&access_token=${tokenData.access_token}`,
     );
 
     const userData = await userInfoResponse.json();
@@ -1011,7 +1141,10 @@ const updateConnectedAccounts = (user: any, provider: string) => {
   }
 
   // Log the updated connectedAccounts
-  console.log('Updated connectedAccounts:', JSON.stringify(user.connectedAccounts));
+  console.log(
+    'Updated connectedAccounts:',
+    JSON.stringify(user.connectedAccounts),
+  );
 
   return user;
 };
@@ -1041,7 +1174,13 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
   }
 
   // Log the extracted values
-  console.log('Extracted values from request:', { userId, provider, providerId, email, role });
+  console.log('Extracted values from request:', {
+    userId,
+    provider,
+    providerId,
+    email,
+    role,
+  });
 
   // Extract values from query parameters if not in body (fallback)
   if (!userId) userId = req.query.userId as string;
@@ -1051,7 +1190,13 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
   if (!role) role = req.query.role as string;
 
   // Log the values after fallback
-  console.log('Values after fallback to query params:', { userId, provider, providerId, email, role });
+  console.log('Values after fallback to query params:', {
+    userId,
+    provider,
+    providerId,
+    email,
+    role,
+  });
 
   // Extract values from headers if still not found (another fallback)
   if (!userId) userId = req.headers['x-user-id'] as string;
@@ -1060,7 +1205,12 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
   if (!role) role = req.headers['x-role'] as string;
 
   // Log the values after header fallback
-  console.log('Values after fallback to headers:', { userId, provider, providerId, role });
+  console.log('Values after fallback to headers:', {
+    userId,
+    provider,
+    providerId,
+    role,
+  });
 
   // Fallback to authenticated user's role if available
   if (!role && (req as any).user && (req as any).user.role) {
@@ -1082,7 +1232,10 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
     try {
       const token = req.headers.authorization?.split(' ')[1];
       if (token) {
-        const decoded = jwt.verify(token, config.jwt_access_secret as string) as any;
+        const decoded = jwt.verify(
+          token,
+          config.jwt_access_secret as string,
+        ) as any;
         if (decoded && decoded._id) {
           userId = decoded._id;
           console.log('Extracted userId from token:', userId);
@@ -1123,7 +1276,13 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
     console.warn('WARNING: Missing providerId, proceeding anyway');
   }
 
-  console.log('Linking OAuth account (legacy method):', { userId, provider, providerId, email, role });
+  console.log('Linking OAuth account (legacy method):', {
+    userId,
+    provider,
+    providerId,
+    email,
+    role,
+  });
 
   // Verify the user exists
   let user;
@@ -1143,9 +1302,15 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
     try {
       const token = req.headers.authorization?.split(' ')[1];
       if (token) {
-        const decoded = jwt.verify(token, config.jwt_access_secret as string) as any;
+        const decoded = jwt.verify(
+          token,
+          config.jwt_access_secret as string,
+        ) as any;
         if (decoded && decoded.email) {
-          console.log('Trying to find user by email from token:', decoded.email);
+          console.log(
+            'Trying to find user by email from token:',
+            decoded.email,
+          );
           user = await User.findOne({ email: decoded.email });
         }
       }
@@ -1156,7 +1321,10 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
 
   // If still no user, try to get the authenticated user
   if (!user && (req as any).user && (req as any).user._id) {
-    console.log('Trying to find user by authenticated user ID:', (req as any).user._id);
+    console.log(
+      'Trying to find user by authenticated user ID:',
+      (req as any).user._id,
+    );
     user = await User.findById((req as any).user._id);
   }
 
@@ -1169,9 +1337,10 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
       message: `OAuth account linking simulation successful`,
       data: {
         success: true,
-        message: "This is a simulated success response. No actual linking occurred.",
-        providerId: providerId || "unknown",
-        provider: provider || "unknown"
+        message:
+          'This is a simulated success response. No actual linking occurred.',
+        providerId: providerId || 'unknown',
+        provider: provider || 'unknown',
       },
     });
   }
@@ -1188,12 +1357,14 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
       existingUserId: existingUser._id.toString(),
       requestedUserId: userId,
       existingEmail: existingUser.email,
-      requestedEmail: email
+      requestedEmail: email,
     });
 
     // Check if the emails match - this means it's likely the same person with multiple accounts
     if (email && existingUser.email === email) {
-      console.log('Emails match! This is likely the same person with multiple accounts');
+      console.log(
+        'Emails match! This is likely the same person with multiple accounts',
+      );
 
       // Instead of showing a merge dialog, just proceed with linking the account
       // to the current user if they have the same email
@@ -1226,10 +1397,12 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
     }
 
     // If emails don't match, this is likely a conflict
-    console.error('Provider ID already linked to another user with different email');
+    console.error(
+      'Provider ID already linked to another user with different email',
+    );
     throw new AppError(
       httpStatus.CONFLICT,
-      `This ${provider} account is already linked to another user`
+      `This ${provider} account is already linked to another user`,
     );
   }
 
@@ -1239,7 +1412,7 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
     email: user.email,
     role: user.role,
     googleId: user.googleId,
-    connectedAccounts: user.connectedAccounts
+    connectedAccounts: user.connectedAccounts,
   });
 
   // Update the user with the provider ID
@@ -1270,7 +1443,7 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
     userId: user._id,
     provider,
     role: user.role,
-    connectedAccounts: JSON.stringify(user.connectedAccounts)
+    connectedAccounts: JSON.stringify(user.connectedAccounts),
   });
 
   try {
@@ -1294,7 +1467,7 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
         userDoc.connectedAccounts = {
           google: false,
           facebook: false,
-          apple: false
+          apple: false,
         };
       }
 
@@ -1323,7 +1496,7 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
         role: userDoc.role,
         isOAuthUser: userDoc.isOAuthUser,
         googleId: userDoc.googleId,
-        connectedAccounts: userDoc.connectedAccounts
+        connectedAccounts: userDoc.connectedAccounts,
       });
     } else {
       console.error('Could not find user by ID:', userId);
@@ -1331,7 +1504,10 @@ const linkOAuthAccount = catchAsync(async (req, res) => {
     }
   } catch (error) {
     console.error('Error saving user during account linking:', error);
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Error linking account');
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Error linking account',
+    );
   }
 
   sendResponse(res, {
@@ -1350,7 +1526,10 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Missing required fields');
   }
 
-  console.log('Handling OAuth callback from frontend:', { provider, codeLength: code.length });
+  console.log('Handling OAuth callback from frontend:', {
+    provider,
+    codeLength: code.length,
+  });
 
   // Parse the state parameter
   let stateObj = { linking: 'false', role: 'student' };
@@ -1363,7 +1542,10 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
   }
 
   const isLinking = stateObj.linking === 'true';
-  console.log('OAuth flow type:', isLinking ? 'Account Linking' : 'Login/Signup');
+  console.log(
+    'OAuth flow type:',
+    isLinking ? 'Account Linking' : 'Login/Signup',
+  );
   console.log('Role from state:', stateObj.role);
 
   // Exchange the authorization code for tokens
@@ -1395,11 +1577,15 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
 
         if (tokenResponse.error) {
           console.error('Google token exchange error:', tokenResponse);
-          throw new AppError(httpStatus.BAD_REQUEST, 'Failed to exchange authorization code');
+          throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Failed to exchange authorization code',
+          );
         }
 
         // Get user info with the access token
-        const googleUserInfoUrl = 'https://www.googleapis.com/oauth2/v3/userinfo';
+        const googleUserInfoUrl =
+          'https://www.googleapis.com/oauth2/v3/userinfo';
         const googleUserInfoRes = await fetch(googleUserInfoUrl, {
           headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
         });
@@ -1407,7 +1593,10 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
         userData = await googleUserInfoRes.json();
 
         if (!userData || !userData.sub) {
-          throw new AppError(httpStatus.BAD_REQUEST, 'Failed to get user info from Google');
+          throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Failed to get user info from Google',
+          );
         }
 
         // Map Google user data to our format
@@ -1421,12 +1610,19 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
 
       case 'facebook':
         // Exchange code for Facebook tokens
-        const fbTokenUrl = 'https://graph.facebook.com/v12.0/oauth/access_token';
+        const fbTokenUrl =
+          'https://graph.facebook.com/v12.0/oauth/access_token';
         const fbParams = new URLSearchParams();
         fbParams.append('client_id', config.oauth.facebook.clientId || '');
-        fbParams.append('client_secret', config.oauth.facebook.clientSecret || '');
+        fbParams.append(
+          'client_secret',
+          config.oauth.facebook.clientSecret || '',
+        );
         fbParams.append('code', code);
-        fbParams.append('redirect_uri', config.oauth.facebook.redirectUri || '');
+        fbParams.append(
+          'redirect_uri',
+          config.oauth.facebook.redirectUri || '',
+        );
 
         // Make the token request
         const fbTokenRes = await fetch(`${fbTokenUrl}?${fbParams}`);
@@ -1434,7 +1630,10 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
 
         if (tokenResponse.error) {
           console.error('Facebook token exchange error:', tokenResponse);
-          throw new AppError(httpStatus.BAD_REQUEST, 'Failed to exchange authorization code');
+          throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Failed to exchange authorization code',
+          );
         }
 
         // Get user info with the access token
@@ -1444,11 +1643,16 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
           access_token: tokenResponse.access_token,
         });
 
-        const fbUserInfoRes = await fetch(`${fbUserInfoUrl}?${fbUserInfoParams}`);
+        const fbUserInfoRes = await fetch(
+          `${fbUserInfoUrl}?${fbUserInfoParams}`,
+        );
         userData = await fbUserInfoRes.json();
 
         if (!userData || !userData.id) {
-          throw new AppError(httpStatus.BAD_REQUEST, 'Failed to get user info from Facebook');
+          throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Failed to get user info from Facebook',
+          );
         }
 
         // Map Facebook user data to our format
@@ -1467,12 +1671,18 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
         appleParams.append('client_id', config.oauth.apple.clientId || '');
         appleParams.append('client_secret', ''); // Apple requires a generated JWT token here
         appleParams.append('code', code);
-        appleParams.append('redirect_uri', config.oauth.apple.redirectUri || '');
+        appleParams.append(
+          'redirect_uri',
+          config.oauth.apple.redirectUri || '',
+        );
         appleParams.append('grant_type', 'authorization_code');
 
         // For Apple, we would need to implement the client secret generation
         // which requires private key signing
-        throw new AppError(httpStatus.NOT_IMPLEMENTED, 'Apple OAuth is not fully implemented');
+        throw new AppError(
+          httpStatus.NOT_IMPLEMENTED,
+          'Apple OAuth is not fully implemented',
+        );
 
       default:
         throw new AppError(httpStatus.BAD_REQUEST, 'Invalid provider');
@@ -1481,11 +1691,14 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
     console.log('OAuth user data retrieved:', {
       provider,
       email: userData.email,
-      providerId: provider === 'google'
-        ? userData.googleId
-        : provider === 'facebook'
-          ? userData.facebookId
-          : 'appleId' in userData ? userData.appleId : 'unknown',
+      providerId:
+        provider === 'google'
+          ? userData.googleId
+          : provider === 'facebook'
+            ? userData.facebookId
+            : 'appleId' in userData
+              ? userData.appleId
+              : 'unknown',
     });
 
     // Handle account linking if that's the flow
@@ -1493,14 +1706,20 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
       // Get the user ID from the authorization header
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        throw new AppError(httpStatus.UNAUTHORIZED, 'Authentication required for account linking');
+        throw new AppError(
+          httpStatus.UNAUTHORIZED,
+          'Authentication required for account linking',
+        );
       }
 
       const token = authHeader.split(' ')[1];
       const decoded = jwt.verify(token, config.jwt_access_secret) as any;
 
       if (!decoded || !decoded.email) {
-        throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid authentication token');
+        throw new AppError(
+          httpStatus.UNAUTHORIZED,
+          'Invalid authentication token',
+        );
       }
 
       // Find the user by email from the token
@@ -1528,7 +1747,10 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
 
       if (!user) {
         // Create new user
-        const userRole = (stateObj.role === 'teacher' || stateObj.role === 'user') ? stateObj.role : 'student';
+        const userRole =
+          stateObj.role === 'teacher' || stateObj.role === 'user'
+            ? stateObj.role
+            : 'student';
         console.log('Creating new user with role:', userRole);
 
         const newUser: Partial<IUser> = {
@@ -1542,8 +1764,8 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
           connectedAccounts: {
             google: false,
             facebook: false,
-            apple: false
-          }
+            apple: false,
+          },
         };
 
         // Add the provider ID
@@ -1567,7 +1789,10 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
           }
         }
 
-        console.log('Creating new user with connectedAccounts:', JSON.stringify(newUser.connectedAccounts));
+        console.log(
+          'Creating new user with connectedAccounts:',
+          JSON.stringify(newUser.connectedAccounts),
+        );
 
         // Create the user
         user = await User.create(newUser);
@@ -1578,7 +1803,7 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
           email: user.email,
           role: user.role,
           googleId: user.googleId,
-          connectedAccounts: user.connectedAccounts
+          connectedAccounts: user.connectedAccounts,
         });
 
         // Create the role-specific profile
@@ -1590,7 +1815,10 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
       }
 
       if (!user) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Failed to find or create user');
+        throw new AppError(
+          httpStatus.NOT_FOUND,
+          'Failed to find or create user',
+        );
       }
 
       // Generate tokens for the user
@@ -1617,7 +1845,9 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
         }
       }
 
-      console.log(`Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`);
+      console.log(
+        `Setting OAuth refresh token cookie with domain: ${domain || 'not set'}, sameSite: ${config.NODE_ENV === 'production' ? 'none' : 'lax'}`,
+      );
 
       // Set refresh token in cookie
       res.cookie('refreshToken', refreshToken, {
@@ -1638,7 +1868,9 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
           user: {
             _id: user._id,
             email: user.email,
-            name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '',
+            name: user.firstName
+              ? `${user.firstName} ${user.lastName || ''}`.trim()
+              : '',
             role: user.role,
             connectedAccounts: user.connectedAccounts,
           },
@@ -1652,12 +1884,12 @@ const handleOAuthCallback = catchAsync(async (req, res) => {
     } else if (error instanceof Error) {
       throw new AppError(
         httpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'OAuth authentication failed'
+        error.message || 'OAuth authentication failed',
       );
     } else {
       throw new AppError(
         httpStatus.INTERNAL_SERVER_ERROR,
-        'OAuth authentication failed'
+        'OAuth authentication failed',
       );
     }
   }
@@ -1694,11 +1926,11 @@ const unlinkOAuthAccount = catchAsync(async (req, res) => {
         userId,
         provider,
         hasPassword: !!user.password,
-        connectedCount
+        connectedCount,
       });
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Cannot unlink the only authentication method. Please set a password first.'
+        'Cannot unlink the only authentication method. Please set a password first.',
       );
     }
   }
@@ -1709,7 +1941,7 @@ const unlinkOAuthAccount = catchAsync(async (req, res) => {
     email: user.email,
     role: user.role,
     googleId: user.googleId,
-    connectedAccounts: user.connectedAccounts
+    connectedAccounts: user.connectedAccounts,
   });
 
   // Update the user to remove the provider ID
@@ -1733,7 +1965,7 @@ const unlinkOAuthAccount = catchAsync(async (req, res) => {
   console.log('Saving user with updated OAuth connection:', {
     userId: user._id,
     provider,
-    connectedAccounts: JSON.stringify(user.connectedAccounts)
+    connectedAccounts: JSON.stringify(user.connectedAccounts),
   });
 
   // Save the user with markModified to ensure connectedAccounts is saved
@@ -1747,7 +1979,7 @@ const unlinkOAuthAccount = catchAsync(async (req, res) => {
     email: updatedUser?.email,
     role: updatedUser?.role,
     googleId: updatedUser?.googleId,
-    connectedAccounts: updatedUser?.connectedAccounts
+    connectedAccounts: updatedUser?.connectedAccounts,
   });
 
   sendResponse(res, {
