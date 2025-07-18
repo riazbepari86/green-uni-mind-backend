@@ -237,6 +237,9 @@ export const EnvironmentConfig = {
             'https://green-uni-mind-frontend.vercel.app',
             'https://www.greenunimind.com',
             'https://greenunimind.com',
+            // Additional production domains for redundancy
+            'https://green-uni-mind-frontend.vercel.app',
+            'https://green-uni-mind.vercel.app',
           ],
           credentials: true,
           optionsSuccessStatus: 200,

@@ -64,44 +64,49 @@ exports.Environment = {
      */
     isDebuggingEnabled: () => {
         const env = (0, exports.getEnvironment)();
-        return env === 'development' || env === 'test' || process.env.ENABLE_DEBUG === 'true';
+        return (env === 'development' ||
+            env === 'test' ||
+            process.env.ENABLE_DEBUG === 'true');
     },
     /**
      * Check if verbose logging should be enabled
      */
     isVerboseLoggingEnabled: () => {
-        return exports.Environment.isDevelopment() || process.env.ENABLE_VERBOSE_LOGGING === 'true';
+        return (exports.Environment.isDevelopment() ||
+            process.env.ENABLE_VERBOSE_LOGGING === 'true');
     },
     /**
      * Check if performance monitoring should be enabled
      */
     isPerformanceMonitoringEnabled: () => {
-        return exports.Environment.isProduction() || process.env.ENABLE_PERFORMANCE_MONITORING === 'true';
+        return (exports.Environment.isProduction() ||
+            process.env.ENABLE_PERFORMANCE_MONITORING === 'true');
     },
     /**
      * Check if error tracking should be enabled
      */
     isErrorTrackingEnabled: () => {
-        return exports.Environment.isProduction() || process.env.ENABLE_ERROR_TRACKING === 'true';
+        return (exports.Environment.isProduction() || process.env.ENABLE_ERROR_TRACKING === 'true');
     },
     /**
      * Check if Redis caching should be enabled
      */
     isRedisCachingEnabled: () => {
         // Enable Redis caching in production by default, or when explicitly enabled
-        return exports.Environment.isProduction() || process.env.ENABLE_REDIS_CACHING === 'true';
+        return (exports.Environment.isProduction() || process.env.ENABLE_REDIS_CACHING === 'true');
     },
     /**
      * Check if file logging should be enabled
      */
     isFileLoggingEnabled: () => {
-        return exports.Environment.isProduction() || process.env.ENABLE_FILE_LOGGING === 'true';
+        return (exports.Environment.isProduction() || process.env.ENABLE_FILE_LOGGING === 'true');
     },
     /**
      * Check if security features should be strict
      */
     isStrictSecurityEnabled: () => {
-        return exports.Environment.isProduction() || process.env.ENABLE_STRICT_SECURITY === 'true';
+        return (exports.Environment.isProduction() ||
+            process.env.ENABLE_STRICT_SECURITY === 'true');
     },
 };
 /**
@@ -199,6 +204,11 @@ exports.EnvironmentConfig = {
                         config_1.default.frontend_url,
                         'https://green-uni-mind.pages.dev',
                         'https://green-uni-mind-frontend.vercel.app',
+                        'https://www.greenunimind.com',
+                        'https://greenunimind.com',
+                        // Additional production domains for redundancy
+                        'https://green-uni-mind-frontend.vercel.app',
+                        'https://green-uni-mind.vercel.app',
                     ],
                     credentials: true,
                     optionsSuccessStatus: 200,
@@ -278,7 +288,7 @@ exports.EnvironmentValidation = {
         const allRequired = exports.Environment.isProduction()
             ? [...required, ...productionRequired]
             : required;
-        const missing = allRequired.filter(envVar => !process.env[envVar]);
+        const missing = allRequired.filter((envVar) => !process.env[envVar]);
         return {
             isValid: missing.length === 0,
             missing,
@@ -300,7 +310,8 @@ exports.EnvironmentValidation = {
         if (exports.Environment.isProduction() && !config_1.default.redis.url && !config_1.default.redis.host) {
             console.warn('⚠️ Redis configuration is missing in production environment');
         }
-        if (exports.Environment.isProduction() && config_1.default.frontend_url.includes('localhost')) {
+        if (exports.Environment.isProduction() &&
+            config_1.default.frontend_url.includes('localhost')) {
             console.warn('⚠️ Frontend URL appears to be localhost in production environment');
         }
     },
